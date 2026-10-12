@@ -62,7 +62,7 @@
   }
 </script>
 
-<form onsubmit={submit} class="{cardClass} space-y-6 p-6">
+<form method="post" onsubmit={submit} class="{cardClass} space-y-6 p-6">
   <div class="space-y-1.5">
     <span class="block text-sm font-semibold text-foreground">Select document file</span>
     <label for="file" class="flex h-40 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border-strong px-4 text-center transition-colors hover:border-gold-500 hover:bg-gold-500/5">

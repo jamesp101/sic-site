@@ -68,7 +68,7 @@
 <div class="space-y-6">
   <NavLinkPreview {label} {url} {isActive} {parentLabel} />
 
-  <form onsubmit={submit} class="space-y-6 rounded-xl border border-border bg-card p-6 shadow-brand-sm">
+  <form method="post" onsubmit={submit} class="space-y-6 rounded-xl border border-border bg-card p-6 shadow-brand-sm">
     <div class="grid gap-6 md:grid-cols-2">
       <Field id="label" label="Label" required error={errors.label}>
         <input id="label" type="text" required maxlength="255" bind:value={label} class={inputClass} placeholder="e.g. Admissions" />

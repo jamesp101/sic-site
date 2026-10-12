@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import PasswordInput from '@/components/PasswordInput.svelte';
   import TextLink from '@/components/TextLink.svelte';
   import { Button } from '@/components/ui/button';
@@ -7,13 +8,19 @@
   import Field from './Field.svelte';
   import Notice from './Notice.svelte';
 
-  let { redirect = '/dashboard', status = '' }: { redirect?: string; status?: string } = $props();
+  let {
+    redirect = '/dashboard',
+    status = '',
+    initialEmail = '',
+    initialError = '',
+  }: { redirect?: string; status?: string; initialEmail?: string; initialError?: string } = $props();
 
-  let email = $state('');
+  // Seeded from the server-rendered no-JS POST result; owned by the form afterwards.
+  let email = $state(untrack(() => initialEmail));
   let password = $state('');
   let remember = $state(false);
   let processing = $state(false);
-  let error = $state('');
+  let error = $state(untrack(() => initialError));
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
@@ -38,7 +45,9 @@
   }
 </script>
 
-<form onsubmit={submit} class="grid gap-6">
+<!-- method="post": if this island never hydrates, the browser posts to /login (handled server-side)
+     instead of a GET that would put the password in the URL. -->
+<form method="post" onsubmit={submit} class="grid gap-6">
   <Notice kind="success" message={status} />
   <Notice kind="error" message={error} />
 

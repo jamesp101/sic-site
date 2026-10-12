@@ -52,7 +52,7 @@
   }
 </script>
 
-<form onsubmit={submit} class="space-y-6 rounded-xl border border-border bg-card p-6 shadow-brand-sm">
+<form method="post" onsubmit={submit} class="space-y-6 rounded-xl border border-border bg-card p-6 shadow-brand-sm">
   <div class="grid gap-6 md:grid-cols-2">
     <Field id="name" label="Full name" required error={errors.name}>
       <input id="name" type="text" required maxlength="255" autocomplete="name" bind:value={name} class={inputClass} />

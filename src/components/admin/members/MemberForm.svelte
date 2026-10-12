@@ -68,7 +68,7 @@
   }
 </script>
 
-<form onsubmit={submit} class="space-y-6 rounded-xl border border-border bg-card p-6 shadow-brand-sm">
+<form method="post" onsubmit={submit} class="space-y-6 rounded-xl border border-border bg-card p-6 shadow-brand-sm">
   <ImageField
     bind:file={image}
     id="image"

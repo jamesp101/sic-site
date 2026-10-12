@@ -1,10 +1,49 @@
 ---
 import LoginForm from '@/components/auth/LoginForm.svelte';
 import AuthLayout from '@/layouts/AuthLayout.astro';
+import { auth, CLIENT_IP_HEADER } from '@/lib/server/auth';
 import { safeRedirect } from '@/lib/safe-redirect';
 
 const redirect = safeRedirect(Astro.url.searchParams.get('redirect'));
 if (Astro.locals.user) return Astro.redirect(redirect);
+
+let email = '';
+let error = '';
+
+// No-JS fallback (or an island that failed to hydrate): the form POSTs here, never GETs, so
+// credentials stay out of the URL. Goes through Better Auth's router so the sign-in rate limit applies.
+if (Astro.request.method === 'POST') {
+    const form = await Astro.request.formData();
+    email = String(form.get('email') ?? '').trim();
+    const headers = new Headers({
+        'content-type': 'application/json',
+        origin: Astro.url.origin,
+        cookie: Astro.request.headers.get('cookie') ?? '',
+        'user-agent': Astro.request.headers.get('user-agent') ?? '',
+        [CLIENT_IP_HEADER]: Astro.clientAddress,
+    });
+    const res = await auth.handler(
+        new Request(new URL('/api/auth/sign-in/email', Astro.url), {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                email,
+                password: String(form.get('password') ?? ''),
+                rememberMe: form.get('remember') === 'on',
+            }),
+        }),
+    );
+    if (res.ok) {
+        const out = new Headers({ Location: redirect });
+        for (const cookie of res.headers.getSetCookie()) out.append('Set-Cookie', cookie);
+        return new Response(null, { status: 303, headers: out });
+    }
+    Astro.response.status = res.status === 429 ? 429 : 422;
+    error =
+        res.status === 429
+            ? 'Too many attempts. Please wait a minute and try again.'
+            : 'These credentials do not match our records.';
+}
 
 const status =
     Astro.url.searchParams.get('status') === 'password-reset'
@@ -13,5 +52,5 @@ const status =
 ---
 
 <AuthLayout title="Log in to your account" description="Enter your email and password below to log in">
-    <LoginForm client:load {redirect} {status} />
+    <LoginForm client:load {redirect} {status} initialEmail={email} initialError={error} />
 </AuthLayout>

@@ -30,7 +30,7 @@
   }
 </script>
 
-<form onsubmit={submit} class="grid gap-6">
+<form method="post" onsubmit={submit} class="grid gap-6">
   <Notice kind="success" message={status} />
   <Notice kind="error" message={error} />
 

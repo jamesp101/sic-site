@@ -34,7 +34,7 @@
 <div class="grid gap-6 text-center">
   <Notice kind="success" message={status} />
   <Notice kind="error" message={error} />
-  <form onsubmit={resend}>
+  <form method="post" onsubmit={resend}>
     <Button type="submit" variant="secondary" disabled={processing}>
       {processing ? 'Sending…' : 'Resend verification email'}
     </Button>

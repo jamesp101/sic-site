@@ -52,7 +52,7 @@
   }
 </script>
 
-<form onsubmit={submit} class="relative space-y-6 rounded-xl border border-border bg-card p-6 shadow-brand-sm">
+<form method="post" onsubmit={submit} class="relative space-y-6 rounded-xl border border-border bg-card p-6 shadow-brand-sm">
   <Field id="name" label="Department name" required error={errors.name}>
     <input
       id="name"

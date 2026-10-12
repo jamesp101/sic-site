@@ -32,7 +32,7 @@
   }
 </script>
 
-<form onsubmit={submit} class="space-y-6">
+<form method="post" onsubmit={submit} class="space-y-6">
   <Notice kind="error" message={error} />
 
   <Field id="current_password" label="Current password" error={errors.currentPassword}>

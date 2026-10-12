@@ -33,7 +33,7 @@
   }
 </script>
 
-<form onsubmit={submit} class="space-y-6">
+<form method="post" onsubmit={submit} class="space-y-6">
   <Notice kind="error" message={error} />
 
   <Field id="name" label="Name" error={errors.name}>

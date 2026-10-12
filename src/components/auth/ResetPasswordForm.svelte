@@ -37,7 +37,7 @@
   }
 </script>
 
-<form onsubmit={submit} class="grid gap-6">
+<form method="post" onsubmit={submit} class="grid gap-6">
   <Notice kind="error" message={error} />
 
   <Field id="password" label="New password" error={errors.password}>

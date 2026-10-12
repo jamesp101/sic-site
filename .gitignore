@@ -17,3 +17,4 @@ devenv.local.nix
 .pre-commit-config.yaml
 prisma/schema.prisma
 e2e/.auth/
+storage/e2e-uploads/

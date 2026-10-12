@@ -28,7 +28,7 @@
   }
 </script>
 
-<form onsubmit={submit} class="space-y-6">
+<form method="post" onsubmit={submit} class="space-y-6">
   <div class="{cardClass} space-y-6 p-6">
     <div class="space-y-2 rounded-xl border border-gold-500/30 bg-gold-500/10 p-4 text-xs text-foreground">
       <p class="flex items-center gap-1.5 font-bold">

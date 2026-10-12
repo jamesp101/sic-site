@@ -46,7 +46,7 @@
         {/snippet}
       </DialogTrigger>
       <DialogContent>
-        <form onsubmit={submit} class="space-y-6">
+        <form method="post" onsubmit={submit} class="space-y-6">
           <div class="space-y-3">
             <DialogTitle>Are you sure you want to delete your account?</DialogTitle>
             <DialogDescription>

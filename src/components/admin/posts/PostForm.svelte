@@ -93,7 +93,7 @@
   }
 </script>
 
-<form onsubmit={submit} class="grid gap-8 lg:grid-cols-3">
+<form method="post" onsubmit={submit} class="grid gap-8 lg:grid-cols-3">
   <div class="space-y-6 lg:col-span-2">
     <div class="{cardClass} space-y-5 p-6">
       <Field label="Post title" id="title" error={errors.title} required>

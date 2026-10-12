@@ -342,7 +342,7 @@
 <!-- New folder -->
 <Dialog bind:open={folderOpen}>
   <DialogContent class="max-w-md border-border bg-surface shadow-brand-xl">
-    <form onsubmit={createFolder} class="space-y-4">
+    <form method="post" onsubmit={createFolder} class="space-y-4">
       <DialogTitle>New folder</DialogTitle>
       <div class="space-y-1.5">
         <label for="folder_name" class="block text-sm font-semibold">Folder name</label>
