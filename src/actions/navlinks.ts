@@ -3,10 +3,18 @@ import { z } from 'astro/zod';
 import { db } from '@/lib/server/db';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { AuthzError, requireSuperAdmin } from '@/lib/server/authz';
+import { navUrlError, reorderError } from '@/lib/nav-tree';
 
 const fields = {
     label: z.string({ error: 'The label is required.' }).trim().min(1, 'The label is required.').max(255),
-    url: z.string({ error: 'The URL is required.' }).trim().min(1, 'The URL is required.').max(255),
+    url: z
+        .string({ error: 'The URL is required.' })
+        .trim()
+        .min(1, 'The URL is required.')
+        .max(255)
+        .refine((value) => navUrlError(value) === null, {
+            message: 'Use a path such as /posts or a full https:// URL.',
+        }),
     order: z.number({ error: 'The order must be a number.' }).int(),
     isActive: z.boolean(),
     parentId: z.number().int().nullable().optional(),
@@ -71,6 +79,38 @@ export const navlinks = {
                 });
                 flash(context, 'Navigation link updated.');
                 return { id: link.id };
+            }),
+    }),
+
+    /** Applies the whole tree (parent + position of every listed link) in one transaction. */
+    reorder: defineAction({
+        input: z.object({
+            items: z
+                .array(
+                    z.object({
+                        id: z.number().int(),
+                        parentId: z.number().int().nullable(),
+                        order: z.number().int().min(0),
+                    }),
+                )
+                .min(1)
+                .max(500),
+        }),
+        handler: ({ items }, context) =>
+            guarded(async () => {
+                requireSuperAdmin(actorOf(context));
+                await db.$transaction(async (tx) => {
+                    const existing = await tx.navigationLink.findMany({ select: { id: true, parentId: true } });
+                    const problem = reorderError(items, existing);
+                    if (problem) throw new ActionError({ code: 'BAD_REQUEST', message: problem });
+                    for (const item of items) {
+                        await tx.navigationLink.update({
+                            where: { id: item.id },
+                            data: { parentId: item.parentId, order: item.order },
+                        });
+                    }
+                });
+                return { count: items.length };
             }),
     }),
 

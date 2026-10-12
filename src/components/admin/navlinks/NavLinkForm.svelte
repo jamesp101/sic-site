@@ -1,11 +1,10 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
-  import { navigate } from 'astro:transitions/client';
   import { untrack } from 'svelte';
-  import NavLinkPreview from '@/components/NavLinkPreview.svelte';
+  import { reloadView } from '@/lib/navigation';
+  import { navUrlError } from '@/lib/nav-tree';
   import Field from '../shared/Field.svelte';
-  import FormActions from '../shared/FormActions.svelte';
-  import { inputClass, parseActionError } from '../shared/form-utils';
+  import { inputClass, parseActionError, primaryButtonClass, secondaryButtonClass } from '../shared/form-utils';
 
   export interface NavLinkFormValues {
     id: number;
@@ -18,42 +17,57 @@
 
   let {
     link = null,
-    parentLinks = [],
-    nextOrder = 0,
+    parentId = null,
+    parentLabel = '',
+    nextOrder = 1,
+    prefix,
+    oncancel,
   }: {
+    /** Link being edited; null creates a new one. */
     link?: NavLinkFormValues | null;
-    /** Top-level links that may be chosen as parent (never the link itself). */
-    parentLinks?: { id: number; label: string }[];
+    /** Parent for a new link (ignored when editing). */
+    parentId?: number | null;
+    parentLabel?: string;
     nextOrder?: number;
+    /** Makes element ids unique when several forms are open. */
+    prefix: string;
+    oncancel: () => void;
   } = $props();
 
   const initial = untrack(() => link);
   let label = $state(initial?.label ?? '');
   let url = $state(initial?.url ?? '');
-  let order = $state(String(initial?.order ?? untrack(() => nextOrder)));
   let isActive = $state(initial?.isActive ?? true);
-  let parentId = $state(initial?.parentId != null ? String(initial.parentId) : '');
   let processing = $state(false);
   let errors = $state<Record<string, string>>({});
   let message = $state('');
+  let labelInput = $state<HTMLInputElement | null>(null);
 
-  const parentLabel = $derived(parentLinks.find((parent) => String(parent.id) === parentId)?.label ?? '');
+  $effect(() => {
+    labelInput?.focus();
+  });
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
-    processing = true;
     errors = {};
     message = '';
-
-    const orderNumber = Number(order);
+    const urlProblem = navUrlError(url);
+    if (urlProblem || !label.trim()) {
+      if (urlProblem) errors.url = urlProblem;
+      if (!label.trim()) errors.label = 'The label is required.';
+      return;
+    }
+    processing = true;
     const payload = {
       label,
       url,
-      order: order.trim() === '' || Number.isNaN(orderNumber) ? (Number.NaN as number) : orderNumber,
       isActive,
-      parentId: parentId ? Number(parentId) : null,
+      order: initial?.order ?? untrack(() => nextOrder),
+      parentId: initial ? initial.parentId : untrack(() => parentId),
     };
-    const { error } = initial ? await actions.navlinks.update({ id: initial.id, ...payload }) : await actions.navlinks.create(payload);
+    const { error } = initial
+      ? await actions.navlinks.update({ id: initial.id, ...payload })
+      : await actions.navlinks.create(payload);
     if (error) {
       const parsed = parseActionError(error);
       errors = parsed.fields;
@@ -61,42 +75,58 @@
       processing = false;
       return;
     }
-    await navigate('/admin/navlinks');
+    await reloadView();
+  }
+
+  function onKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      oncancel();
+    }
   }
 </script>
 
-<div class="space-y-6">
-  <NavLinkPreview {label} {url} {isActive} {parentLabel} />
+<form
+  method="post"
+  onsubmit={submit}
+  onkeydown={onKeydown}
+  aria-label={initial ? `Edit ${initial.label}` : parentLabel ? `Add link under ${parentLabel}` : 'Add link'}
+  class="space-y-4 rounded-lg border border-border-strong bg-surface-alt p-4"
+>
+  <p class="text-sm font-semibold text-foreground">
+    {#if initial}Edit link{:else if parentLabel}New link under “{parentLabel}”{:else}New top-level link{/if}
+  </p>
+  <div class="grid gap-4 md:grid-cols-2">
+    <Field id={`${prefix}-label`} label="Label" required error={errors.label}>
+      <input
+        id={`${prefix}-label`}
+        bind:this={labelInput}
+        type="text"
+        required
+        maxlength="255"
+        bind:value={label}
+        class={inputClass}
+        placeholder="e.g. Admissions"
+      />
+    </Field>
+    <Field id={`${prefix}-url`} label="URL" required error={errors.url} hint="A path such as /posts or a full https:// URL.">
+      <input id={`${prefix}-url`} type="text" required maxlength="255" bind:value={url} class={inputClass} placeholder="/posts" />
+    </Field>
+  </div>
 
-  <form method="post" onsubmit={submit} class="space-y-6 rounded-xl border border-border bg-card p-6 shadow-brand-sm">
-    <div class="grid gap-6 md:grid-cols-2">
-      <Field id="label" label="Label" required error={errors.label}>
-        <input id="label" type="text" required maxlength="255" bind:value={label} class={inputClass} placeholder="e.g. Admissions" />
-      </Field>
-      <Field id="url" label="URL" required error={errors.url} hint="A path such as /posts or a full URL.">
-        <input id="url" type="text" required maxlength="255" bind:value={url} class={inputClass} placeholder="/posts" />
-      </Field>
-      <Field id="parentId" label="Parent link" error={errors.parentId} hint="Leave empty for a top-level link.">
-        <select id="parentId" bind:value={parentId} class={inputClass}>
-          <option value="">None (top level)</option>
-          {#each parentLinks as parent (parent.id)}
-            <option value={String(parent.id)}>{parent.label}</option>
-          {/each}
-        </select>
-      </Field>
-      <Field id="order" label="Display order" required error={errors.order} hint="Lower numbers appear first.">
-        <input id="order" type="number" step="1" required bind:value={order} class={inputClass} />
-      </Field>
-    </div>
+  <label class="flex cursor-pointer items-center gap-3 text-sm text-foreground">
+    <input type="checkbox" bind:checked={isActive} class="h-4 w-4 rounded border-border-strong accent-brand-800" />
+    <span>Visible in navigation</span>
+  </label>
 
-    <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-surface-alt p-4">
-      <input type="checkbox" bind:checked={isActive} class="mt-0.5 h-4 w-4 rounded border-border-strong accent-brand-800" />
-      <span class="flex flex-col">
-        <span class="text-sm font-semibold text-foreground">Visible in navigation</span>
-        <span class="text-xs text-muted-foreground">Hidden links stay saved but are not shown on the site.</span>
-      </span>
-    </label>
+  {#if message}
+    <p class="text-sm font-medium text-destructive" role="alert">{message}</p>
+  {/if}
 
-    <FormActions cancelHref="/admin/navlinks" {processing} submitLabel={initial ? 'Save changes' : 'Add link'} {message} />
-  </form>
-</div>
+  <div class="flex flex-wrap gap-2">
+    <button type="submit" class={primaryButtonClass} disabled={processing}>
+      {processing ? 'Saving…' : initial ? 'Save changes' : 'Add link'}
+    </button>
+    <button type="button" class={secondaryButtonClass} onclick={oncancel} disabled={processing}>Cancel</button>
+  </div>
+</form>
