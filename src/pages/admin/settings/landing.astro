@@ -19,10 +19,10 @@ const setting = await db.setting.findUnique({ where: { key: 'welcome_hero_conten
     title="Landing Page Settings"
     breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Landing Settings' }]}
 >
-    <div class="mx-auto w-full max-w-5xl space-y-6 p-6">
+    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
         <PageHeader
             title="Landing page settings"
-            description="Configure the main welcome page hero section using Markdown and MDX components."
+            description="Design the main welcome page hero section with the visual editor."
         />
         <LandingSettingsForm client:load welcomeHeroContent={setting?.value ?? ''} />
     </div>

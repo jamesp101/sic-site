@@ -2,7 +2,7 @@
   import { actions } from 'astro:actions';
   import { navigate } from 'astro:transitions/client';
   import { untrack } from 'svelte';
-  import MarkdownEditor from '@/components/MarkdownEditor.svelte';
+  import BlockEditor from '@/components/admin/editor/BlockEditor.svelte';
   import Field from '@/components/admin/shared/Field.svelte';
   import FormActions from '@/components/admin/shared/FormActions.svelte';
   import ImageField from '@/components/admin/shared/ImageField.svelte';
@@ -93,9 +93,9 @@
   }
 </script>
 
-<form method="post" onsubmit={submit} class="grid gap-8 lg:grid-cols-3">
-  <div class="space-y-6 lg:col-span-2">
-    <div class="{cardClass} space-y-5 p-6">
+<form method="post" onsubmit={submit} class="space-y-6">
+  <div class="{cardClass} grid gap-8 p-6 lg:grid-cols-3">
+    <div class="space-y-5 lg:col-span-2">
       <Field label="Post title" id="title" error={errors.title} required>
         <input id="title" type="text" required bind:value={title} class={inputClass} placeholder="e.g. Enrollment details for first semester" aria-invalid={errors.title ? 'true' : undefined} />
       </Field>
@@ -117,30 +117,27 @@
         />
       </Field>
 
-      <MarkdownEditor
-        bind:value={content}
-        id="content"
-        label="Post content (Markdown / MDX)"
-        error={errors.content}
-        placeholder="Write your article, announcement or event description…"
-      />
-    </div>
-  </div>
+      <div class="grid gap-5 md:grid-cols-2">
+        <Field label="Post type" id="type" error={errors.type}>
+          <select id="type" bind:value={type} class="{selectClass} w-full">
+            <option value="article">Article / Story</option>
+            <option value="event">Campus Event</option>
+            <option value="announcement">Official Announcement</option>
+          </select>
+        </Field>
 
-  <div class="space-y-6">
-    <div class="{cardClass} space-y-5 p-6">
-      <h2 class="font-sans text-base font-bold text-foreground">Post settings</h2>
-
-      <Field label="Post type" id="type" error={errors.type}>
-        <select id="type" bind:value={type} class="{selectClass} w-full">
-          <option value="article">Article / Story</option>
-          <option value="event">Campus Event</option>
-          <option value="announcement">Official Announcement</option>
-        </select>
-      </Field>
+        <Field label="Department" id="departmentId" error={errors.departmentId}>
+          <select id="departmentId" bind:value={departmentId} class="{selectClass} w-full">
+            {#if isSuperAdmin}<option value="">General landing page</option>{/if}
+            {#each departments as dept (dept.id)}
+              <option value={String(dept.id)}>{dept.name}</option>
+            {/each}
+          </select>
+        </Field>
+      </div>
 
       {#if type === 'event'}
-        <div class="space-y-4 border-t border-border pt-4">
+        <div class="grid gap-5 border-t border-border pt-4 md:grid-cols-2">
           <Field label="Event start" id="startDate" error={errors.startDate}>
             <input id="startDate" type="datetime-local" bind:value={startDate} class={inputClass} />
           </Field>
@@ -149,16 +146,9 @@
           </Field>
         </div>
       {/if}
+    </div>
 
-      <Field label="Department" id="departmentId" error={errors.departmentId}>
-        <select id="departmentId" bind:value={departmentId} class="{selectClass} w-full">
-          {#if isSuperAdmin}<option value="">General landing page</option>{/if}
-          {#each departments as dept (dept.id)}
-            <option value={String(dept.id)}>{dept.name}</option>
-          {/each}
-        </select>
-      </Field>
-
+    <div class="space-y-5">
       <ImageField
         bind:file={highlightImage}
         id="highlightImage"
@@ -175,7 +165,9 @@
         Feature on landing page
       </label>
     </div>
-
-    <FormActions cancelHref="/admin/posts" {processing} {message} submitLabel={post ? 'Save changes' : 'Publish post'} />
   </div>
+
+  <BlockEditor bind:value={content} id="content" label="Post content" error={errors.content} context="post" />
+
+  <FormActions cancelHref="/admin/posts" {processing} {message} submitLabel={post ? 'Save changes' : 'Publish post'} />
 </form>

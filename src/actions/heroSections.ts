@@ -1,12 +1,13 @@
 import { ActionError, defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
+import { contentField } from '@/lib/server/content-field';
 import { departmentForWrite, scopeDepartment, type Actor } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
 
 const fields = {
     title: z.string().trim().max(255).nullish(),
-    content: z.string().min(1, 'The content is required.'),
+    content: contentField({ required: true }),
     order: z.number({ error: 'The order must be a whole number.' }).int('The order must be a whole number.'),
     isActive: z.boolean(),
     departmentId: z.number().int().nullish(),

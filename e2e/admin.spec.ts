@@ -2,8 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 
-const ADMIN = 'e2e/.auth/admin.json';
-const CIT = 'e2e/.auth/cit.json';
+import { ADMIN, CIT } from './auth-state';
 
 test.describe('as superadmin', () => {
     test.use({ storageState: ADMIN });
@@ -63,8 +62,8 @@ test.describe('as superadmin', () => {
         const title = `E2E post ${Date.now()}`;
         await page.goto('/admin/posts/create');
         await page.getByLabel('Post title').fill(title);
-        await page.locator('.cm-content').click();
-        await page.keyboard.type('Body from the end-to-end test.');
+        await page.getByRole('button', { name: 'Add Text', exact: true }).click();
+        await page.getByLabel('Text', { exact: true }).fill('Body from the end-to-end test.');
         await page.locator('#highlightImage').setInputFiles(path.resolve('public/sic-seal.png'));
         await page.getByRole('button', { name: 'Apply Crop' }).click();
         // Hover the sidebar "Posts" link first so a pre-save copy of the list sits in the prefetch cache.
@@ -90,6 +89,8 @@ test.describe('as superadmin', () => {
     });
 
     test('admin screens have no serious axe violations', async ({ page }) => {
+        // Four axe scans (the editor page is heavy) exceed the default 30 s under parallel load.
+        test.slow();
         for (const route of ['/dashboard', '/admin/posts', '/admin/posts/create', '/admin/departments']) {
             await page.goto(route);
             const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();

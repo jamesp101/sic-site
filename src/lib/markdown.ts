@@ -8,6 +8,11 @@
  * - Output carries Tailwind token classes (no `prose`, no hard-coded colours).
  */
 
+import { escapeHtml } from './escape-html';
+import { isBlockDocument } from './blocks/document';
+import { blocksToPlainText } from './blocks/plain-text';
+import { stripMarkdown } from './markdown-strip';
+
 const OPEN = '\uE000';
 const CLOSE = '\uE001';
 const SENTINEL_LINE = /^\uE000(\d+)\uE001$/;
@@ -45,11 +50,7 @@ const CLASSES = {
     badge: 'inline-flex items-center rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-semibold text-brand-700',
 };
 
-const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-
-export function escapeHtml(value: string): string {
-    return value.replace(/[&<>"']/g, (ch) => ESCAPES[ch]);
-}
+export { escapeHtml };
 
 function safeUrl(url: string): string {
     // `url` is already HTML-escaped; reject script-capable schemes.
@@ -248,21 +249,10 @@ export function parseMarkdown(markdown: string | null | undefined): string {
     return restore(html.join('\n'), stash);
 }
 
-/** Plain-text rendition (markdown and MDX-lite stripped, whitespace collapsed) for excerpts and meta descriptions. */
-export function toPlainText(markdown: string | null | undefined): string {
-    if (!markdown) return '';
-    return markdown
-        .replace(/\r\n?/g, '\n')
-        .replace(/^import\s+.*\s+from\s+['"].*['"];?\s*$/gm, ' ')
-        .replace(/```[^\n]*\n?/g, ' ')
-        .replace(/<Badges\s+tags="([^"]*)"\s*\/>/g, ' $1 ')
-        .replace(/<\/?[A-Za-z][^>]*>/g, ' ')
-        .replace(/!\[([^\]]*)\]\([^)]*\)/g, ' ')
-        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-        .replace(/^\s{0,3}#{1,6}\s+/gm, '')
-        .replace(/^\s*>\s?/gm, '')
-        .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, '')
-        .replace(/(\*\*|__|\*|`)/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+/** Plain-text rendition (markup stripped, whitespace collapsed) of Markdown / MDX-lite or a block document, for excerpts and meta descriptions. */
+export function toPlainText(content: string | null | undefined): string {
+    if (!content) return '';
+    // A truncated block document must never leak its JSON into an excerpt.
+    const blockDocument = isBlockDocument(content) || content.trimStart().startsWith('{"type":"sic-blocks"');
+    return blockDocument ? blocksToPlainText(content) : stripMarkdown(content);
 }

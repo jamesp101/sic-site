@@ -40,6 +40,15 @@ Site: <http://localhost:4321>. Seeded logins: `admin@email.com` (superadmin), `c
 - Migrations are provider-specific: `prisma/migrations/<provider>/`. Switching provider = set `DATABASE_URL`, then `vp run db:migrate` to create that provider's baseline.
 - Table and column names match the Laravel schema; Better Auth uses its own `auth_sessions`, `auth_accounts`, `auth_verifications` tables.
 
+## Visual block editor
+
+Posts, hero sections and the landing page setting (`welcome_hero_content`) are edited with the visual block editor (`src/components/admin/editor/`): Elements palette, Layers tree, a canvas that renders the real site styles in an iframe, and an Inspector. Departments still use the Markdown editor.
+
+- **Storage**: a versioned JSON document `{"type":"sic-blocks","version":1,"blocks":[…]}` in the existing text columns (no migration). Anything else in those columns is legacy Markdown / MDX-lite: it keeps rendering through `parseMarkdown`, opens in the editor as one "Markdown (legacy)" block and can be converted to blocks. An untouched legacy value is saved back unchanged.
+- **Code**: `src/lib/blocks/` is pure TypeScript shared by the editor, the server and tests: `types.ts` (model and limits), `schema.ts` (zod validation; `checkContent` is used by the post/hero/settings actions through `src/lib/server/content-field.ts`), `render.ts` (semantic HTML with token classes, all text escaped, URLs filtered, headings h2–h4), `content.ts` (`renderContent`, used by every public caller), `plain-text.ts` (excerpts via `toPlainText`), `from-markdown.ts`, `templates.ts`.
+- **Editor shortcuts**: Delete removes, Ctrl/Cmd+D duplicates, Ctrl/Cmd+Z and Shift+Z undo / redo, Alt+arrows move or re-parent, arrows change the selection, Enter edits text, Esc deselects. In Layers, focus a row, press Space to lift, arrows to move, Space to drop.
+- **Inline text markup** (paragraphs, lists, table cells, …): `**bold**`, `*italic*`, `[label](url)`; `\` escapes a character.
+
 ## Uploads
 
 `STORAGE_DRIVER` selects the backend (see `.env.example`); code only talks to `src/lib/server/storage` (`put`, `remove`, `read`, `publicUrl`, `downloadUrl`), and the database stores bare keys (`posts/abc.jpg`).

@@ -28,10 +28,10 @@ const departments = await db.department.findMany({
         { title: 'Create' },
     ]}
 >
-    <div class="mx-auto w-full max-w-5xl space-y-6 p-6">
+    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
         <PageHeader
             title="Create hero section"
-            description="Design a new MDX hero block for the landing page or a department page."
+            description="Design a new hero block for the landing page or a department page with the visual editor."
             backHref="/admin/hero-sections"
         />
         <HeroSectionForm client:load {departments} isSuperAdmin={isSuperAdmin(actor)} />

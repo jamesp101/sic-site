@@ -1,13 +1,14 @@
 import { expect, test as setup } from '@playwright/test';
+import { ADMIN, CIT } from './auth-state';
 
 // Sign in once per role and reuse the cookies: sign-in is rate limited to 5/min per IP.
 const USERS = [
     {
-        file: 'e2e/.auth/admin.json',
+        file: ADMIN,
         email: 'admin@email.com',
         password: process.env.SEED_SUPERADMIN_PASSWORD ?? 'password',
     },
-    { file: 'e2e/.auth/cit.json', email: 'cit@sic.edu', password: process.env.SEED_DEPARTMENT_PASSWORD ?? 'password' },
+    { file: CIT, email: 'cit@sic.edu', password: process.env.SEED_DEPARTMENT_PASSWORD ?? 'password' },
 ];
 
 for (const user of USERS) {

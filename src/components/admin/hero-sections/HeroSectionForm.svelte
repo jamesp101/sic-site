@@ -1,9 +1,8 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
   import { navigate } from 'astro:transitions/client';
-  import { Info } from '@lucide/svelte';
-  import { untrack } from 'svelte';
-  import MarkdownEditor from '@/components/MarkdownEditor.svelte';
+    import { untrack } from 'svelte';
+  import BlockEditor from '@/components/admin/editor/BlockEditor.svelte';
   import Field from '@/components/admin/shared/Field.svelte';
   import FormActions from '@/components/admin/shared/FormActions.svelte';
   import { inputClass, parseActionError } from '@/components/admin/shared/form-utils';
@@ -68,19 +67,6 @@
 
 <form method="post" onsubmit={submit} class="space-y-6">
   <div class="{cardClass} space-y-6 p-6">
-    <div class="space-y-2 rounded-xl border border-gold-500/30 bg-gold-500/10 p-4 text-xs text-foreground">
-      <p class="flex items-center gap-1.5 font-bold">
-        <Info class="h-4 w-4 text-gold-600" aria-hidden="true" /> Predefined MDX elements
-      </p>
-      <ul class="list-disc space-y-1 pl-5 font-mono">
-        <li><strong>&lt;Card title="Title"&gt;Content&lt;/Card&gt;</strong> – contained info card.</li>
-        <li><strong>&lt;Center&gt;Content&lt;/Center&gt;</strong> – centres nested content.</li>
-        <li><strong>&lt;Flex&gt;Content&lt;/Flex&gt;</strong> – side-by-side on desktop.</li>
-        <li><strong>&lt;Accordion title="Header"&gt;Content&lt;/Accordion&gt;</strong> – expandable block.</li>
-        <li><strong>&lt;Badges&gt;Val1, Val2&lt;/Badges&gt;</strong> – comma-separated badges.</li>
-      </ul>
-    </div>
-
     <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
       <Field label="Page location" id="departmentId" error={errors.departmentId}>
         <select id="departmentId" bind:value={departmentId} class="{selectClass} w-full">
@@ -105,15 +91,9 @@
         Visible on page
       </label>
     </div>
-
-    <MarkdownEditor
-      bind:value={content}
-      id="content"
-      label="Hero content (Markdown / MDX)"
-      error={errors.content}
-      placeholder="# Header&#10;<Center>Text</Center>"
-    />
   </div>
+
+  <BlockEditor bind:value={content} id="content" label="Hero content" error={errors.content} context="section" />
 
   <FormActions cancelHref="/admin/hero-sections" {processing} {message} submitLabel={section ? 'Save changes' : 'Create section'} />
 </form>

@@ -2,6 +2,7 @@ import { ActionError, defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
 import { POST_TYPES } from '@/lib/content-types';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
+import { contentField } from '@/lib/server/content-field';
 import { departmentForWrite, scopeDepartment, type Actor } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
 import { imageFile } from '@/lib/server/image-file';
@@ -16,7 +17,7 @@ const dateString = z
 const fields = {
     title: z.string().trim().min(1, 'The title is required.').max(255),
     slug: z.string().trim().max(255).nullish(),
-    content: z.string().min(1, 'The content is required.'),
+    content: contentField({ required: true }),
     type: z.enum(POST_TYPES as [string, ...string[]], { error: 'Choose a valid post type.' }),
     startDate: dateString,
     endDate: dateString,

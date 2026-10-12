@@ -1,6 +1,7 @@
 import { defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
+import { contentField } from '@/lib/server/content-field';
 import { requireSuperAdmin } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
 
@@ -8,7 +9,7 @@ const LANDING_SETTING_KEY = 'welcome_hero_content';
 
 export const settings = {
     updateLanding: defineAction({
-        input: z.object({ welcomeHeroContent: z.string().nullish() }),
+        input: z.object({ welcomeHeroContent: contentField({ required: false }).nullish() }),
         handler: (input, context) =>
             guarded(async () => {
                 requireSuperAdmin(actorOf(context));
