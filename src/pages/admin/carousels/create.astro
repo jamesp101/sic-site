@@ -1,0 +1,43 @@
+---
+import AppLayout from '@/layouts/AppLayout.astro';
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import CarouselForm from '@/components/admin/carousels/CarouselForm.svelte';
+import { db } from '@/lib/server/db';
+import { departmentFilter, isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { authzResponse } from '@/lib/server/authz-response';
+
+let actor;
+try {
+    actor = requireUser(Astro.locals.user);
+} catch (error) {
+    return authzResponse(error);
+}
+
+const superadmin = isSuperAdmin(actor);
+const [departments, last] = await Promise.all([
+    db.department.findMany({
+        where: superadmin ? {} : { id: actor.departmentId ?? -1 },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+    }),
+    db.carouselItem.aggregate({ where: departmentFilter(actor), _max: { order: true } }),
+]);
+---
+
+<AppLayout
+    title="Add Carousel Slide"
+    breadcrumbs={[
+        { title: 'Dashboard', href: '/dashboard' },
+        { title: 'Carousels', href: '/admin/carousels' },
+        { title: 'Add slide' },
+    ]}
+>
+    <div class="mx-auto w-full max-w-3xl space-y-6 p-6">
+        <PageHeader
+            title="Add carousel slide"
+            description="Create a slide for the home page or a department page."
+            backHref="/admin/carousels"
+        />
+        <CarouselForm client:load {departments} lockDepartment={!superadmin} nextOrder={(last._max.order ?? 0) + 1} />
+    </div>
+</AppLayout>

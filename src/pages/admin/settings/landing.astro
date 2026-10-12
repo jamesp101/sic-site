@@ -1,0 +1,29 @@
+---
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import LandingSettingsForm from '@/components/admin/settings/LandingSettingsForm.svelte';
+import AppLayout from '@/layouts/AppLayout.astro';
+import { requireSuperAdmin } from '@/lib/server/authz';
+import { authzResponse } from '@/lib/server/authz-response';
+import { db } from '@/lib/server/db';
+
+try {
+    requireSuperAdmin(Astro.locals.user);
+} catch (error) {
+    return authzResponse(error);
+}
+
+const setting = await db.setting.findUnique({ where: { key: 'welcome_hero_content' } });
+---
+
+<AppLayout
+    title="Landing Page Settings"
+    breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Landing Settings' }]}
+>
+    <div class="mx-auto w-full max-w-5xl space-y-6 p-6">
+        <PageHeader
+            title="Landing page settings"
+            description="Configure the main welcome page hero section using Markdown and MDX components."
+        />
+        <LandingSettingsForm client:load welcomeHeroContent={setting?.value ?? ''} />
+    </div>
+</AppLayout>

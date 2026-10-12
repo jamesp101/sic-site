@@ -1,0 +1,40 @@
+---
+import Eyebrow from './Eyebrow.astro';
+import { btnGold, btnOnDark } from './classes';
+import { SITE } from '@/lib/site';
+---
+
+<section class="relative overflow-hidden bg-linear-to-br from-brand-950 via-brand-900 to-brand-800 text-white">
+    <div
+        class="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-gold-500/15 blur-3xl"
+        aria-hidden="true"
+    ></div>
+    <div
+        class="pointer-events-none absolute -bottom-32 -left-24 h-96 w-96 rounded-full bg-brand-500/20 blur-3xl"
+        aria-hidden="true"
+    ></div>
+    <div class="relative mx-auto flex w-full max-w-4xl flex-col items-center px-6 py-20 text-center md:py-28">
+        <img
+            src="/sic-seal.png"
+            alt={`${SITE.name} seal`}
+            width="224"
+            height="224"
+            fetchpriority="high"
+            decoding="async"
+            class="h-28 w-28 rounded-full border-2 border-gold-500/40 bg-white/5 object-contain md:h-36 md:w-36"
+        />
+        <Eyebrow tone="onDark" class="mt-8">
+            {SITE.motto}
+        </Eyebrow>
+        <h1 class="mt-4 animate-fade-in text-4xl font-bold tracking-tight md:text-6xl">{SITE.name}</h1>
+        <p class="mt-5 max-w-2xl text-base leading-relaxed text-white/85 md:text-lg">{SITE.tagline}</p>
+        <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+            <a href="#departments" class={btnGold}>
+                Explore programs
+            </a>
+            <a href="/contact" class={btnOnDark}>
+                Contact admissions
+            </a>
+        </div>
+    </div>
+</section>

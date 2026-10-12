@@ -1,0 +1,60 @@
+---
+import { SITE } from '@/lib/site';
+
+const { address } = SITE;
+---
+
+<div class="space-y-4">
+    <div class="rounded-2xl border border-border bg-surface p-6 shadow-brand-sm">
+        <h3 class="font-sans text-sm font-semibold uppercase tracking-wider text-link">Campus address</h3>
+        <address class="mt-2 text-sm not-italic leading-relaxed text-foreground">
+            {SITE.name}
+            <br />
+            {address.streetAddress}, {address.addressLocality}
+            <br />
+            {address.addressRegion} {address.postalCode}, Philippines
+        </address>
+    </div>
+    <div class="rounded-2xl border border-border bg-surface p-6 shadow-brand-sm">
+        <h3 class="font-sans text-sm font-semibold uppercase tracking-wider text-link">Phone</h3>
+        <p class="mt-2 text-sm">
+            <a
+                href={`tel:${SITE.telephoneE164}`}
+                class="rounded font-medium text-foreground underline-offset-4 hover:underline"
+            >
+                {SITE.telephone}
+            </a>
+        </p>
+    </div>
+    <div class="rounded-2xl border border-border bg-surface p-6 shadow-brand-sm">
+        <h3 class="font-sans text-sm font-semibold uppercase tracking-wider text-link">Email</h3>
+        <p class="mt-2 text-sm">
+            <a
+                href={`mailto:${SITE.email}`}
+                class="rounded font-medium text-foreground underline-offset-4 hover:underline"
+            >
+                {SITE.email}
+            </a>
+        </p>
+    </div>
+    <div class="rounded-2xl border border-border bg-surface p-6 shadow-brand-sm">
+        <h3 class="font-sans text-sm font-semibold uppercase tracking-wider text-link">Follow us</h3>
+        <ul class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+            {SITE.sameAs.map((url) => (
+                <li>
+                    <a
+                        href={url}
+                        rel="noopener"
+                        class="rounded font-medium text-foreground underline-offset-4 hover:underline"
+                    >
+                        {url.includes('facebook')
+                            ? 'Facebook'
+                            : url.includes('tiktok')
+                              ? 'TikTok'
+                              : new URL(url).hostname}
+                    </a>
+                </li>
+            ))}
+        </ul>
+    </div>
+</div>

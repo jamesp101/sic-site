@@ -1,0 +1,44 @@
+---
+/**
+ * Document shell shared by every layout: <html lang>, SEO head, fonts, theme
+ * bootstrap (no flash of wrong theme). Theme is applied client-side only so
+ * publicly cached HTML is identical for every visitor.
+ */
+import Seo, { type SeoProps } from '@/components/seo/Seo.astro';
+import interLatin from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
+import '@/styles/app.css';
+
+type Props = SeoProps & { bodyClass?: string };
+const { bodyClass = '', ...seo } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#0a2e6e" />
+        <meta name="color-scheme" content="light dark" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="alternate" type="application/rss+xml" title="San Isidro College — Posts" href="/rss.xml" />
+        <link rel="sitemap" href="/sitemap.xml" />
+        <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin />
+        <script is:inline>
+            (() => {
+                const stored = localStorage.getItem('appearance');
+                const value = stored === 'light' || stored === 'dark' ? stored : 'system';
+                const dark =
+                    value === 'dark' || (value === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+                document.documentElement.classList.toggle('dark', dark);
+                document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+            })();
+        </script>
+        <Seo {...seo} />
+        <slot name="head" />
+    </head>
+    <body class={bodyClass}>
+        <slot />
+    </body>
+</html>

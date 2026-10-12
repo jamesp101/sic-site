@@ -1,0 +1,17 @@
+---
+import DeleteUser from '@/components/DeleteUser.svelte';
+import Heading from '@/components/Heading.svelte';
+import ProfileForm from '@/components/settings/ProfileForm.svelte';
+import SettingsLayout from '@/layouts/SettingsLayout.astro';
+
+const user = Astro.locals.user!;
+---
+
+<SettingsLayout title="Profile">
+    <h1 class="sr-only">Profile settings</h1>
+    <div class="flex flex-col space-y-6">
+        <Heading variant="small" title="Profile" description="Update your name and email address" />
+        <ProfileForm client:load name={user.name} email={user.email} emailVerified={user.emailVerified} />
+    </div>
+    <DeleteUser client:visible />
+</SettingsLayout>

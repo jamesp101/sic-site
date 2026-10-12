@@ -1,0 +1,257 @@
+---
+import { ArrowUpDown, Calendar, FileText, Megaphone, Pencil, Search, Star } from '@lucide/svelte';
+import AddLink from '@/components/admin/shared/AddLink.astro';
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import DeletePostButton from '@/components/admin/posts/DeletePostButton.svelte';
+import { cardClass, formatDate, iconLinkClass, selectClass, thClass } from '@/components/admin/ui';
+import AppLayout from '@/layouts/AppLayout.astro';
+import { POST_TYPES } from '@/lib/content-types';
+import { departmentFilter, isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { authzResponse } from '@/lib/server/authz-response';
+import { db } from '@/lib/server/db';
+import { publicUrl } from '@/lib/server/storage';
+import type { Prisma } from '@/generated/prisma/client';
+
+let actor;
+try {
+    actor = requireUser(Astro.locals.user);
+} catch (error) {
+    return authzResponse(error);
+}
+
+const params = Astro.url.searchParams;
+const q = params.get('q')?.trim() ?? '';
+const type = POST_TYPES.find((t) => t === params.get('type')) ?? '';
+const departmentParam = /^\d+$/.test(params.get('department') ?? '') ? Number(params.get('department')) : null;
+const featured = params.get('featured') === 'yes' ? true : params.get('featured') === 'no' ? false : null;
+const sort = ['title', 'type', 'department', 'featured', 'created'].includes(params.get('sort') ?? '')
+    ? params.get('sort')!
+    : 'created';
+const dir: 'asc' | 'desc' =
+    params.get('dir') === 'asc' ? 'asc' : params.get('dir') === 'desc' ? 'desc' : sort === 'created' ? 'desc' : 'asc';
+
+const where: Prisma.PostWhereInput = {
+    ...departmentFilter(actor),
+    ...(q ? { OR: [{ title: { contains: q } }, { content: { contains: q } }] } : {}),
+    ...(type ? { type } : {}),
+    ...(departmentParam !== null && isSuperAdmin(actor) ? { departmentId: departmentParam } : {}),
+    ...(featured !== null ? { isFeatured: featured } : {}),
+};
+const orderBy: Prisma.PostOrderByWithRelationInput =
+    sort === 'title'
+        ? { title: dir }
+        : sort === 'type'
+          ? { type: dir }
+          : sort === 'department'
+            ? { department: { name: dir } }
+            : sort === 'featured'
+              ? { isFeatured: dir }
+              : { createdAt: dir };
+
+const [posts, departments] = await Promise.all([
+    db.post.findMany({
+        where,
+        orderBy,
+        include: { department: { select: { name: true } }, user: { select: { name: true } } },
+    }),
+    isSuperAdmin(actor)
+        ? db.department.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } })
+        : Promise.resolve([]),
+]);
+
+function sortHref(field: string) {
+    const next = new URL(Astro.url);
+    next.searchParams.set('sort', field);
+    next.searchParams.set('dir', sort === field && dir === 'asc' ? 'desc' : 'asc');
+    return `${next.pathname}${next.search}`;
+}
+const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascending' : 'descending') : undefined);
+const typeClass: Record<string, string> = {
+    article: 'bg-status-article-bg text-status-article-fg',
+    event: 'bg-status-event-bg text-status-event-fg',
+    announcement: 'bg-status-announcement-bg text-status-announcement-fg',
+};
+const typeIcon = { article: FileText, event: Calendar, announcement: Megaphone } as const;
+const filtered = Boolean(q || type || departmentParam !== null || featured !== null);
+---
+
+<AppLayout title="Manage Posts" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Posts' }]}>
+    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+        <PageHeader title="Posts" description="Create, edit or delete articles, announcements and campus events.">
+            <AddLink href="/admin/posts/create">Create post</AddLink>
+        </PageHeader>
+
+        <form
+            method="get"
+            action="/admin/posts"
+            class={`${cardClass} flex flex-col items-center justify-between gap-4 p-4 md:flex-row`}
+        >
+            <div class="relative w-full md:max-w-xs">
+                <Search
+                    class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                />
+                <input
+                    type="search"
+                    name="q"
+                    value={q}
+                    placeholder="Search posts…"
+                    aria-label="Search posts"
+                    class="w-full rounded-lg border border-border-strong bg-surface py-2 pr-4 pl-10 text-sm outline-none focus:border-brand-600"
+                />
+            </div>
+            <div class="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-center md:w-auto">
+                <select name="type" aria-label="Filter by type" class={selectClass}>
+                    <option value="">All types</option>
+                    {POST_TYPES.map((t) => (
+                        <option value={t} selected={t === type}>
+                            {t[0].toUpperCase() + t.slice(1)}
+                        </option>
+                    ))}
+                </select>
+                {departments.length > 0 && (
+                    <select name="department" aria-label="Filter by department" class={selectClass}>
+                        <option value="">All departments</option>
+                        {departments.map((d) => (
+                            <option value={String(d.id)} selected={d.id === departmentParam}>
+                                {d.name}
+                            </option>
+                        ))}
+                    </select>
+                )}
+                <select name="featured" aria-label="Filter by featured" class={selectClass}>
+                    <option value="">All featured</option>
+                    <option value="yes" selected={featured === true}>
+                        Featured only
+                    </option>
+                    <option value="no" selected={featured === false}>
+                        Not featured
+                    </option>
+                </select>
+                <input type="hidden" name="sort" value={sort} />
+                <input type="hidden" name="dir" value={dir} />
+                <button
+                    type="submit"
+                    class="rounded-lg bg-brand-800 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 dark:bg-gold-500 dark:text-brand-950 dark:hover:bg-gold-400"
+                >
+                    Filter
+                </button>
+                {filtered && (
+                    <a
+                        href="/admin/posts"
+                        class="rounded-lg border border-border-strong px-3 py-2 text-center text-sm font-semibold text-muted-foreground hover:bg-surface-alt"
+                    >
+                        Reset
+                    </a>
+                )}
+            </div>
+        </form>
+
+        <div class={`${cardClass} overflow-hidden`}>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-left">
+                    <thead>
+                        <tr class="border-b border-border bg-surface-alt">
+                            {[
+                                ['title', 'Post'],
+                                ['type', 'Type'],
+                                ['department', 'Department'],
+                                ['featured', 'Featured'],
+                            ].map(([field, label]) => (
+                                <th scope="col" class={thClass} aria-sort={ariaSort(field)}>
+                                    <a href={sortHref(field)} class="inline-flex items-center gap-1 hover:text-link">
+                                        {label} <ArrowUpDown class="h-3.5 w-3.5" aria-hidden="true" />
+                                    </a>
+                                </th>
+                            ))}
+                            <th scope="col" class={thClass}>
+                                Author
+                            </th>
+                            <th scope="col" class={`${thClass} text-right`}>
+                                Actions
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border text-sm">
+                        {posts.map((post) => {
+                            const image = publicUrl(post.highlightImagePath);
+                            const Icon = typeIcon[post.type as keyof typeof typeIcon] ?? FileText;
+                            return (
+                                <tr class="hover:bg-surface-alt">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-3">
+                                            {image ? (
+                                                <img
+                                                    src={image}
+                                                    alt=""
+                                                    loading="lazy"
+                                                    class="h-10 w-16 shrink-0 rounded-md border border-border object-cover"
+                                                />
+                                            ) : (
+                                                <div
+                                                    class={`flex h-10 w-16 shrink-0 items-center justify-center rounded-md ${typeClass[post.type] ?? 'bg-secondary text-secondary-foreground'}`}
+                                                >
+                                                    <Icon class="h-5 w-5" aria-hidden="true" />
+                                                </div>
+                                            )}
+                                            <div class="min-w-0">
+                                                <span class="block max-w-sm truncate font-semibold text-foreground">
+                                                    {post.title}
+                                                </span>
+                                                <span class="mt-0.5 block text-xs text-muted-foreground">
+                                                    Created {formatDate(post.createdAt)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <span
+                                            class={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${typeClass[post.type] ?? ''}`}
+                                        >
+                                            {post.type}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 text-muted-foreground">
+                                        {post.department?.name ?? 'General (all departments)'}
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        {post.isFeatured ? (
+                                            <span class="inline-flex items-center gap-1 rounded bg-file-archive-bg px-2 py-0.5 text-xs font-semibold text-file-archive-fg">
+                                                <Star class="h-3 w-3 fill-current" aria-hidden="true" /> Featured
+                                            </span>
+                                        ) : (
+                                            <span class="text-muted-foreground" aria-label="Not featured">
+                                                –
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td class="px-6 py-4 text-muted-foreground">{post.user?.name ?? 'System'}</td>
+                                    <td class="px-6 py-4">
+                                        <div class="flex justify-end gap-1.5">
+                                            <a
+                                                href={`/admin/posts/${post.id}/edit`}
+                                                class={iconLinkClass}
+                                                aria-label={`Edit post ${post.title}`}
+                                                title="Edit post"
+                                            >
+                                                <Pencil class="h-4 w-4" aria-hidden="true" />
+                                            </a>
+                                            <DeletePostButton client:visible id={post.id} name={post.title} />
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                        {posts.length === 0 && (
+                            <tr>
+                                <td colspan="6" class="px-6 py-12 text-center text-muted-foreground italic">
+                                    No posts match your filters.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</AppLayout>

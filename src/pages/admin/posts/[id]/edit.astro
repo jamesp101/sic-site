@@ -1,0 +1,52 @@
+---
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import PostForm from '@/components/admin/posts/PostForm.svelte';
+import AppLayout from '@/layouts/AppLayout.astro';
+import { isSuperAdmin, requireUser, scopeDepartment } from '@/lib/server/authz';
+import { authzResponse, parseId } from '@/lib/server/authz-response';
+import { db } from '@/lib/server/db';
+import { publicUrl } from '@/lib/server/storage';
+
+let actor;
+let post;
+try {
+    actor = requireUser(Astro.locals.user);
+    const id = parseId(Astro.params.id);
+    post = scopeDepartment(actor, id === null ? null : await db.post.findUnique({ where: { id } }));
+} catch (error) {
+    return authzResponse(error);
+}
+
+const departments = await db.department.findMany({
+    where: isSuperAdmin(actor) ? {} : { id: actor.departmentId ?? -1 },
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true },
+});
+
+const values = {
+    id: post.id,
+    title: post.title,
+    slug: post.slug,
+    content: post.content,
+    type: post.type,
+    startDate: post.startDate?.toISOString() ?? null,
+    endDate: post.endDate?.toISOString() ?? null,
+    departmentId: post.departmentId,
+    isFeatured: post.isFeatured,
+    highlightImageUrl: publicUrl(post.highlightImagePath),
+};
+---
+
+<AppLayout
+    title="Edit Post"
+    breadcrumbs={[
+        { title: 'Dashboard', href: '/dashboard' },
+        { title: 'Posts', href: '/admin/posts' },
+        { title: 'Edit' },
+    ]}
+>
+    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+        <PageHeader title="Edit post" description={`Make changes to “${post.title}”.`} backHref="/admin/posts" />
+        <PostForm client:load {departments} isSuperAdmin={isSuperAdmin(actor)} post={values} />
+    </div>
+</AppLayout>

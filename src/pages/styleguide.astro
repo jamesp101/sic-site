@@ -1,0 +1,21 @@
+---
+import PageBanner from '@/components/site/PageBanner.astro';
+import StyleguideSample from '@/components/site/StyleguideSample.astro';
+import PublicLayout from '@/layouts/PublicLayout.astro';
+
+if (!import.meta.env.DEV) return new Response(null, { status: 404, statusText: 'Not Found' });
+---
+
+<PublicLayout title="Styleguide" description="Design tokens, type roles and public components." noindex minimal>
+    <PageBanner
+        eyebrow="Design system"
+        title="Styleguide"
+        lead="Tokens, type and components with fixture data. The first panel follows the page theme (toggle it in the header); the second is forced dark."
+    />
+    <h2 class="mx-auto mt-10 w-full max-w-7xl px-6 text-2xl font-bold">Current theme</h2>
+    <StyleguideSample interactive />
+    <div class="dark bg-background text-foreground">
+        <h2 class="mx-auto w-full max-w-7xl px-6 pt-10 text-2xl font-bold">Dark theme</h2>
+        <StyleguideSample />
+    </div>
+</PublicLayout>

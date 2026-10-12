@@ -1,0 +1,39 @@
+---
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import PostForm from '@/components/admin/posts/PostForm.svelte';
+import AppLayout from '@/layouts/AppLayout.astro';
+import { isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { authzResponse } from '@/lib/server/authz-response';
+import { db } from '@/lib/server/db';
+
+let actor;
+try {
+    actor = requireUser(Astro.locals.user);
+} catch (error) {
+    return authzResponse(error);
+}
+
+const departments = await db.department.findMany({
+    where: isSuperAdmin(actor) ? {} : { id: actor.departmentId ?? -1 },
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true },
+});
+---
+
+<AppLayout
+    title="Create Post"
+    breadcrumbs={[
+        { title: 'Dashboard', href: '/dashboard' },
+        { title: 'Posts', href: '/admin/posts' },
+        { title: 'Create' },
+    ]}
+>
+    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+        <PageHeader
+            title="Create new post"
+            description="Publish a new article, event advisory or announcement."
+            backHref="/admin/posts"
+        />
+        <PostForm client:load {departments} isSuperAdmin={isSuperAdmin(actor)} />
+    </div>
+</AppLayout>

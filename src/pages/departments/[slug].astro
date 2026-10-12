@@ -1,0 +1,96 @@
+---
+import Eyebrow from '@/components/site/Eyebrow.astro';
+import HeroCarousel from '@/components/site/HeroCarousel.svelte';
+import MarkdownSection from '@/components/site/MarkdownSection.astro';
+import OrgChart from '@/components/site/OrgChart.astro';
+import PageBanner from '@/components/site/PageBanner.astro';
+import PostCard from '@/components/site/PostCard.astro';
+import PublicLayout from '@/layouts/PublicLayout.astro';
+import { departmentJsonLd, oneLine } from '@/lib/seo';
+import { getDepartmentPage } from '@/lib/server/queries';
+import { SITE } from '@/lib/site';
+
+const { slug } = Astro.params;
+const page = slug ? await getDepartmentPage(slug) : null;
+if (!page) return new Response(null, { status: 404, statusText: 'Not Found' });
+
+const { department, carousel, posts, members, heroSections } = page;
+const site = Astro.site ?? new URL(Astro.url.origin);
+const canonical = `/departments/${department.slug}`;
+const description = oneLine(department.description) || `${department.name} at ${SITE.name}, Malaybalay City, Bukidnon.`;
+---
+
+<PublicLayout
+    title={department.name}
+    description={description}
+    {canonical}
+    image={department.logoUrl ?? carousel[0]?.imageUrl}
+    imageAlt={department.name}
+    modifiedTime={department.updatedAt}
+    breadcrumbs={[{ label: 'Home', href: '/' }, { label: department.name }]}
+    jsonLd={departmentJsonLd(department, members, site, new URL(canonical, site).href)}
+>
+    {carousel.length > 0 && (
+        <HeroCarousel
+            client:visible
+            slides={carousel}
+            eyebrow={department.name}
+            tall={false}
+            label={`${department.name} highlights`}
+        />
+    )}
+
+    <PageBanner eyebrow="Academic department" title={department.name} lead={department.description} />
+
+    <MarkdownSection content={department.heroContent} />
+    {heroSections.map((section) => (
+        <MarkdownSection content={section.content} />
+    ))}
+
+    {members.length > 0 && (
+        <section class="border-b border-border bg-surface-alt py-16" aria-labelledby="people-heading">
+            <div class="mx-auto w-full max-w-7xl px-6">
+                <div class="text-center">
+                    <Eyebrow>People</Eyebrow>
+                    <h2
+                        id="people-heading"
+                        class="mt-3 text-3xl font-bold text-brand-800 md:text-4xl dark:text-foreground"
+                    >
+                        Leadership &amp; faculty
+                    </h2>
+                </div>
+                <div class="mt-12 overflow-x-auto pb-4">
+                    <div class="mx-auto w-max min-w-full">
+                        <OrgChart nodes={members} />
+                    </div>
+                </div>
+            </div>
+        </section>
+    )}
+
+    {posts.length > 0 && (
+        <section class="py-16" aria-labelledby="dept-posts-heading">
+            <div class="mx-auto w-full max-w-7xl px-6">
+                <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+                    <h2
+                        id="dept-posts-heading"
+                        class="text-3xl font-bold text-brand-800 md:text-4xl dark:text-foreground"
+                    >
+                        Announcements &amp; events
+                    </h2>
+                    <a
+                        href={`/posts?department_id=${department.id}`}
+                        class="rounded text-sm font-semibold text-link underline-offset-4 hover:underline"
+                    >
+                        View all from this department &rarr;
+                    </a>
+                </div>
+                <div class="mt-10 grid grid-cols-1 gap-8 md:grid-cols-3">
+                    {posts.map((post) => (
+                        <PostCard post={post} variant="compact" />
+                    ))}
+                </div>
+            </div>
+        </section>
+    )}
+</PublicLayout>

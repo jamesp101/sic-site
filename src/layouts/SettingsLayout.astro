@@ -1,0 +1,53 @@
+---
+/** Settings shell: admin AppLayout + sub-navigation (Profile, Security, Appearance). */
+import AppLayout from '@/layouts/AppLayout.astro';
+
+interface Props {
+    title: string;
+}
+const { title } = Astro.props;
+
+const items = [
+    { title: 'Profile', href: '/settings/profile' },
+    { title: 'Security', href: '/settings/security' },
+    { title: 'Appearance', href: '/settings/appearance' },
+];
+const path = Astro.url.pathname.replace(/\/$/, '');
+---
+
+<AppLayout title={`${title} settings`} breadcrumbs={[{ title: 'Settings', href: '/settings/profile' }, { title }]}>
+    <div class="px-4 py-6">
+        <header class="mb-8 space-y-1">
+            <p class="flex items-center gap-2 text-xs font-semibold tracking-widest text-link uppercase">
+                <span class="h-0.5 w-6 bg-gold-500" aria-hidden="true"></span>
+                Settings
+            </p>
+            <p class="text-sm text-muted-foreground">Manage your profile and account settings</p>
+        </header>
+
+        <div class="flex flex-col lg:flex-row lg:gap-12">
+            <nav class="w-full max-w-xl lg:w-48" aria-label="Settings">
+                <ul class="flex flex-col gap-1">
+                    {items.map((item) => (
+                        <li>
+                            <a
+                                href={item.href}
+                                aria-current={path === item.href ? 'page' : undefined}
+                                class:list={[
+                                    'block rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground',
+                                    path === item.href ? 'bg-muted text-foreground' : 'text-muted-foreground',
+                                ]}
+                            >
+                                {item.title}
+                            </a>
+                        </li>
+                    ))}
+                </ul>
+            </nav>
+            <hr class="my-6 border-border lg:hidden" />
+            <section class="max-w-xl flex-1 space-y-12 md:max-w-2xl">
+                <slot />
+            </section>
+        </div>
+    </div>
+</AppLayout>

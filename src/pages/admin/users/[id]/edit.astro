@@ -1,0 +1,45 @@
+---
+import AppLayout from '@/layouts/AppLayout.astro';
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import UserForm from '@/components/admin/users/UserForm.svelte';
+import { db } from '@/lib/server/db';
+import { AuthzError, requireSuperAdmin } from '@/lib/server/authz';
+import { authzResponse, parseId } from '@/lib/server/authz-response';
+
+let user;
+try {
+    requireSuperAdmin(Astro.locals.user);
+    const id = parseId(Astro.params.id);
+    const row = id === null ? null : await db.user.findUnique({ where: { id } });
+    if (!row) throw new AuthzError('NOT_FOUND');
+    user = {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        role: row.role === 'superadmin' ? ('superadmin' as const) : ('department_user' as const),
+        departmentId: row.departmentId,
+    };
+} catch (error) {
+    return authzResponse(error);
+}
+
+const departments = await db.department.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } });
+---
+
+<AppLayout
+    title={`Edit ${user.name}`}
+    breadcrumbs={[
+        { title: 'Dashboard', href: '/dashboard' },
+        { title: 'Users', href: '/admin/users' },
+        { title: 'Edit user' },
+    ]}
+>
+    <div class="mx-auto w-full max-w-3xl space-y-6 p-6">
+        <PageHeader
+            title="Edit user"
+            description={`Change the account details of ${user.name}.`}
+            backHref="/admin/users"
+        />
+        <UserForm client:load {user} {departments} />
+    </div>
+</AppLayout>

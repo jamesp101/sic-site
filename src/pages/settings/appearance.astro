@@ -1,0 +1,17 @@
+---
+import AppearanceTabs from '@/components/AppearanceTabs.svelte';
+import Heading from '@/components/Heading.svelte';
+import SettingsLayout from '@/layouts/SettingsLayout.astro';
+---
+
+<SettingsLayout title="Appearance">
+    <h1 class="sr-only">Appearance settings</h1>
+    <div class="space-y-6">
+        <Heading
+            variant="small"
+            title="Appearance settings"
+            description="Update the appearance settings for your account"
+        />
+        <AppearanceTabs client:load />
+    </div>
+</SettingsLayout>

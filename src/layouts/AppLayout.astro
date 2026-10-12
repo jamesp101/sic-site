@@ -1,0 +1,34 @@
+---
+/**
+ * Admin shell: sidebar, header, breadcrumbs and toasts. Always noindex.
+ * The sidebar island wraps the (server-rendered) page content slot.
+ */
+import AdminShell from '@/components/admin/AdminShell.svelte';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { takeFlash } from '@/lib/server/flash';
+
+interface Props {
+    title: string;
+    breadcrumbs?: { title: string; href?: string }[];
+}
+
+const { title, breadcrumbs = [] } = Astro.props;
+const user = Astro.locals.user!; // middleware redirects guests before any admin page renders
+
+const flash = await takeFlash(Astro);
+const sidebarOpen = Astro.cookies.get('sidebar_state')?.value !== 'false';
+const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
+---
+
+<BaseLayout {title} description="San Isidro College administration." noindex>
+    <AdminShell
+        client:load
+        user={{ id: user.id, name: user.name, email: user.email, role: user.role }}
+        {currentPath}
+        {breadcrumbs}
+        {sidebarOpen}
+        {flash}
+    >
+        <slot />
+    </AdminShell>
+</BaseLayout>

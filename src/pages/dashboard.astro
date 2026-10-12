@@ -1,0 +1,120 @@
+---
+import { ArrowRight, CirclePlus, Download, FileText, School, Upload, Users } from '@lucide/svelte';
+import { cardClass, eyebrowClass } from '@/components/admin/ui';
+import AppLayout from '@/layouts/AppLayout.astro';
+import { departmentFilter, isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { authzResponse } from '@/lib/server/authz-response';
+import { db } from '@/lib/server/db';
+
+let actor;
+try {
+    actor = requireUser(Astro.locals.user);
+} catch (error) {
+    return authzResponse(error);
+}
+
+const scope = departmentFilter(actor);
+const [postsCount, downloadsCount, departmentsCount, usersCount, department] = await Promise.all([
+    db.post.count({ where: scope }),
+    db.download.count({ where: scope }),
+    db.department.count(),
+    db.user.count(),
+    isSuperAdmin(actor) || actor.departmentId === null
+        ? Promise.resolve(null)
+        : db.department.findUnique({ where: { id: actor.departmentId }, select: { name: true } }),
+]);
+
+const user = Astro.locals.user!;
+const stats = [
+    { label: 'Posts & news', value: postsCount, note: 'Total articles & announcements', icon: FileText },
+    { label: 'Downloads', value: downloadsCount, note: 'Total uploaded public files', icon: Download },
+    { label: 'Departments', value: departmentsCount, note: 'Colleges & academic divisions', icon: School },
+    { label: 'Administrators', value: usersCount, note: 'Total platform admins', icon: Users },
+];
+const tasks = [
+    {
+        href: '/admin/posts/create',
+        title: 'Write news or event',
+        text: 'Publish an article, campus event or announcement.',
+        cta: 'Get started',
+        icon: CirclePlus,
+    },
+    {
+        href: '/admin/downloads',
+        title: 'Upload document',
+        text: 'Add forms, calendars or guides to the public downloads page.',
+        cta: 'Upload file',
+        icon: Upload,
+    },
+    {
+        href: '/',
+        title: 'Preview public site',
+        text: 'Open the public site to review your changes.',
+        cta: 'Open site',
+        icon: School,
+        external: true,
+    },
+];
+---
+
+<AppLayout title="Dashboard" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }]}>
+    <div class="mx-auto flex w-full max-w-7xl flex-col gap-8 p-6">
+        <header class="space-y-2">
+            <p class={eyebrowClass}>Admin</p>
+            <h1 class="text-3xl font-bold tracking-tight text-foreground">
+                Welcome back, {user.name || 'Administrator'}
+            </h1>
+            <p class="text-sm text-muted-foreground">
+                {isSuperAdmin(actor)
+                    ? 'System SuperAdmin • Full administrative controls active.'
+                    : `Department Administrator • Managing content for ${department?.name ?? 'your assigned department'}.`}
+            </p>
+        </header>
+
+        <section aria-label="Overview" class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {stats.map(({ label, value, note, icon: Icon }) => (
+                <div class={`${cardClass} p-6`}>
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-sans text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                            {label}
+                        </h2>
+                        <div class="rounded-lg bg-gold-500/10 p-2 text-gold-600">
+                            <Icon class="h-5 w-5" aria-hidden="true" />
+                        </div>
+                    </div>
+                    <p class="mt-4 text-3xl font-extrabold text-foreground">{value}</p>
+                    <p class="mt-1 text-xs text-muted-foreground">{note}</p>
+                </div>
+            ))}
+        </section>
+
+        <section aria-labelledby="quick-tasks" class="space-y-4">
+            <h2 id="quick-tasks" class="text-xl font-bold tracking-tight text-foreground">
+                Quick tasks
+            </h2>
+            <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {tasks.map(({ href, title, text, cta, icon: Icon, external }) => (
+                    <a
+                        href={href}
+                        target={external ? '_blank' : undefined}
+                        rel={external ? 'noopener' : undefined}
+                        class={`${cardClass} group flex flex-col justify-between p-6 transition-all hover:border-gold-500 hover:shadow-brand-md`}
+                    >
+                        <div class="space-y-2">
+                            <div class="w-fit rounded-lg bg-gold-500/10 p-2.5 text-gold-600">
+                                <Icon class="h-6 w-6" aria-hidden="true" />
+                            </div>
+                            <h3 class="mt-4 font-bold text-foreground transition-colors group-hover:text-link">
+                                {title}
+                            </h3>
+                            <p class="text-xs leading-relaxed text-muted-foreground">{text}</p>
+                        </div>
+                        <span class="mt-6 flex items-center gap-1.5 text-xs font-bold text-link transition-all group-hover:gap-2">
+                            {cta} <ArrowRight class="h-3.5 w-3.5" aria-hidden="true" />
+                        </span>
+                    </a>
+                ))}
+            </div>
+        </section>
+    </div>
+</AppLayout>

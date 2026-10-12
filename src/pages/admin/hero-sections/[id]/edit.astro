@@ -1,0 +1,50 @@
+---
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import HeroSectionForm from '@/components/admin/hero-sections/HeroSectionForm.svelte';
+import AppLayout from '@/layouts/AppLayout.astro';
+import { isSuperAdmin, requireUser, scopeDepartment } from '@/lib/server/authz';
+import { authzResponse, parseId } from '@/lib/server/authz-response';
+import { db } from '@/lib/server/db';
+
+let actor;
+let section;
+try {
+    actor = requireUser(Astro.locals.user);
+    const id = parseId(Astro.params.id);
+    section = scopeDepartment(actor, id === null ? null : await db.heroSection.findUnique({ where: { id } }));
+} catch (error) {
+    return authzResponse(error);
+}
+
+const departments = await db.department.findMany({
+    where: isSuperAdmin(actor) ? {} : { id: actor.departmentId ?? -1 },
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true },
+});
+const values = {
+    id: section.id,
+    title: section.title,
+    content: section.content,
+    order: section.order,
+    isActive: section.isActive,
+    departmentId: section.departmentId,
+};
+---
+
+<AppLayout
+    title="Edit Hero Section"
+    breadcrumbs={[
+        { title: 'Dashboard', href: '/dashboard' },
+        { title: 'Hero Sections', href: '/admin/hero-sections' },
+        { title: 'Edit' },
+    ]}
+>
+    <div class="mx-auto w-full max-w-5xl space-y-6 p-6">
+        <PageHeader
+            title="Edit hero section"
+            description={`Make changes to “${section.title || 'Hero section'}”.`}
+            backHref="/admin/hero-sections"
+        />
+        <HeroSectionForm client:load {departments} isSuperAdmin={isSuperAdmin(actor)} section={values} />
+    </div>
+</AppLayout>

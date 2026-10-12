@@ -1,0 +1,218 @@
+---
+import { ArrowUpDown, Eye, EyeOff, Pencil, Search, Sparkles } from '@lucide/svelte';
+import AddLink from '@/components/admin/shared/AddLink.astro';
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import DeleteHeroSectionButton from '@/components/admin/hero-sections/DeleteHeroSectionButton.svelte';
+import { cardClass, iconLinkClass, selectClass, thClass } from '@/components/admin/ui';
+import AppLayout from '@/layouts/AppLayout.astro';
+import { departmentFilter, isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { authzResponse } from '@/lib/server/authz-response';
+import { db } from '@/lib/server/db';
+import type { Prisma } from '@/generated/prisma/client';
+
+let actor;
+try {
+    actor = requireUser(Astro.locals.user);
+} catch (error) {
+    return authzResponse(error);
+}
+
+const params = Astro.url.searchParams;
+const q = params.get('q')?.trim() ?? '';
+const location = params.get('location') ?? '';
+const sort = ['title', 'department', 'order', 'active'].includes(params.get('sort') ?? '')
+    ? params.get('sort')!
+    : 'order';
+const dir: 'asc' | 'desc' = params.get('dir') === 'desc' ? 'desc' : 'asc';
+
+const where: Prisma.HeroSectionWhereInput = {
+    ...departmentFilter(actor),
+    ...(q ? { OR: [{ title: { contains: q } }, { content: { contains: q } }] } : {}),
+    ...(location === 'welcome'
+        ? { departmentId: null }
+        : /^\d+$/.test(location) && isSuperAdmin(actor)
+          ? { departmentId: Number(location) }
+          : {}),
+};
+const orderBy: Prisma.HeroSectionOrderByWithRelationInput =
+    sort === 'title'
+        ? { title: dir }
+        : sort === 'department'
+          ? { department: { name: dir } }
+          : sort === 'active'
+            ? { isActive: dir }
+            : { order: dir };
+
+const [sections, departments] = await Promise.all([
+    db.heroSection.findMany({ where, orderBy, include: { department: { select: { name: true } } } }),
+    isSuperAdmin(actor)
+        ? db.department.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } })
+        : Promise.resolve([]),
+]);
+
+function sortHref(field: string) {
+    const next = new URL(Astro.url);
+    next.searchParams.set('sort', field);
+    next.searchParams.set('dir', sort === field && dir === 'asc' ? 'desc' : 'asc');
+    return `${next.pathname}${next.search}`;
+}
+const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascending' : 'descending') : undefined);
+---
+
+<AppLayout title="Hero Sections" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Hero Sections' }]}>
+    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+        <PageHeader
+            title="Hero sections"
+            description="Manage rich MDX content blocks for the landing page and department pages."
+        >
+            <AddLink href="/admin/hero-sections/create">Create hero section</AddLink>
+        </PageHeader>
+
+        <form
+            method="get"
+            action="/admin/hero-sections"
+            class={`${cardClass} flex flex-col items-center justify-between gap-4 p-4 md:flex-row`}
+        >
+            <div class="relative w-full md:max-w-xs">
+                <Search
+                    class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                />
+                <input
+                    type="search"
+                    name="q"
+                    value={q}
+                    placeholder="Search content…"
+                    aria-label="Search hero sections"
+                    class="w-full rounded-lg border border-border-strong bg-surface py-2 pr-4 pl-10 text-sm outline-none focus:border-brand-600"
+                />
+            </div>
+            <div class="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-center md:w-auto">
+                {departments.length > 0 && (
+                    <select name="location" aria-label="Filter by page" class={selectClass}>
+                        <option value="">All pages / departments</option>
+                        <option value="welcome" selected={location === 'welcome'}>
+                            Welcome page (main landing)
+                        </option>
+                        {departments.map((d) => (
+                            <option value={String(d.id)} selected={String(d.id) === location}>
+                                {d.name}
+                            </option>
+                        ))}
+                    </select>
+                )}
+                <input type="hidden" name="sort" value={sort} />
+                <input type="hidden" name="dir" value={dir} />
+                <button
+                    type="submit"
+                    class="rounded-lg bg-brand-800 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 dark:bg-gold-500 dark:text-brand-950 dark:hover:bg-gold-400"
+                >
+                    Filter
+                </button>
+                {(q || location) && (
+                    <a
+                        href="/admin/hero-sections"
+                        class="rounded-lg border border-border-strong px-3 py-2 text-center text-sm font-semibold text-muted-foreground hover:bg-surface-alt"
+                    >
+                        Reset
+                    </a>
+                )}
+            </div>
+        </form>
+
+        <div class={`${cardClass} overflow-hidden`}>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-left">
+                    <thead>
+                        <tr class="border-b border-border bg-surface-alt">
+                            {[
+                                ['title', 'Section'],
+                                ['department', 'Page location'],
+                                ['order', 'Order'],
+                                ['active', 'Status'],
+                            ].map(([field, label]) => (
+                                <th scope="col" class={thClass} aria-sort={ariaSort(field)}>
+                                    <a href={sortHref(field)} class="inline-flex items-center gap-1 hover:text-link">
+                                        {label} <ArrowUpDown class="h-3.5 w-3.5" aria-hidden="true" />
+                                    </a>
+                                </th>
+                            ))}
+                            <th scope="col" class={`${thClass} text-right`}>
+                                Actions
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border text-sm">
+                        {sections.map((hs) => (
+                            <tr class="hover:bg-surface-alt">
+                                <td class="px-6 py-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gold-500/10 text-gold-600">
+                                            <Sparkles class="h-4 w-4" aria-hidden="true" />
+                                        </div>
+                                        <div class="min-w-0">
+                                            <span class="block max-w-sm truncate font-semibold text-foreground">
+                                                {hs.title || 'Untitled section'}
+                                            </span>
+                                            <span class="mt-0.5 block max-w-sm truncate text-xs text-muted-foreground">
+                                                {hs.content.slice(0, 75)}
+                                                {hs.content.length > 75 ? '…' : ''}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    {hs.department ? (
+                                        <span class="rounded bg-secondary px-2 py-1 text-xs font-semibold text-secondary-foreground">
+                                            {hs.department.name}
+                                        </span>
+                                    ) : (
+                                        <span class="rounded bg-file-archive-bg px-2 py-1 text-xs font-semibold text-file-archive-fg">
+                                            Welcome page
+                                        </span>
+                                    )}
+                                </td>
+                                <td class="px-6 py-4 font-mono text-xs text-muted-foreground">#{hs.order}</td>
+                                <td class="px-6 py-4">
+                                    {hs.isActive ? (
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-status-article-bg px-2 py-0.5 text-xs font-semibold text-status-article-fg">
+                                            <Eye class="h-3 w-3" aria-hidden="true" /> Active
+                                        </span>
+                                    ) : (
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                                            <EyeOff class="h-3 w-3" aria-hidden="true" /> Inactive
+                                        </span>
+                                    )}
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="flex justify-end gap-1.5">
+                                        <a
+                                            href={`/admin/hero-sections/${hs.id}/edit`}
+                                            class={iconLinkClass}
+                                            aria-label={`Edit hero section ${hs.title ?? hs.id}`}
+                                            title="Edit section"
+                                        >
+                                            <Pencil class="h-4 w-4" aria-hidden="true" />
+                                        </a>
+                                        <DeleteHeroSectionButton
+                                            client:visible
+                                            id={hs.id}
+                                            name={hs.title ?? `#${hs.id}`}
+                                        />
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                        {sections.length === 0 && (
+                            <tr>
+                                <td colspan="5" class="px-6 py-12 text-center text-muted-foreground italic">
+                                    No hero sections found.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</AppLayout>

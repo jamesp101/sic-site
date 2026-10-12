@@ -1,0 +1,70 @@
+---
+/**
+ * Public page shell: skip link, header, <main id="main">, footer, and
+ * layout-level JSON-LD (WebSite on every page, BreadcrumbList when crumbs are given).
+ */
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import SiteBreadcrumbs from '@/components/site/SiteBreadcrumbs.astro';
+import SiteFooter from '@/components/site/SiteFooter.astro';
+import SiteHeader from '@/components/site/SiteHeader.astro';
+import type { SeoProps } from '@/components/seo/Seo.astro';
+import { getDepartments, getNavLinks } from '@/lib/server/queries';
+import { breadcrumbList, webSite, type Crumb } from '@/lib/seo';
+
+type Props = SeoProps & {
+    breadcrumbs?: Crumb[];
+    bodyClass?: string;
+    /** Skip database lookups (used by the 500 page). */
+    minimal?: boolean;
+};
+
+const { breadcrumbs, bodyClass = '', minimal = false, jsonLd, ...seo } = Astro.props;
+
+const [navLinks, departments] = minimal ? [[], []] : await Promise.all([getNavLinks(), getDepartments()]);
+
+const site = Astro.site ?? new URL(Astro.url.origin);
+const canonicalUrl = new URL(seo.canonical ?? Astro.url.pathname, site).href;
+const extra = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
+const ld = [
+    ...extra,
+    ...(breadcrumbs?.length ? [breadcrumbList(breadcrumbs, site, canonicalUrl)] : []),
+    ...(Astro.url.pathname === '/' ? [webSite(site)] : []),
+];
+---
+
+<BaseLayout {...seo} jsonLd={ld} bodyClass={`flex min-h-screen flex-col ${bodyClass}`}>
+    <link slot="head" rel="manifest" href="/manifest.webmanifest" />
+    <noscript slot="head">
+        <style>
+            /* No JS: keep navigation usable. */
+            .nav-toggle {
+                display: none;
+            }
+            .nav-list {
+                display: flex !important;
+                position: static !important;
+                flex-direction: row;
+                flex-wrap: wrap;
+                padding: 0 !important;
+                border: 0 !important;
+                background: transparent !important;
+                box-shadow: none !important;
+            }
+            .nav-group:focus-within .nav-sub {
+                display: flex !important;
+            }
+        </style>
+    </noscript>
+    <a
+        href="#main"
+        class="sr-only z-100 rounded-lg bg-gold-500 px-4 py-2 text-sm font-semibold text-brand-950 focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+    >
+        Skip to main content
+    </a>
+    <SiteHeader {navLinks} {departments} />
+    {breadcrumbs && breadcrumbs.length > 0 && <SiteBreadcrumbs crumbs={breadcrumbs} />}
+    <main id="main" tabindex="-1" class="flex-1 outline-none">
+        <slot />
+    </main>
+    <SiteFooter {departments} />
+</BaseLayout>

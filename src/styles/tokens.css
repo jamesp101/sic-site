@@ -1,0 +1,137 @@
+/*
+ * Design tokens. Palette and type follow https://sic.edu.ph (navy + gold,
+ * Playfair Display + Inter). Components use these via Tailwind theme names
+ * (bg-brand-700, text-primary, bg-status-article-bg, ...). No hard-coded hex elsewhere.
+ */
+:root {
+    /* Brand scale (sic.edu.ph) */
+    --brand-950: #04102a; /* navy-deep: footer, ink sections */
+    --brand-900: #071b42; /* navy-dark: dark sections, pressed */
+    --brand-800: #0a2e6e; /* navy: header, primary */
+    --brand-700: #0d3b7a; /* header gradient stop */
+    --brand-600: #1565c0; /* blue: eyebrows, links on light */
+    --brand-500: #1976d2;
+    --brand-400: #42a5f5;
+    --brand-200: #bbdefb;
+    --brand-100: #e3f2fd; /* sky */
+    --brand-50: #f0f8ff; /* sky-soft */
+    --gold-300: #fcd34d;
+    --gold-400: #fbbf24; /* amber */
+    --gold-500: #f59e0b; /* gold: accents, active dots */
+    --gold-600: #d97706; /* gold-dark */
+
+    /* Semantic (light) */
+    --background: #f2f7fe;
+    --surface: #ffffff;
+    --surface-alt: #f8fafc;
+    --foreground: #0d1e35; /* ink */
+    --muted-foreground: #4a6080; /* 6.3:1 on white */
+    --primary: var(--brand-800);
+    --primary-foreground: #ffffff;
+    --link: var(--brand-600);
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --ring: var(--brand-600);
+
+    --shadow-sm: 0 1px 3px rgb(10 46 110 / 0.08);
+    --shadow-md: 0 4px 16px rgb(10 46 110 / 0.1);
+    --shadow-lg: 0 12px 40px rgb(10 46 110 / 0.15);
+    --shadow-xl: 0 24px 60px rgb(10 46 110 / 0.2);
+
+    /* Status pills: post types */
+    --status-article-bg: #dcfce7;
+    --status-article-fg: #166534;
+    --status-event-bg: #dbeafe;
+    --status-event-fg: #1e40af;
+    --status-announcement-bg: #fee2e2;
+    --status-announcement-fg: #991b1b;
+    /* Status pills: file types */
+    --file-pdf-bg: #fee2e2;
+    --file-pdf-fg: #991b1b;
+    --file-doc-bg: #dbeafe;
+    --file-doc-fg: #1e40af;
+    --file-sheet-bg: #d1fae5;
+    --file-sheet-fg: #065f46;
+    --file-image-bg: #ede9fe;
+    --file-image-fg: #5b21b6;
+    --file-archive-bg: #fef3c7;
+    --file-archive-fg: #92400e;
+    --file-other-bg: #f1f5f9;
+    --file-other-fg: #334155;
+
+    /* shadcn variables mapped to brand tokens (admin + auth UI) */
+    --card: var(--surface);
+    --card-foreground: var(--foreground);
+    --popover: var(--surface);
+    --popover-foreground: var(--foreground);
+    --secondary: var(--brand-100);
+    --secondary-foreground: var(--brand-800);
+    --muted: var(--surface-alt);
+    --accent: var(--brand-100);
+    --accent-foreground: var(--brand-800);
+    --destructive: #dc2626;
+    --destructive-foreground: #ffffff;
+    --input: var(--border-strong);
+    --chart-1: var(--brand-800);
+    --chart-2: var(--gold-500);
+    --chart-3: var(--brand-500);
+    --chart-4: #0d9488;
+    --chart-5: #7c3aed;
+    --radius: 0.625rem;
+    --sidebar: var(--surface);
+    --sidebar-background: var(--surface);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--brand-800);
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: var(--brand-100);
+    --sidebar-accent-foreground: var(--brand-800);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+}
+
+.dark {
+    --background: #04102a;
+    --surface: #0b1a38;
+    --surface-alt: #071b42;
+    --foreground: #e8eef8;
+    --muted-foreground: #a3b4cc; /* 8.1:1 on surface */
+    /* Navy on near-black fails contrast; dark mode uses gold as primary. */
+    --primary: var(--gold-400);
+    --primary-foreground: #04102a;
+    --link: var(--gold-300);
+    --border: rgb(255 255 255 / 0.08);
+    --border-strong: rgb(255 255 255 / 0.16);
+    --ring: var(--gold-400);
+
+    --status-article-bg: rgb(22 101 52 / 0.35);
+    --status-article-fg: #bbf7d0;
+    --status-event-bg: rgb(30 64 175 / 0.35);
+    --status-event-fg: #bfdbfe;
+    --status-announcement-bg: rgb(153 27 27 / 0.35);
+    --status-announcement-fg: #fecaca;
+    --file-pdf-bg: rgb(153 27 27 / 0.35);
+    --file-pdf-fg: #fecaca;
+    --file-doc-bg: rgb(30 64 175 / 0.35);
+    --file-doc-fg: #bfdbfe;
+    --file-sheet-bg: rgb(6 95 70 / 0.35);
+    --file-sheet-fg: #a7f3d0;
+    --file-image-bg: rgb(91 33 182 / 0.35);
+    --file-image-fg: #ddd6fe;
+    --file-archive-bg: rgb(146 64 14 / 0.35);
+    --file-archive-fg: #fde68a;
+    --file-other-bg: rgb(255 255 255 / 0.08);
+    --file-other-fg: #cbd5e1;
+
+    --secondary: rgb(255 255 255 / 0.08);
+    --secondary-foreground: var(--foreground);
+    --accent: rgb(255 255 255 / 0.08);
+    --accent-foreground: var(--foreground);
+    --destructive: #ef4444;
+    --input: rgb(255 255 255 / 0.16);
+    --sidebar: var(--surface-alt);
+    --sidebar-background: var(--surface-alt);
+    --sidebar-primary: var(--gold-400);
+    --sidebar-primary-foreground: #04102a;
+    --sidebar-accent: rgb(255 255 255 / 0.08);
+    --sidebar-accent-foreground: var(--foreground);
+}

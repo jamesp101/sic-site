@@ -1,0 +1,15 @@
+---
+import VerifyEmailForm from '@/components/auth/VerifyEmailForm.svelte';
+import AuthLayout from '@/layouts/AuthLayout.astro';
+
+const user = Astro.locals.user;
+if (!user) return Astro.redirect('/login?redirect=/verify-email');
+if (user.emailVerified) return Astro.redirect('/dashboard');
+---
+
+<AuthLayout
+    title="Email verification"
+    description="Please verify your email address by clicking on the link we emailed to you."
+>
+    <VerifyEmailForm client:load email={user.email} />
+</AuthLayout>

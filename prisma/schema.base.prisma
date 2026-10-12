@@ -1,0 +1,237 @@
+// Edit this file, then `vp run db:migrate`. prisma/schema.prisma is generated
+// from it (scripts/prisma-schema.mjs) with the provider taken from DATABASE_URL.
+// Table and column names match the Laravel schema so an existing database can be adopted.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "{{provider}}"
+}
+
+model User {
+  id              Int       @id @default(autoincrement())
+  name            String
+  email           String    @unique
+  emailVerified   Boolean   @default(false) @map("email_verified")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  image           String?
+  /// Laravel bcrypt hash; Better Auth reads credentials from Account.password.
+  password        String?
+  rememberToken   String?   @map("remember_token")
+  role            String    @default("department_user")
+  departmentId    Int?      @map("department_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  posts      Post[]
+  downloads  Download[]
+  sessions   Session[]
+  accounts   Account[]
+
+  @@map("users")
+}
+
+model Session {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  userId    Int      @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_sessions")
+}
+
+model Account {
+  id                    Int       @id @default(autoincrement())
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                Int       @map("user_id")
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_accounts")
+}
+
+model Verification {
+  id         Int      @id @default(autoincrement())
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([identifier])
+  @@map("auth_verifications")
+}
+
+model Department {
+  id          Int      @id @default(autoincrement())
+  name        String
+  slug        String   @unique
+  description String? {{longtext}}
+  heroContent String?  @map("hero_content") {{longtext}}
+  logoPath    String?  @map("logo_path")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users         User[]
+  carouselItems CarouselItem[]
+  posts         Post[]
+  members       Member[]
+  downloads     Download[]
+  directories   DownloadDirectory[]
+  heroSections  HeroSection[]
+
+  @@map("departments")
+}
+
+model CarouselItem {
+  id           Int      @id @default(autoincrement())
+  title        String?
+  subtitle     String?
+  imagePath    String   @map("image_path")
+  linkUrl      String?  @map("link_url")
+  order        Int      @default(0)
+  departmentId Int?     @map("department_id")
+  showOnMain   Boolean  @default(true) @map("show_on_main")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@map("carousel_items")
+}
+
+model Member {
+  id           Int      @id @default(autoincrement())
+  name         String
+  role         String
+  departmentId Int      @map("department_id")
+  parentId     Int?     @map("parent_id")
+  order        Int      @default(0)
+  imagePath    String?  @map("image_path")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  parent     Member?    @relation("MemberTree", fields: [parentId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  children   Member[]   @relation("MemberTree")
+
+  @@map("members")
+}
+
+model NavigationLink {
+  id        Int      @id @default(autoincrement())
+  label     String
+  url       String
+  order     Int      @default(0)
+  isActive  Boolean  @default(true) @map("is_active")
+  parentId  Int?     @map("parent_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  parent   NavigationLink?  @relation("NavTree", fields: [parentId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  children NavigationLink[] @relation("NavTree")
+
+  @@map("navigation_links")
+}
+
+model Post {
+  id                 Int       @id @default(autoincrement())
+  title              String
+  slug               String    @unique
+  content            String {{longtext}}
+  /// article | event | announcement
+  type               String
+  startDate          DateTime? @map("start_date")
+  endDate            DateTime? @map("end_date")
+  highlightImagePath String?   @map("highlight_image_path")
+  departmentId       Int?      @map("department_id")
+  userId             Int       @map("user_id")
+  isFeatured         Boolean   @default(false) @map("is_featured")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([type])
+  @@index([createdAt])
+  @@map("posts")
+}
+
+model Download {
+  id           Int      @id @default(autoincrement())
+  fileName     String   @map("file_name")
+  filePath     String   @map("file_path")
+  fileSize     Int      @map("file_size")
+  /// JSON-encoded string[]
+  tags         String? {{longtext}}
+  directory    String?
+  departmentId Int?     @map("department_id")
+  userId       Int      @map("user_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("downloads")
+}
+
+model DownloadDirectory {
+  id           Int      @id @default(autoincrement())
+  name         String
+  departmentId Int?     @map("department_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@map("download_directories")
+}
+
+model HeroSection {
+  id           Int      @id @default(autoincrement())
+  title        String?
+  content      String {{longtext}}
+  order        Int      @default(0)
+  isActive     Boolean  @default(true) @map("is_active")
+  departmentId Int?     @map("department_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@map("hero_sections")
+}
+
+model Setting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String? {{longtext}}
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}

@@ -1,0 +1,65 @@
+---
+import DownloadBrowser from '@/components/site/DownloadBrowser.astro';
+import FilterBar from '@/components/site/FilterBar.svelte';
+import PageBanner from '@/components/site/PageBanner.astro';
+import PublicLayout from '@/layouts/PublicLayout.astro';
+import { getDepartments, getDownloadDirectories, listDownloads } from '@/lib/server/queries';
+
+const params = Astro.url.searchParams;
+const search = params.get('search')?.trim().slice(0, 100) ?? '';
+const departmentParam = Number(params.get('department_id'));
+const departmentId = Number.isInteger(departmentParam) && departmentParam > 0 ? departmentParam : undefined;
+const directory = params.get('directory')?.trim().slice(0, 255) ?? '';
+
+const [departments, all, directoryNames] = await Promise.all([
+    getDepartments(),
+    listDownloads({ search: search || undefined, departmentId }),
+    getDownloadDirectories(departmentId),
+]);
+
+// Folder counts reflect the current search/department; folder selection narrows the list server-side.
+const counts = new Map<string, number>(directoryNames.map((name) => [name, 0]));
+for (const file of all) counts.set(file.directory, (counts.get(file.directory) ?? 0) + 1);
+const folders = [...counts].filter(([name]) => name !== '').map(([name, count]) => ({ name, count }));
+const visible = directory ? all.filter((file) => file.directory === directory) : all;
+const filtered = Boolean(search || departmentId || directory);
+---
+
+<PublicLayout
+    title="Downloads"
+    description="Official forms, academic guides, curriculum checklists and schedules from San Isidro College, organised by folder and department."
+    canonical="/downloads"
+    noindex={filtered}
+    follow
+    breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Downloads' }]}
+>
+    <PageBanner
+        eyebrow="Downloads"
+        title="Documents & Files"
+        lead="Browse official folders and download forms, academic guides, curriculum checklists and department schedules."
+    />
+
+    <section class="min-h-[50vh] py-10" aria-label="Files">
+        <div class="mx-auto w-full max-w-7xl space-y-10 px-6">
+            <FilterBar
+                client:idle
+                action="/downloads"
+                search={search}
+                searchLabel="Search files"
+                searchPlaceholder="Document name, tag or folder…"
+                departmentId={departmentId ?? null}
+                departments={departments}
+                hidden={directory ? { directory } : {}}
+                active={filtered}
+                clearHref="/downloads"
+            />
+            <DownloadBrowser
+                downloads={visible}
+                {folders}
+                selected={directory}
+                carry={{ search: search || undefined, departmentId }}
+                totalCount={all.length}
+            />
+        </div>
+    </section>
+</PublicLayout>

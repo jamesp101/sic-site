@@ -1,0 +1,128 @@
+---
+import type { DepartmentSummary } from '@/lib/content-types';
+import { SITE } from '@/lib/site';
+
+interface Props {
+    departments: DepartmentSummary[];
+}
+
+const { departments } = Astro.props;
+const { address } = SITE;
+const year = new Date().getFullYear();
+
+const socials = SITE.sameAs.map((url) => {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    return { url, label: host.startsWith('facebook') ? 'Facebook' : host.startsWith('tiktok') ? 'TikTok' : host };
+});
+
+const linkClass = 'rounded text-white/75 transition-colors hover:text-gold-300';
+const heading = 'mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-gold-400';
+---
+
+<footer class="mt-auto border-t border-white/10 bg-brand-950 text-white">
+    <div class="mx-auto w-full max-w-7xl px-6 py-14">
+        <div class="grid grid-cols-1 gap-10 md:grid-cols-4">
+            <div>
+                <a href="/" class="flex items-center gap-3 rounded-lg">
+                    <img
+                        src="/sic-seal.png"
+                        alt=""
+                        width="44"
+                        height="44"
+                        loading="lazy"
+                        decoding="async"
+                        class="h-11 w-11 rounded-full border-2 border-gold-500/40 bg-white/5 object-contain"
+                    />
+                    <span class="leading-tight">
+                        <span class="block font-serif text-lg font-bold">{SITE.name}</span>
+                        <span class="block text-xs uppercase tracking-[0.2em] text-gold-300">{SITE.motto}</span>
+                    </span>
+                </a>
+                <p class="mt-4 text-sm leading-relaxed text-white/75">{SITE.tagline}</p>
+            </div>
+
+            <nav aria-labelledby="footer-departments">
+                <h2 id="footer-departments" class={`${heading} font-sans`}>
+                    Departments
+                </h2>
+                <ul class="space-y-2 text-sm">
+                    {departments.map((d) => (
+                        <li>
+                            <a href={`/departments/${d.slug}`} class={linkClass}>
+                                {d.name}
+                            </a>
+                        </li>
+                    ))}
+                    {departments.length === 0 && (
+                        <li>
+                            <a href="/#departments" class={linkClass}>
+                                Academic programs
+                            </a>
+                        </li>
+                    )}
+                </ul>
+            </nav>
+
+            <nav aria-labelledby="footer-links">
+                <h2 id="footer-links" class={`${heading} font-sans`}>
+                    Quick links
+                </h2>
+                <ul class="space-y-2 text-sm">
+                    <li>
+                        <a href="/posts" class={linkClass}>
+                            News &amp; Events
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/downloads" class={linkClass}>
+                            Downloads
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/contact" class={linkClass}>
+                            Contact &amp; Admissions
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/rss.xml" class={linkClass}>
+                            RSS feed
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <div>
+                <h2 class={`${heading} font-sans`}>Contact us</h2>
+                <address class="space-y-2 text-sm not-italic text-white/75">
+                    <p>
+                        {address.streetAddress}, {address.addressLocality}, {address.addressRegion}
+                        {address.postalCode}
+                    </p>
+                    <p>
+                        <a href={`mailto:${SITE.email}`} class={linkClass}>
+                            {SITE.email}
+                        </a>
+                    </p>
+                    <p>
+                        <a href={`tel:${SITE.telephoneE164}`} class={linkClass}>
+                            {SITE.telephone}
+                        </a>
+                    </p>
+                </address>
+                <ul class="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm" aria-label="Social media">
+                    {socials.map((s) => (
+                        <li>
+                            <a href={s.url} rel="noopener" class={linkClass}>
+                                {s.label}
+                            </a>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        </div>
+
+        <p class="mt-12 border-t border-white/10 pt-6 text-xs text-white/70">
+            &copy; {year} {SITE.name}. All rights reserved.
+        </p>
+    </div>
+</footer>

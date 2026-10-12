@@ -1,0 +1,84 @@
+---
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import DownloadsManager from '@/components/admin/downloads/DownloadsManager.svelte';
+import AppLayout from '@/layouts/AppLayout.astro';
+import { departmentFilter, isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { authzResponse } from '@/lib/server/authz-response';
+import { db } from '@/lib/server/db';
+import { extensionOf, fileKind } from '@/lib/files';
+import { publicUrl } from '@/lib/server/storage';
+
+let actor;
+try {
+    actor = requireUser(Astro.locals.user);
+} catch (error) {
+    return authzResponse(error);
+}
+const superadmin = isSuperAdmin(actor);
+
+function parseTags(raw: string | null): string[] {
+    if (!raw) return [];
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.map((t) => String(t).trim()).filter(Boolean);
+    } catch {
+        // legacy comma-separated value
+    }
+    return raw
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
+}
+
+const [rows, departments, directories] = await Promise.all([
+    db.download.findMany({
+        where: departmentFilter(actor),
+        orderBy: { createdAt: 'desc' },
+        include: { department: { select: { name: true } } },
+    }),
+    db.department.findMany({
+        where: superadmin ? {} : { id: actor.departmentId ?? -1 },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+    }),
+    db.downloadDirectory.findMany({ orderBy: { name: 'asc' } }),
+]);
+
+const downloads = rows.map((row) => {
+    const extension = extensionOf(row.filePath);
+    return {
+        id: row.id,
+        fileName: row.fileName,
+        url: publicUrl(row.filePath) ?? '',
+        size: row.fileSize,
+        extension,
+        kind: fileKind(extension),
+        directory: row.directory,
+        tags: parseTags(row.tags),
+        departmentId: row.departmentId,
+        departmentName: row.department?.name ?? null,
+        createdAt: row.createdAt.toISOString(),
+    };
+});
+const folderRows = directories.map((d) => ({
+    id: d.id,
+    name: d.name,
+    canDelete: superadmin || d.departmentId === actor.departmentId,
+}));
+---
+
+<AppLayout title="Downloads" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Downloads' }]}>
+    <div class="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-6">
+        <PageHeader
+            title="Downloads"
+            description="Upload and organise forms, manuals and resources for the public downloads page."
+        />
+        <DownloadsManager
+            client:load
+            downloads={downloads}
+            {departments}
+            directories={folderRows}
+            isSuperAdmin={superadmin}
+        />
+    </div>
+</AppLayout>

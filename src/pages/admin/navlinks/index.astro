@@ -1,0 +1,118 @@
+---
+import AppLayout from '@/layouts/AppLayout.astro';
+import AddLink from '@/components/admin/shared/AddLink.astro';
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import DeleteNavLinkButton from '@/components/admin/navlinks/DeleteNavLinkButton.svelte';
+import { db } from '@/lib/server/db';
+import { requireSuperAdmin } from '@/lib/server/authz';
+import { authzResponse } from '@/lib/server/authz-response';
+
+try {
+    requireSuperAdmin(Astro.locals.user);
+} catch (error) {
+    return authzResponse(error);
+}
+
+const all = await db.navigationLink.findMany({ orderBy: [{ order: 'asc' }, { id: 'asc' }] });
+const tops = all.filter((link) => link.parentId === null);
+const rows = tops.flatMap((top) => [
+    { link: top, depth: 0 },
+    ...all.filter((child) => child.parentId === top.id).map((child) => ({ link: child, depth: 1 })),
+]);
+---
+
+<AppLayout
+    title="Navigation Links"
+    breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Navigation links' }]}
+>
+    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+        <PageHeader title="Navigation links" description="Configure the links in the main website navigation bar.">
+            <AddLink href="/admin/navlinks/create">Add link</AddLink>
+        </PageHeader>
+
+        <div class="overflow-hidden rounded-xl border border-border bg-card shadow-brand-sm">
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-left text-sm">
+                    <thead>
+                        <tr class="border-b border-border bg-surface-alt text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            <th scope="col" class="px-6 py-4">
+                                Label
+                            </th>
+                            <th scope="col" class="px-6 py-4">
+                                URL
+                            </th>
+                            <th scope="col" class="w-24 px-6 py-4">
+                                Order
+                            </th>
+                            <th scope="col" class="w-32 px-6 py-4">
+                                Status
+                            </th>
+                            <th scope="col" class="w-28 px-6 py-4 text-right">
+                                Actions
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border">
+                        {rows.length === 0 && (
+                            <tr>
+                                <td colspan="5" class="px-6 py-12 text-center italic text-muted-foreground">
+                                    No navigation links yet.
+                                </td>
+                            </tr>
+                        )}
+                        {rows.map(({ link, depth }) => (
+                            <tr class="hover:bg-surface-alt/60">
+                                <td class:list={['px-6 py-3 font-semibold text-foreground', depth > 0 && 'pl-12']}>
+                                    {depth > 0 && (
+                                        <span class="mr-2 text-muted-foreground" aria-hidden="true">
+                                            ↳
+                                        </span>
+                                    )}
+                                    {link.label}
+                                </td>
+                                <td class="px-6 py-3 font-mono text-xs text-link">{link.url}</td>
+                                <td class="px-6 py-3 font-mono text-xs">#{link.order}</td>
+                                <td class="px-6 py-3">
+                                    {link.isActive ? (
+                                        <span class="rounded-full bg-status-event-bg px-2 py-0.5 text-xs font-semibold text-status-event-fg">
+                                            Visible
+                                        </span>
+                                    ) : (
+                                        <span class="rounded-full bg-file-other-bg px-2 py-0.5 text-xs font-semibold text-file-other-fg">
+                                            Hidden
+                                        </span>
+                                    )}
+                                </td>
+                                <td class="px-6 py-3">
+                                    <div class="flex justify-end gap-1.5">
+                                        <a
+                                            href={`/admin/navlinks/${link.id}/edit`}
+                                            class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-alt hover:text-foreground"
+                                            aria-label={`Edit ${link.label}`}
+                                            title="Edit link"
+                                        >
+                                            <svg
+                                                class="h-4 w-4"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                aria-hidden="true"
+                                            >
+                                                <path d="M12 20h9" />
+                                                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                                            </svg>
+                                        </a>
+                                        <DeleteNavLinkButton client:visible id={link.id} label={link.label} />
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</AppLayout>

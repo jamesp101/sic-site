@@ -1,0 +1,54 @@
+---
+import AppLayout from '@/layouts/AppLayout.astro';
+import AddLink from '@/components/admin/shared/AddLink.astro';
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import MemberTable from '@/components/admin/members/MemberTable.svelte';
+import { db } from '@/lib/server/db';
+import { AuthzError, requireUser, scopeDepartment } from '@/lib/server/authz';
+import { authzResponse, parseId } from '@/lib/server/authz-response';
+import { publicUrl } from '@/lib/server/storage';
+
+let department;
+let members;
+try {
+    const actor = requireUser(Astro.locals.user);
+    const id = parseId(Astro.params.id);
+    department =
+        id === null ? null : await db.department.findUnique({ where: { id }, select: { id: true, name: true } });
+    if (!department) throw new AuthzError('NOT_FOUND');
+    scopeDepartment(actor, { departmentId: department.id });
+    members = (
+        await db.member.findMany({ where: { departmentId: department.id }, orderBy: [{ order: 'asc' }, { id: 'asc' }] })
+    ).map((m) => ({
+        id: m.id,
+        name: m.name,
+        role: m.role,
+        parentId: m.parentId,
+        order: m.order,
+        imageUrl: publicUrl(m.imagePath),
+    }));
+} catch (error) {
+    return authzResponse(error);
+}
+---
+
+<AppLayout
+    title={`Org Chart - ${department.name}`}
+    breadcrumbs={[
+        { title: 'Dashboard', href: '/dashboard' },
+        { title: 'Departments', href: '/admin/departments' },
+        { title: department.name },
+        { title: 'Members' },
+    ]}
+>
+    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+        <PageHeader
+            title="Faculty & org chart"
+            description={`Manage the organizational structure and members of ${department.name}.`}
+            backHref="/admin/departments"
+        >
+            <AddLink href={`/admin/departments/${department.id}/members/create`}>Add member</AddLink>
+        </PageHeader>
+        <MemberTable client:load departmentId={department.id} {members} />
+    </div>
+</AppLayout>

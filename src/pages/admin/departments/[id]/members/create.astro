@@ -1,0 +1,48 @@
+---
+import AppLayout from '@/layouts/AppLayout.astro';
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import MemberForm from '@/components/admin/members/MemberForm.svelte';
+import { db } from '@/lib/server/db';
+import { AuthzError, requireUser, scopeDepartment } from '@/lib/server/authz';
+import { authzResponse, parseId } from '@/lib/server/authz-response';
+
+let department;
+let parents;
+let nextOrder = 1;
+try {
+    const actor = requireUser(Astro.locals.user);
+    const id = parseId(Astro.params.id);
+    department =
+        id === null ? null : await db.department.findUnique({ where: { id }, select: { id: true, name: true } });
+    if (!department) throw new AuthzError('NOT_FOUND');
+    scopeDepartment(actor, { departmentId: department.id });
+    const rows = await db.member.findMany({
+        where: { departmentId: department.id },
+        orderBy: [{ order: 'asc' }, { id: 'asc' }],
+        select: { id: true, name: true, role: true, order: true },
+    });
+    parents = rows.map(({ id, name, role }) => ({ id, name, role }));
+    nextOrder = rows.reduce((max, row) => Math.max(max, row.order), 0) + 1;
+} catch (error) {
+    return authzResponse(error);
+}
+---
+
+<AppLayout
+    title={`Add Member - ${department.name}`}
+    breadcrumbs={[
+        { title: 'Dashboard', href: '/dashboard' },
+        { title: 'Departments', href: '/admin/departments' },
+        { title: department.name, href: `/admin/departments/${department.id}/members` },
+        { title: 'Add member' },
+    ]}
+>
+    <div class="mx-auto w-full max-w-3xl space-y-6 p-6">
+        <PageHeader
+            title="Add member"
+            description={`Add a person to the organization chart of ${department.name}.`}
+            backHref={`/admin/departments/${department.id}/members`}
+        />
+        <MemberForm client:load departmentId={department.id} {parents} {nextOrder} />
+    </div>
+</AppLayout>

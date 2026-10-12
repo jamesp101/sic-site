@@ -1,0 +1,56 @@
+---
+import AppLayout from '@/layouts/AppLayout.astro';
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import CarouselForm from '@/components/admin/carousels/CarouselForm.svelte';
+import { db } from '@/lib/server/db';
+import { AuthzError, isSuperAdmin, requireUser, scopeDepartment } from '@/lib/server/authz';
+import { authzResponse, parseId } from '@/lib/server/authz-response';
+import { publicUrl } from '@/lib/server/storage';
+
+let item;
+let superadmin = false;
+let departments;
+try {
+    const actor = requireUser(Astro.locals.user);
+    const id = parseId(Astro.params.id);
+    const row = id === null ? null : await db.carouselItem.findUnique({ where: { id } });
+    if (!row) throw new AuthzError('NOT_FOUND');
+    scopeDepartment(actor, row);
+    superadmin = isSuperAdmin(actor);
+    item = {
+        id: row.id,
+        title: row.title,
+        subtitle: row.subtitle,
+        linkUrl: row.linkUrl,
+        order: row.order,
+        departmentId: row.departmentId,
+        showOnMain: row.showOnMain,
+        imageUrl: publicUrl(row.imagePath) ?? '',
+    };
+    departments = await db.department.findMany({
+        where: superadmin ? {} : { id: actor.departmentId ?? -1 },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+    });
+} catch (error) {
+    return authzResponse(error);
+}
+---
+
+<AppLayout
+    title="Edit Carousel Slide"
+    breadcrumbs={[
+        { title: 'Dashboard', href: '/dashboard' },
+        { title: 'Carousels', href: '/admin/carousels' },
+        { title: 'Edit slide' },
+    ]}
+>
+    <div class="mx-auto w-full max-w-3xl space-y-6 p-6">
+        <PageHeader
+            title="Edit carousel slide"
+            description="Change the image, text and placement of this slide."
+            backHref="/admin/carousels"
+        />
+        <CarouselForm client:load {item} {departments} lockDepartment={!superadmin} />
+    </div>
+</AppLayout>

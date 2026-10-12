@@ -1,0 +1,28 @@
+---
+import type { Crumb } from '@/lib/seo';
+
+interface Props {
+    crumbs: Crumb[];
+}
+
+const { crumbs } = Astro.props;
+---
+
+<nav aria-label="Breadcrumb" class="border-b border-border bg-surface">
+    <ol class="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-2 gap-y-1 px-6 py-3 text-sm text-muted-foreground">
+        {crumbs.map((crumb, index) => (
+            <li class="flex items-center gap-2">
+                {index > 0 && <span aria-hidden="true">/</span>}
+                {crumb.href && index < crumbs.length - 1 ? (
+                    <a href={crumb.href} class="rounded text-link underline-offset-4 hover:underline">
+                        {crumb.label}
+                    </a>
+                ) : (
+                    <span aria-current="page" class="font-medium text-foreground">
+                        {crumb.label}
+                    </span>
+                )}
+            </li>
+        ))}
+    </ol>
+</nav>

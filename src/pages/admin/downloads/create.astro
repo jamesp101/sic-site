@@ -1,0 +1,49 @@
+---
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import DownloadUploadForm from '@/components/admin/downloads/DownloadUploadForm.svelte';
+import AppLayout from '@/layouts/AppLayout.astro';
+import { isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { authzResponse } from '@/lib/server/authz-response';
+import { db } from '@/lib/server/db';
+import { LIMITS, MB } from '@/lib/server/storage';
+
+let actor;
+try {
+    actor = requireUser(Astro.locals.user);
+} catch (error) {
+    return authzResponse(error);
+}
+
+const [departments, directories] = await Promise.all([
+    db.department.findMany({
+        where: isSuperAdmin(actor) ? {} : { id: actor.departmentId ?? -1 },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+    }),
+    db.downloadDirectory.findMany({ orderBy: { name: 'asc' }, select: { name: true } }),
+]);
+---
+
+<AppLayout
+    title="Upload Document"
+    breadcrumbs={[
+        { title: 'Dashboard', href: '/dashboard' },
+        { title: 'Downloads', href: '/admin/downloads' },
+        { title: 'Upload' },
+    ]}
+>
+    <div class="mx-auto w-full max-w-3xl space-y-6 p-6">
+        <PageHeader
+            title="Upload document"
+            description="Publish forms, manuals or resources to the downloads directory."
+            backHref="/admin/downloads"
+        />
+        <DownloadUploadForm
+            client:load
+            {departments}
+            directories={[...new Set(directories.map((d) => d.name))]}
+            isSuperAdmin={isSuperAdmin(actor)}
+            maxMb={LIMITS.download / MB}
+        />
+    </div>
+</AppLayout>

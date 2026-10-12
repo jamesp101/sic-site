@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.astro/
+.env
+.env.local
+storage/*.db
+storage/*.db-journal
+storage/uploads/
+src/generated/
+test-results/
+playwright-report/
+.lighthouseci/
+# devenv
+.devenv*
+devenv.local.nix
+.direnv
+.pre-commit-config.yaml
+prisma/schema.prisma
+e2e/.auth/

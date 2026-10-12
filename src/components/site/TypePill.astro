@@ -1,0 +1,19 @@
+---
+import type { PostType } from '@/lib/content-types';
+
+interface Props {
+    type: PostType;
+}
+
+const { type } = Astro.props;
+const styles: Record<PostType, string> = {
+    article: 'bg-status-article-bg text-status-article-fg',
+    event: 'bg-status-event-bg text-status-event-fg',
+    announcement: 'bg-status-announcement-bg text-status-announcement-fg',
+};
+const labels: Record<PostType, string> = { article: 'Article', event: 'Event', announcement: 'Announcement' };
+---
+
+<span class:list={['inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold', styles[type]]}>
+    {labels[type]}
+</span>

@@ -1,0 +1,13 @@
+{
+    "extends": "astro/tsconfigs/strict",
+    "include": [".astro/types.d.ts", "**/*", "prisma/provider.mjs"],
+    "exclude": ["dist", "node_modules", "src/generated"],
+    "compilerOptions": {
+        "paths": {
+            "@/*": ["./src/*"]
+        },
+        "allowJs": true,
+        "checkJs": false,
+        "types": ["node"]
+    }
+}

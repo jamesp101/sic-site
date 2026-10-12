@@ -1,0 +1,17 @@
+---
+import LoginForm from '@/components/auth/LoginForm.svelte';
+import AuthLayout from '@/layouts/AuthLayout.astro';
+import { safeRedirect } from '@/lib/safe-redirect';
+
+const redirect = safeRedirect(Astro.url.searchParams.get('redirect'));
+if (Astro.locals.user) return Astro.redirect(redirect);
+
+const status =
+    Astro.url.searchParams.get('status') === 'password-reset'
+        ? 'Your password has been reset. You can now log in.'
+        : '';
+---
+
+<AuthLayout title="Log in to your account" description="Enter your email and password below to log in">
+    <LoginForm client:load {redirect} {status} />
+</AuthLayout>

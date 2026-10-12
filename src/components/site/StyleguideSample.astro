@@ -1,0 +1,286 @@
+---
+/** Every token, type role and public component with fixture data (no DB). Dev-only styleguide content. */
+import BrandHero from './BrandHero.astro';
+import ContactForm from './ContactForm.svelte';
+import ContactInfoCard from './ContactInfoCard.astro';
+import DepartmentCard from './DepartmentCard.astro';
+import DownloadBrowser from './DownloadBrowser.astro';
+import EmptyState from './EmptyState.astro';
+import Eyebrow from './Eyebrow.astro';
+import FileKindBadge from './FileKindBadge.astro';
+import FilterBar from './FilterBar.svelte';
+import HeroCarousel from './HeroCarousel.svelte';
+import MarkdownSection from './MarkdownSection.astro';
+import OrgChart from './OrgChart.astro';
+import PageBanner from './PageBanner.astro';
+import PostCard from './PostCard.astro';
+import TypePill from './TypePill.astro';
+import { btnGold, btnOnDark, btnOutline, btnPrimary } from './classes';
+import type {
+    CarouselSlide,
+    DepartmentSummary,
+    DownloadView,
+    FileKind,
+    MemberNode,
+    PostSummary,
+} from '@/lib/content-types';
+
+interface Props {
+    /** Interactive islands use fixed ids, so render them in one panel only. */
+    interactive?: boolean;
+}
+const { interactive = false } = Astro.props;
+
+const now = new Date('2026-03-05T08:00:00+08:00');
+const dept: DepartmentSummary = {
+    id: 1,
+    name: 'College of Teacher Education',
+    slug: 'teacher-education',
+    description: 'Sample department summary text used to preview the card layout.',
+    logoUrl: null,
+    updatedAt: now,
+};
+const posts: PostSummary[] = (['article', 'event', 'announcement'] as const).map((type, i) => ({
+    id: i + 1,
+    title: `Sample ${type} headline that may wrap onto a second line`,
+    slug: `sample-${type}`,
+    type,
+    excerpt: 'Sample excerpt text. It is plain text, clamped to three lines inside the card.',
+    imageUrl: null,
+    startDate: type === 'event' ? now : null,
+    endDate: type === 'event' ? new Date('2026-03-07T17:00:00+08:00') : null,
+    isFeatured: false,
+    createdAt: now,
+    updatedAt: now,
+    department: type === 'article' ? null : { id: dept.id, name: dept.name, slug: dept.slug },
+}));
+const slides: CarouselSlide[] = [
+    { id: 1, title: 'Sample slide one', subtitle: 'Subtitle text', imageUrl: '/sic-seal.png', linkUrl: '/posts' },
+    { id: 2, title: 'Sample slide two', subtitle: null, imageUrl: '/sic-seal.png', linkUrl: null },
+];
+const members: MemberNode[] = [
+    {
+        id: 1,
+        name: 'Sample Dean',
+        role: 'Dean',
+        imageUrl: null,
+        children: [
+            {
+                id: 2,
+                name: 'Sample Chair One',
+                role: 'Program chair',
+                imageUrl: null,
+                children: [{ id: 4, name: 'Sample Instructor', role: 'Instructor', imageUrl: null, children: [] }],
+            },
+            { id: 3, name: 'Sample Chair Two', role: 'Program chair', imageUrl: null, children: [] },
+        ],
+    },
+];
+const kinds: FileKind[] = ['pdf', 'doc', 'sheet', 'image', 'archive', 'other'];
+const downloads: DownloadView[] = kinds.map((kind, i) => ({
+    id: i + 1,
+    fileName: `sample-file-${i + 1}.${kind === 'other' ? 'bin' : kind}`,
+    url: '#',
+    downloadUrl: '#',
+    size: 1024 * 150 * (i + 1),
+    extension: kind === 'other' ? 'bin' : kind,
+    kind,
+    tags: i % 2 ? ['forms'] : [],
+    directory: i < 3 ? 'Forms' : 'Schedules',
+    createdAt: now,
+    department: i === 0 ? { id: dept.id, name: dept.name, slug: dept.slug } : null,
+}));
+
+const swatches = [
+    ['brand-950', 'bg-brand-950'],
+    ['brand-900', 'bg-brand-900'],
+    ['brand-800', 'bg-brand-800'],
+    ['brand-700', 'bg-brand-700'],
+    ['brand-600', 'bg-brand-600'],
+    ['brand-500', 'bg-brand-500'],
+    ['brand-400', 'bg-brand-400'],
+    ['brand-200', 'bg-brand-200'],
+    ['brand-100', 'bg-brand-100'],
+    ['brand-50', 'bg-brand-50'],
+    ['gold-300', 'bg-gold-300'],
+    ['gold-400', 'bg-gold-400'],
+    ['gold-500', 'bg-gold-500'],
+    ['gold-600', 'bg-gold-600'],
+    ['background', 'bg-background'],
+    ['surface', 'bg-surface'],
+    ['surface-alt', 'bg-surface-alt'],
+    ['foreground', 'bg-foreground'],
+    ['muted-foreground', 'bg-muted-foreground'],
+    ['primary', 'bg-primary'],
+    ['link', 'bg-link'],
+    ['border-strong', 'bg-border-strong'],
+    ['destructive', 'bg-destructive'],
+    ['article', 'bg-status-article-bg'],
+    ['event', 'bg-status-event-bg'],
+    ['announcement', 'bg-status-announcement-bg'],
+    ['pdf', 'bg-file-pdf-bg'],
+    ['doc', 'bg-file-doc-bg'],
+    ['sheet', 'bg-file-sheet-bg'],
+    ['image', 'bg-file-image-bg'],
+    ['archive', 'bg-file-archive-bg'],
+    ['other', 'bg-file-other-bg'],
+];
+const shadows = [
+    ['shadow-brand-sm', 'shadow-brand-sm'],
+    ['shadow-brand-md', 'shadow-brand-md'],
+    ['shadow-brand-lg', 'shadow-brand-lg'],
+    ['shadow-brand-xl', 'shadow-brand-xl'],
+];
+const h = 'mb-6 mt-16 border-b border-border pb-2 font-sans text-xl font-semibold text-foreground';
+---
+
+<div class="mx-auto w-full max-w-7xl px-6 pb-16">
+    <h3 class={`${h} mt-8!`}>Colour tokens</h3>
+    <ul class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+        {swatches.map(([name, cls]) => (
+            <li class="text-xs">
+                <span class:list={['block h-14 rounded-lg border border-border-strong', cls]}></span>
+                <span class="mt-1 block text-muted-foreground">{name}</span>
+            </li>
+        ))}
+    </ul>
+    <ul class="mt-6 flex flex-wrap gap-6">
+        {shadows.map(([name, cls]) => (
+            <li
+                class:list={[
+                    'flex h-16 w-32 items-center justify-center rounded-xl bg-surface text-xs text-muted-foreground',
+                    cls,
+                ]}
+            >
+                {name}
+            </li>
+        ))}
+    </ul>
+
+    <h3 class={h}>Type roles</h3>
+    <div class="space-y-4">
+        <p class="font-serif text-4xl font-bold tracking-tight md:text-6xl">Hero title — Playfair Display</p>
+        <p class="font-serif text-4xl font-bold md:text-5xl">Page title (h1)</p>
+        <p class="font-serif text-3xl font-bold md:text-4xl">Section title (h2)</p>
+        <p class="font-sans text-lg font-semibold">Card title (h3) — Inter</p>
+        <p class="font-sans text-base leading-relaxed">
+            Body text in Inter. San Isidro College, Malaybalay City, Bukidnon.
+        </p>
+        <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Meta / label</p>
+        <Eyebrow>Eyebrow label</Eyebrow>
+        <div class="bg-brand-900 p-4">
+            <Eyebrow tone="onDark">Eyebrow on dark</Eyebrow>
+        </div>
+    </div>
+
+    <h3 class={h}>Buttons</h3>
+    <div class="flex flex-wrap items-center gap-4">
+        <a href="#top" class={btnGold}>
+            Gold
+        </a>
+        <a href="#top" class={btnPrimary}>
+            Primary
+        </a>
+        <a href="#top" class={btnOutline}>
+            Outline
+        </a>
+        <span class="rounded-xl bg-brand-900 p-3">
+            <a href="#top" class={btnOnDark}>
+                On dark
+            </a>
+        </span>
+    </div>
+
+    <h3 class={h}>Pills and badges</h3>
+    <div class="flex flex-wrap items-center gap-3">
+        {(['article', 'event', 'announcement'] as const).map((t) => (
+            <TypePill type={t} />
+        ))}
+        {kinds.map((kind) => (
+            <FileKindBadge {kind} extension={kind === 'other' ? 'bin' : kind} />
+        ))}
+    </div>
+
+    <h3 class={h}>Post cards (default · compact)</h3>
+    <div class="grid grid-cols-1 gap-8 md:grid-cols-3">
+        {posts.map((post) => (
+            <PostCard {post} />
+        ))}
+    </div>
+    <div class="mt-8 grid grid-cols-1 gap-8 md:grid-cols-3">
+        {posts.map((post) => (
+            <PostCard {post} variant="compact" />
+        ))}
+    </div>
+
+    <h3 class={h}>Department card</h3>
+    <div class="grid grid-cols-1 gap-8 md:grid-cols-3">
+        <DepartmentCard department={dept} />
+    </div>
+
+    <h3 class={h}>Org chart</h3>
+    <div class="overflow-x-auto pb-4">
+        <div class="mx-auto w-max min-w-full">
+            <OrgChart nodes={members} />
+        </div>
+    </div>
+
+    <h3 class={h}>Empty state</h3>
+    <EmptyState
+        title="No posts found"
+        description="No posts match your search criteria."
+        actionHref="#top"
+        actionLabel="Show all posts"
+    />
+
+    <h3 class={h}>Contact info</h3>
+    <div class="max-w-xl">
+        <ContactInfoCard />
+    </div>
+
+    <h3 class={h}>Downloads</h3>
+    <DownloadBrowser
+        {downloads}
+        folders={[
+            { name: 'Forms', count: 3 },
+            { name: 'Schedules', count: 3 },
+        ]}
+        selected=""
+        carry={{}}
+        totalCount={downloads.length}
+    />
+
+    {interactive && (
+        <>
+            <h3 class={h}>Filter bar</h3>
+            <FilterBar
+                client:idle
+                action="/styleguide"
+                search=""
+                departments={[dept]}
+                sort="newest"
+                clearHref="/styleguide"
+            />
+            <h3 class={h}>Contact form</h3>
+            <div class="max-w-xl">
+                <ContactForm client:idle action="/contact" />
+            </div>
+        </>
+    )}
+</div>
+
+<h3 class="mx-auto w-full max-w-7xl px-6 font-sans text-xl font-semibold text-foreground">Banner, hero and carousel</h3>
+<div class="mt-6">
+    <PageBanner
+        eyebrow="Eyebrow"
+        title="Page banner title"
+        lead="Lead text sits under the title and wraps at a readable width."
+    />
+    <MarkdownSection
+        content={
+            '# Markdown section\n\nBody text with **bold** copy, shifted one heading level down.\n\n## Sub heading\n\n- First point\n- Second point'
+        }
+    />
+    <BrandHero />
+    {interactive && <HeroCarousel client:visible slides={slides} label="Sample slideshow" tall={false} />}
+</div>

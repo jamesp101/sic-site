@@ -1,0 +1,93 @@
+---
+import AppLayout from '@/layouts/AppLayout.astro';
+import AddLink from '@/components/admin/shared/AddLink.astro';
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import DeleteDepartmentButton from '@/components/admin/departments/DeleteDepartmentButton.svelte';
+import { db } from '@/lib/server/db';
+import { isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { authzResponse } from '@/lib/server/authz-response';
+import { publicUrl } from '@/lib/server/storage';
+import { getInitials } from '@/lib/initials';
+
+let actor;
+try {
+    actor = requireUser(Astro.locals.user);
+} catch (error) {
+    return authzResponse(error);
+}
+
+const superadmin = isSuperAdmin(actor);
+const rows = await db.department.findMany({
+    where: superadmin ? {} : { id: actor.departmentId ?? -1 },
+    orderBy: { name: 'asc' },
+});
+---
+
+<AppLayout
+    title="Manage Departments"
+    breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Departments' }]}
+>
+    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+        <PageHeader
+            title="Departments"
+            description="Edit department descriptions, hero sections and logos, and manage organizational charts."
+        >
+            {superadmin && <AddLink href="/admin/departments/create">Add department</AddLink>}
+        </PageHeader>
+
+        {rows.length === 0 ? (
+            <p class="rounded-xl border border-dashed border-border-strong p-10 text-center text-sm text-muted-foreground">
+                No departments yet.
+            </p>
+        ) : (
+            <ul class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {rows.map((dept) => {
+                    const logo = publicUrl(dept.logoPath);
+                    return (
+                        <li class="flex flex-col justify-between rounded-xl border border-border bg-card p-6 shadow-brand-sm">
+                            <div>
+                                <div class="flex items-center gap-3">
+                                    <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-surface-alt">
+                                        {logo ? (
+                                            <img
+                                                src={logo}
+                                                alt=""
+                                                class="h-full w-full object-contain p-0.5"
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <span class="text-xs font-bold text-brand-800 dark:text-gold-400">
+                                                {getInitials(dept.name)}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <h2 class="font-serif text-lg font-bold leading-tight text-foreground">
+                                        {dept.name}
+                                    </h2>
+                                </div>
+                                <p class="mt-4 line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                                    {dept.description || 'No description provided.'}
+                                </p>
+                            </div>
+                            <div class="mt-6 flex items-center gap-2 border-t border-border pt-4">
+                                <a
+                                    href={`/admin/departments/${dept.id}/edit`}
+                                    class="inline-flex flex-1 items-center justify-center rounded-lg border border-border-strong py-2 text-xs font-bold text-foreground transition-colors hover:bg-surface-alt"
+                                >
+                                    Edit info
+                                </a>
+                                <a
+                                    href={`/admin/departments/${dept.id}/members`}
+                                    class="inline-flex flex-1 items-center justify-center rounded-lg bg-brand-800 py-2 text-xs font-bold text-white transition-colors hover:bg-brand-700 dark:bg-gold-500 dark:text-brand-950"
+                                >
+                                    Org chart
+                                </a>
+                                {superadmin && <DeleteDepartmentButton client:load id={dept.id} name={dept.name} />}
+                            </div>
+                        </li>
+                    );
+                })}
+            </ul>
+        )}
+    </div>
+</AppLayout>

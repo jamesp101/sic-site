@@ -1,0 +1,61 @@
+---
+import AppLayout from '@/layouts/AppLayout.astro';
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import MemberForm from '@/components/admin/members/MemberForm.svelte';
+import { db } from '@/lib/server/db';
+import { AuthzError, requireUser, scopeDepartment } from '@/lib/server/authz';
+import { authzResponse, parseId } from '@/lib/server/authz-response';
+import { subtreeIds } from '@/lib/server/member-tree';
+import { publicUrl } from '@/lib/server/storage';
+
+let department;
+let member;
+let parents;
+try {
+    const actor = requireUser(Astro.locals.user);
+    const id = parseId(Astro.params.id);
+    const memberId = parseId(Astro.params.memberId);
+    department =
+        id === null ? null : await db.department.findUnique({ where: { id }, select: { id: true, name: true } });
+    if (!department) throw new AuthzError('NOT_FOUND');
+    scopeDepartment(actor, { departmentId: department.id });
+    const row = memberId === null ? null : await db.member.findUnique({ where: { id: memberId } });
+    if (!row || row.departmentId !== department.id) throw new AuthzError('NOT_FOUND');
+    member = {
+        id: row.id,
+        name: row.name,
+        role: row.role,
+        parentId: row.parentId,
+        order: row.order,
+        imageUrl: publicUrl(row.imagePath),
+    };
+    const all = await db.member.findMany({
+        where: { departmentId: department.id },
+        orderBy: [{ order: 'asc' }, { id: 'asc' }],
+        select: { id: true, name: true, role: true, parentId: true },
+    });
+    const excluded = subtreeIds(all, row.id);
+    parents = all.filter((m) => !excluded.has(m.id)).map(({ id, name, role }) => ({ id, name, role }));
+} catch (error) {
+    return authzResponse(error);
+}
+---
+
+<AppLayout
+    title={`Edit Member - ${department.name}`}
+    breadcrumbs={[
+        { title: 'Dashboard', href: '/dashboard' },
+        { title: 'Departments', href: '/admin/departments' },
+        { title: department.name, href: `/admin/departments/${department.id}/members` },
+        { title: 'Edit member' },
+    ]}
+>
+    <div class="mx-auto w-full max-w-3xl space-y-6 p-6">
+        <PageHeader
+            title="Edit member"
+            description={`Change the details of ${member.name}.`}
+            backHref={`/admin/departments/${department.id}/members`}
+        />
+        <MemberForm client:load departmentId={department.id} {member} {parents} />
+    </div>
+</AppLayout>

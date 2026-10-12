@@ -1,0 +1,58 @@
+---
+import NavMenu from './NavMenu.svelte';
+import ThemeToggle from './ThemeToggle.svelte';
+import type { NavItem } from './nav-types';
+import type { DepartmentSummary, NavLinkView } from '@/lib/content-types';
+import { SITE } from '@/lib/site';
+
+interface Props {
+    navLinks: NavLinkView[];
+    departments: DepartmentSummary[];
+}
+
+const { navLinks, departments } = Astro.props;
+
+const departmentLinks = departments.map((d) => ({ label: d.name, href: `/departments/${d.slug}` }));
+
+// One normalised list drives both the desktop bar and the mobile panel.
+const items: NavItem[] =
+    navLinks.length > 0
+        ? navLinks.map((link) =>
+              link.url === '#departments'
+                  ? { label: link.label, children: departmentLinks }
+                  : link.children.length > 0
+                    ? { label: link.label, children: link.children.map((c) => ({ label: c.label, href: c.url })) }
+                    : { label: link.label, href: link.url },
+          )
+        : [
+              { label: 'Home', href: '/' },
+              ...(departmentLinks.length ? [{ label: 'Departments', children: departmentLinks }] : []),
+              { label: 'News & Events', href: '/posts' },
+              { label: 'Downloads', href: '/downloads' },
+              { label: 'Contact', href: '/contact' },
+          ];
+---
+
+<header class="sticky top-0 z-50 border-b border-white/10 bg-linear-to-r from-brand-800 to-brand-700 text-white shadow-brand-md">
+    <div class="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-6 py-3">
+        <a href="/" class="flex items-center gap-3 rounded-lg" aria-label={`${SITE.name} — home`}>
+            <img
+                src="/sic-seal.png"
+                alt=""
+                width="44"
+                height="44"
+                decoding="async"
+                class="h-11 w-11 rounded-full border-2 border-gold-500/40 bg-white/5 object-contain"
+            />
+            <span class="leading-tight">
+                <span class="block font-serif text-lg font-bold tracking-tight">{SITE.name}</span>
+                <span class="block text-xs uppercase tracking-[0.2em] text-gold-300">{SITE.motto}</span>
+            </span>
+        </a>
+
+        <div class="flex items-center gap-2">
+            <NavMenu client:idle {items} currentPath={Astro.url.pathname} />
+            <ThemeToggle client:idle />
+        </div>
+    </div>
+</header>

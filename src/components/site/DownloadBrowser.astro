@@ -1,0 +1,153 @@
+---
+import EmptyState from './EmptyState.astro';
+import FileKindBadge from './FileKindBadge.astro';
+import { btnPrimary } from './classes';
+import type { DownloadView } from '@/lib/content-types';
+import { formatDate, formatFileSize } from '@/lib/format';
+
+interface Props {
+    /** Files to list (already narrowed to the selected folder). */
+    downloads: DownloadView[];
+    /** Every folder with the number of files matching the current search/department. */
+    folders: { name: string; count: number }[];
+    /** Selected folder name, or '' for all. */
+    selected: string;
+    /** Search / department filters carried over to folder links. */
+    carry: { search?: string; departmentId?: number };
+    totalCount: number;
+}
+
+const { downloads, folders, selected, carry, totalCount } = Astro.props;
+
+function folderHref(name: string): string {
+    const params = new URLSearchParams();
+    if (carry.search) params.set('search', carry.search);
+    if (carry.departmentId) params.set('department_id', String(carry.departmentId));
+    if (name) params.set('directory', name);
+    const query = params.toString();
+    return query ? `/downloads?${query}` : '/downloads';
+}
+
+const groups = new Map<string, DownloadView[]>();
+for (const file of downloads) {
+    const key = file.directory || 'General';
+    groups.set(key, [...(groups.get(key) ?? []), file]);
+}
+
+const folderLink =
+    'flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm transition-colors hover:border-gold-500';
+---
+
+<div class="space-y-10">
+    {folders.length > 0 && (
+        <nav aria-label="Folders">
+            <h2 class="mb-3 font-sans text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                Folders
+            </h2>
+            <ul class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <li>
+                    <a
+                        href={folderHref('')}
+                        aria-current={selected === '' ? 'page' : undefined}
+                        class:list={[
+                            folderLink,
+                            selected === ''
+                                ? 'border-gold-500 bg-surface font-semibold shadow-brand-sm'
+                                : 'border-border bg-surface',
+                        ]}
+                    >
+                        <span>All files</span>
+                        <span class="text-xs text-muted-foreground">{totalCount}</span>
+                    </a>
+                </li>
+                {folders.map((folder) => (
+                    <li>
+                        <a
+                            href={folderHref(folder.name)}
+                            aria-current={selected === folder.name ? 'page' : undefined}
+                            class:list={[
+                                folderLink,
+                                selected === folder.name
+                                    ? 'border-gold-500 bg-surface font-semibold shadow-brand-sm'
+                                    : 'border-border bg-surface',
+                            ]}
+                        >
+                            <span class="truncate">{folder.name}</span>
+                            <span class="text-xs text-muted-foreground">{folder.count}</span>
+                        </a>
+                    </li>
+                ))}
+            </ul>
+        </nav>
+    )}
+
+    {downloads.length === 0 ? (
+        <EmptyState
+            title="No files found"
+            description="No files match your search, department or folder."
+            actionHref="/downloads"
+            actionLabel="Show all files"
+        />
+    ) : (
+        [...groups].map(([directory, files], index) => (
+            <section aria-labelledby={`folder-${index}`}>
+                <h2 id={`folder-${index}`} class="mb-4 text-2xl font-bold text-brand-800 dark:text-foreground">
+                    {directory}{' '}
+                    <span class="font-sans text-base font-normal text-muted-foreground">({files.length})</span>
+                </h2>
+                <ul class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {files.map((file) => (
+                        <li class="flex flex-col justify-between rounded-2xl border border-border bg-surface p-5 shadow-brand-sm">
+                            <div class="flex items-start gap-3">
+                                <FileKindBadge kind={file.kind} extension={file.extension} />
+                                <div class="min-w-0 flex-1">
+                                    <h3 class="break-words font-sans text-sm font-semibold text-foreground">
+                                        {file.fileName}
+                                    </h3>
+                                    <p class="mt-1 text-xs text-muted-foreground">
+                                        {formatFileSize(file.size)} ·{' '}
+                                        <time datetime={file.createdAt.toISOString()}>
+                                            {formatDate(file.createdAt, { short: true })}
+                                        </time>
+                                    </p>
+                                </div>
+                            </div>
+                            {file.department && (
+                                <p class="mt-3 text-xs text-muted-foreground">
+                                    Department: <span class="font-semibold text-link">{file.department.name}</span>
+                                </p>
+                            )}
+                            {file.tags.length > 0 && (
+                                <ul class="mt-3 flex flex-wrap gap-1.5" aria-label="Tags">
+                                    {file.tags.map((tag) => (
+                                        <li>
+                                            <a
+                                                href={`/downloads?search=${encodeURIComponent(tag)}`}
+                                                class="rounded-md bg-surface-alt px-2 py-0.5 text-xs font-medium text-muted-foreground hover:text-link"
+                                            >
+                                                {tag}
+                                            </a>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                            <div class="mt-5 flex items-center justify-end gap-2 border-t border-border pt-4">
+                                <a
+                                    href={file.url}
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="rounded-lg px-3 py-2 text-xs font-semibold text-link hover:underline"
+                                >
+                                    View<span class="sr-only"> {file.fileName} (opens in new tab)</span>
+                                </a>
+                                <a href={file.downloadUrl} download={file.fileName} class={`${btnPrimary} px-4! py-2!`}>
+                                    Download<span class="sr-only"> {file.fileName}</span>
+                                </a>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </section>
+        ))
+    )}
+</div>

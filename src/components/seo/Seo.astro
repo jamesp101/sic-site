@@ -1,0 +1,74 @@
+---
+/**
+ * Per-page head metadata: title, description, canonical, robots, Open Graph,
+ * Twitter card and JSON-LD. Canonical is absolute and query-free unless
+ * `canonical` is passed explicitly.
+ */
+import { SITE } from '@/lib/site';
+
+export interface SeoProps {
+    title?: string;
+    description?: string;
+    canonical?: string;
+    image?: string | null;
+    imageAlt?: string;
+    type?: 'website' | 'article';
+    noindex?: boolean;
+    /** With `noindex`: still let crawlers follow links (`noindex, follow`). */
+    follow?: boolean;
+    publishedTime?: Date | null;
+    modifiedTime?: Date | null;
+    jsonLd?: Record<string, unknown> | Record<string, unknown>[];
+}
+
+const {
+    title,
+    description = SITE.description,
+    canonical,
+    image,
+    imageAlt,
+    type = 'website',
+    noindex = false,
+    follow = false,
+    publishedTime,
+    modifiedTime,
+    jsonLd,
+} = Astro.props as SeoProps;
+
+const site = Astro.site ?? new URL(Astro.url.origin);
+const fullTitle = title ? `${title} | ${SITE.name}` : `${SITE.name} — Malaybalay City, Bukidnon`;
+const canonicalUrl = new URL(canonical ?? Astro.url.pathname, site).href;
+const ogImage = new URL(image ?? SITE.defaultOgImage, site).href;
+const metaDescription = description.length > 160 ? `${description.slice(0, 157).trimEnd()}…` : description;
+const ld = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
+// Escape `<` so content cannot close the script element.
+const ldJson = ld.map((item) => JSON.stringify(item).replace(/</g, '\\u003c'));
+---
+
+<title>{fullTitle}</title>
+<meta name="description" content={metaDescription} />
+<link rel="canonical" href={canonicalUrl} />
+<meta
+    name="robots"
+    content={noindex ? (follow ? 'noindex, follow' : 'noindex, nofollow') : 'index, follow, max-image-preview:large'}
+/>
+
+<meta property="og:site_name" content={SITE.name} />
+<meta property="og:locale" content={SITE.locale} />
+<meta property="og:type" content={type} />
+<meta property="og:title" content={title ?? SITE.name} />
+<meta property="og:description" content={metaDescription} />
+<meta property="og:url" content={canonicalUrl} />
+<meta property="og:image" content={ogImage} />
+{imageAlt && <meta property="og:image:alt" content={imageAlt} />}
+{publishedTime && <meta property="article:published_time" content={publishedTime.toISOString()} />}
+{modifiedTime && <meta property="article:modified_time" content={modifiedTime.toISOString()} />}
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title ?? SITE.name} />
+<meta name="twitter:description" content={metaDescription} />
+<meta name="twitter:image" content={ogImage} />
+
+{ldJson.map((json) => (
+    <script type="application/ld+json" set:html={json} />
+))}

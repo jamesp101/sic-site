@@ -1,0 +1,67 @@
+---
+import { actions, isInputError } from 'astro:actions';
+import ContactForm from '@/components/site/ContactForm.svelte';
+import ContactInfoCard from '@/components/site/ContactInfoCard.astro';
+import Eyebrow from '@/components/site/Eyebrow.astro';
+import PageBanner from '@/components/site/PageBanner.astro';
+import PublicLayout from '@/layouts/PublicLayout.astro';
+
+// No-JS path: the browser POSTs the form to this page, Astro runs the action, we render its result.
+const result = Astro.getActionResult(actions.contact.send);
+if (result && !result.error) return Astro.redirect('/contact?sent=1', 303);
+
+const fieldErrors = result?.error && isInputError(result.error) ? result.error.fields : {};
+const formError = result?.error
+    ? isInputError(result.error)
+        ? 'Please fix the highlighted fields and try again.'
+        : 'Your message could not be sent. Please try again or email us directly.'
+    : null;
+
+let values: Record<string, string> = {};
+if (result?.error) {
+    try {
+        const data = await Astro.request.clone().formData();
+        values = Object.fromEntries([...data].filter(([, v]) => typeof v === 'string')) as Record<string, string>;
+    } catch {
+        // Body already consumed; the visitor simply retypes.
+    }
+}
+---
+
+<PublicLayout
+    title="Contact & Admissions"
+    description="Contact San Isidro College in Impalambong, Malaybalay City, Bukidnon: phone, email, campus address and an online inquiry form."
+    canonical="/contact"
+    breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Contact' }]}
+>
+    <PageBanner
+        eyebrow="Contact"
+        title="Contact & Admissions"
+        lead="Get in touch with the college about admissions, programs and campus information."
+    />
+
+    <section class="py-16 md:py-24">
+        <div class="mx-auto grid w-full max-w-7xl grid-cols-1 gap-12 px-6 lg:grid-cols-2">
+            <div>
+                <Eyebrow>Visit or call</Eyebrow>
+                <h2 class="mb-6 mt-3 text-3xl font-bold text-brand-800 dark:text-foreground">Campus information</h2>
+                <ContactInfoCard />
+            </div>
+
+            <div class="self-start rounded-2xl border border-border bg-surface p-8 shadow-brand-md">
+                <h2 class="text-3xl font-bold text-brand-800 dark:text-foreground">Send us a message</h2>
+                <p class="mt-2 text-sm text-muted-foreground">
+                    Fill out the form and the college will reply to your email address.
+                </p>
+                <ContactForm
+                    client:idle
+                    action={actions.contact.send.queryString}
+                    {values}
+                    {fieldErrors}
+                    {formError}
+                    sent={Astro.url.searchParams.get('sent') === '1'}
+                />
+            </div>
+        </div>
+    </section>
+</PublicLayout>

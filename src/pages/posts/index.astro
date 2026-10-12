@@ -1,0 +1,123 @@
+---
+import EmptyState from '@/components/site/EmptyState.astro';
+import FilterBar from '@/components/site/FilterBar.svelte';
+import PageBanner from '@/components/site/PageBanner.astro';
+import PostCard from '@/components/site/PostCard.astro';
+import PublicLayout from '@/layouts/PublicLayout.astro';
+import { POST_TYPES, type PostFilters, type PostType } from '@/lib/content-types';
+import { postsItemList } from '@/lib/seo';
+import { getDepartments, listPosts } from '@/lib/server/queries';
+
+const params = Astro.url.searchParams;
+const typeParam = params.get('type');
+const type = POST_TYPES.includes(typeParam as PostType) ? (typeParam as PostType) : undefined;
+const departmentParam = Number(params.get('department_id'));
+const departmentId = Number.isInteger(departmentParam) && departmentParam > 0 ? departmentParam : undefined;
+const search = params.get('search')?.trim().slice(0, 100) ?? '';
+const sort: NonNullable<PostFilters['sort']> = params.get('sort') === 'oldest' ? 'oldest' : 'newest';
+
+const [departments, posts] = await Promise.all([
+    getDepartments(),
+    listPosts({ type, departmentId, search: search || undefined, sort }),
+]);
+
+const filtered = Boolean(type || departmentId || search || sort === 'oldest');
+const site = Astro.site ?? new URL(Astro.url.origin);
+
+const tabs: { label: string; type?: PostType }[] = [
+    { label: 'All posts' },
+    { label: 'Articles', type: 'article' },
+    { label: 'Events', type: 'event' },
+    { label: 'Announcements', type: 'announcement' },
+];
+
+function tabHref(tabType?: PostType): string {
+    const next = new URLSearchParams();
+    if (tabType) next.set('type', tabType);
+    if (departmentId) next.set('department_id', String(departmentId));
+    if (search) next.set('search', search);
+    if (sort === 'oldest') next.set('sort', 'oldest');
+    const query = next.toString();
+    return query ? `/posts?${query}` : '/posts';
+}
+---
+
+<PublicLayout
+    title="News, Events & Announcements"
+    description="Latest news, campus events and official announcements from San Isidro College in Malaybalay City, Bukidnon."
+    canonical="/posts"
+    noindex={filtered}
+    follow
+    breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'News & Events' }]}
+    jsonLd={postsItemList(posts, site, 'News, Events & Announcements')}
+>
+    <PageBanner
+        eyebrow="News & events"
+        title="News, Events & Announcements"
+        lead="Keep up to date with the latest stories and official advisories from our campus."
+    />
+
+    <section class="py-12" aria-label="Posts">
+        <div class="mx-auto w-full max-w-7xl px-6">
+            <nav aria-label="Post type" class="mb-6">
+                <ul class="flex flex-wrap gap-2">
+                    {tabs.map((tab) => {
+                        const current = tab.type === type;
+                        return (
+                            <li>
+                                <a
+                                    href={tabHref(tab.type)}
+                                    aria-current={current ? 'page' : undefined}
+                                    class:list={[
+                                        'inline-flex rounded-lg px-4 py-2 text-sm font-semibold transition-colors',
+                                        current
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'text-muted-foreground hover:bg-surface hover:text-foreground',
+                                    ]}
+                                >
+                                    {tab.label}
+                                </a>
+                            </li>
+                        );
+                    })}
+                </ul>
+            </nav>
+
+            <FilterBar
+                client:idle
+                action="/posts"
+                search={search}
+                searchLabel="Search posts"
+                searchPlaceholder="Search stories…"
+                departmentId={departmentId ?? null}
+                departments={departments}
+                sort={sort}
+                hidden={type ? { type } : {}}
+                active={filtered}
+                clearHref="/posts"
+            />
+
+            <p class="mt-6 text-sm text-muted-foreground" role="status">
+                {posts.length} {posts.length === 1 ? 'post' : 'posts'}
+                {filtered ? ' match your filters' : ''}.
+            </p>
+
+            {posts.length > 0 ? (
+                <div class="mt-6 grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+                    {posts.map((post) => (
+                        <PostCard post={post} headingLevel="h2" />
+                    ))}
+                </div>
+            ) : (
+                <div class="mt-6">
+                    <EmptyState
+                        title="No posts found"
+                        description="No posts match your search criteria."
+                        actionHref="/posts"
+                        actionLabel="Show all posts"
+                    />
+                </div>
+            )}
+        </div>
+    </section>
+</PublicLayout>

@@ -1,0 +1,39 @@
+---
+import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import HeroSectionForm from '@/components/admin/hero-sections/HeroSectionForm.svelte';
+import AppLayout from '@/layouts/AppLayout.astro';
+import { isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { authzResponse } from '@/lib/server/authz-response';
+import { db } from '@/lib/server/db';
+
+let actor;
+try {
+    actor = requireUser(Astro.locals.user);
+} catch (error) {
+    return authzResponse(error);
+}
+
+const departments = await db.department.findMany({
+    where: isSuperAdmin(actor) ? {} : { id: actor.departmentId ?? -1 },
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true },
+});
+---
+
+<AppLayout
+    title="Add Hero Section"
+    breadcrumbs={[
+        { title: 'Dashboard', href: '/dashboard' },
+        { title: 'Hero Sections', href: '/admin/hero-sections' },
+        { title: 'Create' },
+    ]}
+>
+    <div class="mx-auto w-full max-w-5xl space-y-6 p-6">
+        <PageHeader
+            title="Create hero section"
+            description="Design a new MDX hero block for the landing page or a department page."
+            backHref="/admin/hero-sections"
+        />
+        <HeroSectionForm client:load {departments} isSuperAdmin={isSuperAdmin(actor)} />
+    </div>
+</AppLayout>
