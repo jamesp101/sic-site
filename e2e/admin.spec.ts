@@ -35,6 +35,23 @@ test.describe('as superadmin', () => {
         await expect(page).toHaveURL(/\/admin\/posts$/);
         await page.goBack();
         await expect(page).toHaveURL(/q=business/);
+        // Back/forward changes the URL before the swap; wait for the restored view.
+        await expect(page.getByRole('heading', { level: 1, name: 'Departments' })).toBeVisible();
+
+        // Hover prefetches the next view; the click then swaps without another request.
+        const requests: string[] = [];
+        page.on('request', (request) => {
+            const url = new URL(request.url());
+            requests.push(url.pathname + url.search);
+        });
+        // "Users" is only linked from the sidebar, so no other hover/focus can have prefetched it.
+        const users = sidebar.getByRole('link', { name: 'Users', exact: true });
+        await users.hover();
+        await expect.poll(() => requests.filter((p) => p === '/admin/users').length).toBe(1);
+        await users.click();
+        await expect(page).toHaveURL(/\/admin\/users$/);
+        await expect(page.getByRole('heading', { level: 1 })).toContainText(/Users/);
+        expect(requests.filter((p) => p === '/admin/users').length).toBe(1);
 
         expect(await page.evaluate(() => Reflect.get(window, '__marker'))).toBe(1);
         expect(documentRequests).toBe(0);
@@ -50,8 +67,14 @@ test.describe('as superadmin', () => {
         await page.keyboard.type('Body from the end-to-end test.');
         await page.locator('#highlightImage').setInputFiles(path.resolve('public/sic-seal.png'));
         await page.getByRole('button', { name: 'Apply Crop' }).click();
+        // Hover the sidebar "Posts" link first so a pre-save copy of the list sits in the prefetch cache.
+        const prefetched = page.waitForResponse((res) => res.url().endsWith('/admin/posts'));
+        await page.locator('[data-sidebar="content"]').getByRole('link', { name: 'Posts', exact: true }).hover();
+        await prefetched;
         await page.getByRole('button', { name: 'Publish post' }).click();
         await expect(page).toHaveURL(/\/admin\/posts$/);
+        // The post-save navigation must fetch fresh data, not reuse the prefetched list.
+        await expect(page.locator('main')).toContainText(title);
 
         await page.goto(`/posts?search=${encodeURIComponent(title)}`);
         const link = page.getByRole('link', { name: title }).first();

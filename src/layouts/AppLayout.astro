@@ -37,4 +37,8 @@ const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
     >
         <slot />
     </AdminShell>
+    <script>
+        // Bundled module script: runs once per document, survives ClientRouter swaps.
+        import '@/scripts/admin-navigation';
+    </script>
 </BaseLayout>
