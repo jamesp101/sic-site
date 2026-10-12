@@ -1,7 +1,9 @@
 <script lang="ts">
   import { ChevronLeft, ChevronRight, Pause, Play } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { readingOrder, safeHref } from '@/lib/carousel-overlay';
   import type { CarouselSlide } from '@/lib/content-types';
+  import SlideLayer from './SlideLayer.svelte';
 
   let {
     slides,
@@ -60,7 +62,7 @@
 <section
   aria-roledescription="carousel"
   aria-label={label}
-  class="relative w-full overflow-hidden bg-brand-950 {tall ? 'h-[500px] md:h-[600px]' : 'h-[400px] md:h-[450px]'}"
+  class="hero relative w-full overflow-hidden bg-brand-950 {tall ? '' : 'hero-short'}"
   onmouseenter={() => (hovering = true)}
   onmouseleave={() => (hovering = false)}
   onfocusin={() => (focused = true)}
@@ -90,34 +92,43 @@
           class="absolute inset-0 h-full w-full object-cover"
         />
         <div class="absolute inset-0 bg-linear-to-t from-brand-950/85 via-brand-950/45 to-brand-950/30"></div>
-        <div class="relative mx-auto flex h-full max-w-7xl flex-col justify-center px-6 text-white">
-          <div class="max-w-2xl space-y-4">
-            {#if eyebrow}
-              <p class="inline-flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.25em] text-gold-300 before:h-0.5 before:w-8 before:rounded-sm before:bg-gold-500 before:content-['']">
-                {eyebrow}
-              </p>
-            {/if}
-            {#if slide.title}
-              <p class="animate-fade-in font-serif text-4xl font-bold leading-tight tracking-tight md:text-6xl">
-                {slide.title}
-              </p>
-            {/if}
-            {#if slide.subtitle}
-              <p class="text-lg text-white/90 md:text-xl">{slide.subtitle}</p>
-            {/if}
-            {#if slide.linkUrl}
-              <p class="pt-2">
-                <a
-                  href={slide.linkUrl}
-                  class="inline-flex items-center gap-2 rounded-xl bg-gold-500 px-6 py-3 text-xs font-semibold uppercase tracking-widest text-brand-950 shadow-brand-md transition hover:-translate-y-0.5 hover:bg-gold-400"
-                >
-                  Explore more<span class="sr-only">: {slide.title ?? 'slide ' + (index + 1)}</span>
-                  <span aria-hidden="true">&rarr;</span>
-                </a>
-              </p>
-            {/if}
+        {#if slide.overlay}
+          <!-- Designer slide: real, server-rendered text, links and images positioned over the picture. -->
+          <div class="stage">
+            {#each readingOrder(slide.overlay) as { layer, z } (layer.id)}
+              <SlideLayer {layer} {z} />
+            {/each}
           </div>
-        </div>
+        {:else}
+          <div class="relative mx-auto flex h-full max-w-7xl flex-col justify-center px-6 text-white">
+            <div class="max-w-2xl space-y-4">
+              {#if eyebrow}
+                <p class="inline-flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.25em] text-gold-300 before:h-0.5 before:w-8 before:rounded-sm before:bg-gold-500 before:content-['']">
+                  {eyebrow}
+                </p>
+              {/if}
+              {#if slide.title}
+                <p class="animate-fade-in font-serif text-4xl font-bold leading-tight tracking-tight md:text-6xl">
+                  {slide.title}
+                </p>
+              {/if}
+              {#if slide.subtitle}
+                <p class="text-lg text-white/90 md:text-xl">{slide.subtitle}</p>
+              {/if}
+              {#if slide.linkUrl && safeHref(slide.linkUrl)}
+                <p class="pt-2">
+                  <a
+                    href={safeHref(slide.linkUrl) ?? undefined}
+                    class="inline-flex items-center gap-2 rounded-xl bg-gold-500 px-6 py-3 text-xs font-semibold uppercase tracking-widest text-brand-950 shadow-brand-md transition hover:-translate-y-0.5 hover:bg-gold-400"
+                  >
+                    Explore more<span class="sr-only">: {slide.title ?? 'slide ' + (index + 1)}</span>
+                    <span aria-hidden="true">&rarr;</span>
+                  </a>
+                </p>
+              {/if}
+            </div>
+          </div>
+        {/if}
       </div>
     {/each}
   </div>
@@ -159,3 +170,51 @@
     </div>
   {/if}
 </section>
+
+<style>
+  /*
+   * The hero is a size container named "hero". Overlay layers live on a 16:9 stage that covers it
+   * exactly like the object-cover photo, so percentages match the editor. Below 48rem the stage
+   * becomes a bottom-aligned column and layers stack in reading order (see SlideLayer).
+   */
+  .hero {
+    container: hero / inline-size;
+    height: var(--hh);
+    --hh: 500px;
+  }
+  .hero-short {
+    --hh: 400px;
+  }
+  @media (min-width: 48rem) {
+    .hero {
+      --hh: 600px;
+    }
+    .hero-short {
+      --hh: 450px;
+    }
+  }
+  .stage {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100cqw, calc(var(--hh) * 16 / 9));
+    aspect-ratio: 16 / 9;
+    transform: translate(-50%, -50%);
+    container-type: inline-size;
+    --min-fs: 0.75rem;
+  }
+  @container hero (max-width: 47.99rem) {
+    .stage {
+      inset: 0;
+      transform: none;
+      width: auto;
+      aspect-ratio: auto;
+      container-type: normal;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 0.75rem;
+      padding: 1.5rem 1.5rem 4.5rem;
+    }
+  }
+</style>

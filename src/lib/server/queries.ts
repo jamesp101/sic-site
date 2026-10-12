@@ -13,6 +13,7 @@ import type {
     PostSummary,
     PostType,
 } from '@/lib/content-types';
+import { parseOverlay } from '@/lib/carousel-overlay-schema';
 import { extensionOf, fileKind } from '@/lib/files';
 import { toPlainText } from '@/lib/markdown';
 import { db, dbProvider } from './db';
@@ -96,6 +97,7 @@ const carouselSelect = {
     subtitle: true,
     imagePath: true,
     linkUrl: true,
+    overlay: true,
 } satisfies Prisma.CarouselItemSelect;
 
 function toSlide(row: Prisma.CarouselItemGetPayload<{ select: typeof carouselSelect }>): CarouselSlide {
@@ -105,6 +107,7 @@ function toSlide(row: Prisma.CarouselItemGetPayload<{ select: typeof carouselSel
         subtitle: row.subtitle,
         imageUrl: publicUrl(row.imagePath) ?? row.imagePath,
         linkUrl: row.linkUrl,
+        overlay: parseOverlay(row.overlay),
     };
 }
 

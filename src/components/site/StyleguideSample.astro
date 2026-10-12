@@ -55,8 +55,15 @@ const posts: PostSummary[] = (['article', 'event', 'announcement'] as const).map
     department: type === 'article' ? null : { id: dept.id, name: dept.name, slug: dept.slug },
 }));
 const slides: CarouselSlide[] = [
-    { id: 1, title: 'Sample slide one', subtitle: 'Subtitle text', imageUrl: '/sic-seal.png', linkUrl: '/posts' },
-    { id: 2, title: 'Sample slide two', subtitle: null, imageUrl: '/sic-seal.png', linkUrl: null },
+    {
+        id: 1,
+        title: 'Sample slide one',
+        subtitle: 'Subtitle text',
+        imageUrl: '/sic-seal.png',
+        linkUrl: '/posts',
+        overlay: null,
+    },
+    { id: 2, title: 'Sample slide two', subtitle: null, imageUrl: '/sic-seal.png', linkUrl: null, overlay: null },
 ];
 const members: MemberNode[] = [
     {

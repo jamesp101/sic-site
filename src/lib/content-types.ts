@@ -2,6 +2,8 @@
  * View-model shapes returned by src/lib/server/queries.ts and consumed by
  * public components. URLs are already resolved through storage.publicUrl.
  */
+import type { Layer as OverlayLayer } from './carousel-overlay';
+
 export type PostType = 'article' | 'event' | 'announcement';
 export const POST_TYPES: readonly PostType[] = ['article', 'event', 'announcement'];
 
@@ -34,6 +36,8 @@ export interface CarouselSlide {
     subtitle: string | null;
     imageUrl: string;
     linkUrl: string | null;
+    /** Designer layers; null = legacy slide rendered from title / subtitle / linkUrl. */
+    overlay: OverlayLayer[] | null;
 }
 
 export interface HeroSectionView {

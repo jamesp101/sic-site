@@ -1,12 +1,10 @@
 ---
 import AppLayout from '@/layouts/AppLayout.astro';
-import AddLink from '@/components/admin/shared/AddLink.astro';
-import PageHeader from '@/components/admin/shared/PageHeader.astro';
-import CarouselList from '@/components/admin/carousels/CarouselList.svelte';
+import CarouselDesigner from '@/components/admin/carousels/CarouselDesigner.svelte';
 import { db } from '@/lib/server/db';
+import { toDesignerSlide } from '@/lib/server/carousel-admin';
 import { departmentFilter, isSuperAdmin, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
-import { publicUrl } from '@/lib/server/storage';
 
 let actor;
 try {
@@ -16,39 +14,26 @@ try {
 }
 
 const superadmin = isSuperAdmin(actor);
-const [items, departments] = await Promise.all([
-    db.carouselItem.findMany({
-        where: departmentFilter(actor),
-        include: { department: { select: { name: true } } },
-        orderBy: [{ order: 'asc' }, { id: 'asc' }],
-    }),
+const [rows, departments] = await Promise.all([
+    db.carouselItem.findMany({ where: departmentFilter(actor), orderBy: [{ order: 'asc' }, { id: 'asc' }] }),
     db.department.findMany({
         where: superadmin ? {} : { id: actor.departmentId ?? -1 },
         select: { id: true, name: true },
         orderBy: { name: 'asc' },
     }),
 ]);
-const slides = items.map((item) => ({
-    id: item.id,
-    title: item.title,
-    subtitle: item.subtitle,
-    linkUrl: item.linkUrl,
-    order: item.order,
-    departmentId: item.departmentId,
-    departmentName: item.department?.name ?? null,
-    showOnMain: item.showOnMain,
-    imageUrl: publicUrl(item.imagePath) ?? '',
-}));
+const slides = rows.map(toDesignerSlide);
+const requested = Number(Astro.url.searchParams.get('slide'));
+const initialId = slides.some((slide) => slide.id === requested) ? requested : (slides[0]?.id ?? null);
 ---
 
-<AppLayout title="Carousel Slides" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Carousels' }]}>
-    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
-        <PageHeader
-            title="Carousel slides"
-            description="Manage the slides shown on the home page and on department pages."
-        >
-            <AddLink href="/admin/carousels/create">Add slide</AddLink>
-        </PageHeader>
-        <CarouselList client:load {slides} {departments} canFilterDepartment={superadmin} />
-    </div>
+<AppLayout title="Carousel Designer" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Carousels' }]}>
+    <CarouselDesigner
+        client:load
+        {slides}
+        {departments}
+        {initialId}
+        superadmin={superadmin}
+        lockedDepartmentId={superadmin ? null : (actor.departmentId ?? null)}
+    />
 </AppLayout>
