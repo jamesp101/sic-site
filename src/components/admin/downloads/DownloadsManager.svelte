@@ -1,5 +1,6 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
+  import { reloadView } from '@/lib/navigation';
   import {
     Check, Copy, ExternalLink, File, FileArchive, FileImage, FileSpreadsheet, FileText, Folder, FolderPlus, HardDrive,
     Info, LayoutGrid, List, Loader2, RefreshCw, Search, Tag, Trash, X,
@@ -142,7 +143,7 @@
       alert(parseActionError(error).message);
       return;
     }
-    window.location.reload();
+    await reloadView();
   }
 
   async function createFolder(event: SubmitEvent) {
@@ -159,7 +160,7 @@
       folderBusy = false;
       return;
     }
-    window.location.reload();
+    await reloadView();
   }
 
   function onKeydown(event: KeyboardEvent) {

@@ -8,6 +8,40 @@ const CIT = 'e2e/.auth/cit.json';
 test.describe('as superadmin', () => {
     test.use({ storageState: ADMIN });
 
+    test('admin navigation swaps views without a full page load', async ({ page }) => {
+        await page.emulateMedia({ colorScheme: 'dark' });
+        await page.goto('/dashboard');
+        // A full document load would wipe this marker; client-side navigation keeps it.
+        await page.evaluate(() => Reflect.set(window, '__marker', 1));
+
+        let documentRequests = 0;
+        page.on('request', (request) => {
+            if (request.resourceType() === 'document') documentRequests++;
+        });
+
+        const sidebar = page.locator('[data-sidebar="content"]');
+        await sidebar.getByRole('link', { name: 'Departments', exact: true }).click();
+        await expect(page).toHaveURL(/\/admin\/departments$/);
+        await expect(page.getByRole('heading', { level: 1, name: 'Departments' })).toBeVisible();
+        await expect(page).toHaveTitle(/Manage Departments/);
+
+        // GET filter forms are swapped in too.
+        await page.getByLabel('Search departments').fill('business');
+        await page.getByRole('button', { name: 'Filter' }).click();
+        await expect(page).toHaveURL(/q=business/);
+        await expect(page.locator('tbody tr')).toHaveCount(1);
+
+        await sidebar.getByRole('link', { name: 'Posts', exact: true }).click();
+        await expect(page).toHaveURL(/\/admin\/posts$/);
+        await page.goBack();
+        await expect(page).toHaveURL(/q=business/);
+
+        expect(await page.evaluate(() => Reflect.get(window, '__marker'))).toBe(1);
+        expect(documentRequests).toBe(0);
+        // Theme class survives the swaps.
+        await expect(page.locator('html')).toHaveClass(/dark/);
+    });
+
     test('creates a post with a highlight image and it is visible publicly', async ({ page }) => {
         const title = `E2E post ${Date.now()}`;
         await page.goto('/admin/posts/create');
@@ -33,7 +67,7 @@ test.describe('as superadmin', () => {
     });
 
     test('admin screens have no serious axe violations', async ({ page }) => {
-        for (const route of ['/dashboard', '/admin/posts', '/admin/posts/create']) {
+        for (const route of ['/dashboard', '/admin/posts', '/admin/posts/create', '/admin/departments']) {
             await page.goto(route);
             const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
             const serious = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
@@ -42,6 +76,33 @@ test.describe('as superadmin', () => {
             ).toEqual([]);
         }
     });
+
+    test('departments table searches, filters and sorts on the server', async ({ page }) => {
+        const names = () => page.locator('tbody tr td:first-child a').allTextContents();
+
+        await page.goto('/admin/departments?q=business');
+        expect(await names()).toEqual(['College of Business Administration']);
+
+        await page.goto('/admin/departments?sort=name&dir=desc');
+        const desc = await names();
+        expect(desc).toEqual([...desc].sort((a, b) => b.localeCompare(a)));
+        await expect(page.locator('th[aria-sort="descending"]')).toHaveText(/Department/);
+
+        // Sorting by member count orders rows by the visible count.
+        await page.goto('/admin/departments?sort=members&dir=desc');
+        const counts = (await page.locator('tbody tr td:nth-child(2)').allTextContents()).map(Number);
+        expect(counts).toEqual([...counts].sort((a, b) => b - a));
+
+        // Seeded College of Education has no org chart members yet.
+        await page.goto('/admin/departments?members=no');
+        expect(await names()).toEqual(['College of Education']);
+        await page.goto('/admin/departments?members=yes');
+        expect(await names()).not.toContain('College of Education');
+        await page.goto('/admin/departments?q=no-such-department');
+        await expect(page.getByText('No departments match your filters.')).toBeVisible();
+        await page.getByRole('link', { name: 'Reset' }).click();
+        await expect(page).toHaveURL(/\/admin\/departments$/);
+    });
 });
 
 test.describe('as department user', () => {
@@ -49,6 +110,15 @@ test.describe('as department user', () => {
 
     test('cannot open superadmin screens', async ({ page }) => {
         expect((await page.goto('/admin/users'))?.status()).toBe(403);
+    });
+
+    test('departments table only lists their own department, even with filters', async ({ page }) => {
+        const names = page.locator('tbody tr td:first-child a');
+        await page.goto('/admin/departments');
+        await expect(names).toHaveText(['College of Information Technology']);
+        await page.goto('/admin/departments?q=business');
+        await expect(names).toHaveCount(0);
+        await expect(page.getByRole('link', { name: 'Add department' })).toHaveCount(0);
     });
 
     test('cannot edit another department post or see it in their list', async ({ browser, page }) => {

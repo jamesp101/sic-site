@@ -1,5 +1,6 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
+  import { reloadView } from '@/lib/navigation';
   import { Info, Loader2, Save } from '@lucide/svelte';
   import { untrack } from 'svelte';
   import MarkdownEditor from '@/components/MarkdownEditor.svelte';
@@ -22,8 +23,8 @@
       error = parseActionError(result.error).message;
       return;
     }
-    // The action queued a flash message; reloading shows it as a toast.
-    window.location.reload();
+    // The action queued a flash message; re-rendering the view shows it as a toast.
+    await reloadView();
   }
 </script>
 

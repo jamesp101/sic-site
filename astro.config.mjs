@@ -12,6 +12,9 @@ export default defineConfig({
     trailingSlash: 'never',
     integrations: [svelte()],
     security: { checkOrigin: true },
+    // ClientRouter would prefetch every link by default; admin pages are `no-store`, so prefetched
+    // HTML could never be reused. Keep prefetch opt-in (`data-astro-prefetch`).
+    prefetch: { prefetchAll: false },
     vite: {
         plugins: [tailwindcss()],
         ssr: { external: ['better-sqlite3', '@prisma/adapter-better-sqlite3'] },

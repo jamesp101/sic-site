@@ -1,5 +1,6 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
+  import { reloadView } from '@/lib/navigation';
   import Field from '@/components/auth/Field.svelte';
   import Notice from '@/components/auth/Notice.svelte';
   import { fieldErrors } from '@/components/auth/action-errors';
@@ -21,7 +22,7 @@
     const { error: failure } = await actions.account.changePassword({ currentPassword, password, passwordConfirmation });
     processing = false;
     if (!failure) {
-      window.location.reload();
+      await reloadView();
       return;
     }
     errors = fieldErrors(failure);

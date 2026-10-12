@@ -1,5 +1,6 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
+  import { navigate } from 'astro:transitions/client';
   import { untrack } from 'svelte';
   import NavLinkPreview from '@/components/NavLinkPreview.svelte';
   import Field from '../shared/Field.svelte';
@@ -60,7 +61,7 @@
       processing = false;
       return;
     }
-    window.location.assign('/admin/navlinks');
+    await navigate('/admin/navlinks');
   }
 </script>
 

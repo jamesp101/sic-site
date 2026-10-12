@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Trash } from '@lucide/svelte';
   import { toast } from 'svelte-sonner';
+  import { navigate } from 'astro:transitions/client';
+  import { reloadView } from '@/lib/navigation';
   import ConfirmDialog from '../ConfirmDialog.svelte';
   import { dangerIconButtonClass, parseActionError } from './form-utils';
 
@@ -32,8 +34,8 @@
       toast.error(parseActionError(error).message || 'The item could not be deleted.');
       return;
     }
-    if (redirect) window.location.assign(redirect);
-    else window.location.reload();
+    if (redirect) await navigate(redirect);
+    else await reloadView();
   }
 </script>
 

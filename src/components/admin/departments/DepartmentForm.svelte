@@ -1,5 +1,6 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
+  import { navigate } from 'astro:transitions/client';
   import { untrack } from 'svelte';
   import MarkdownEditor from '@/components/MarkdownEditor.svelte';
   import Field from '../shared/Field.svelte';
@@ -47,7 +48,7 @@
       processing = false;
       return;
     }
-    window.location.assign('/admin/departments');
+    await navigate('/admin/departments');
   }
 </script>
 

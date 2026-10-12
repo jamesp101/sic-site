@@ -1,13 +1,16 @@
 ---
-import AppLayout from '@/layouts/AppLayout.astro';
+import { ArrowUpDown, Network, Pencil, Search } from '@lucide/svelte';
 import AddLink from '@/components/admin/shared/AddLink.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DeleteDepartmentButton from '@/components/admin/departments/DeleteDepartmentButton.svelte';
-import { db } from '@/lib/server/db';
+import { cardClass, formatDate, iconLinkClass, selectClass, thClass } from '@/components/admin/ui';
+import AppLayout from '@/layouts/AppLayout.astro';
+import { getInitials } from '@/lib/initials';
 import { isSuperAdmin, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
+import { db } from '@/lib/server/db';
 import { publicUrl } from '@/lib/server/storage';
-import { getInitials } from '@/lib/initials';
+import type { Prisma } from '@/generated/prisma/client';
 
 let actor;
 try {
@@ -17,10 +20,75 @@ try {
 }
 
 const superadmin = isSuperAdmin(actor);
+const params = Astro.url.searchParams;
+const q = params.get('q')?.trim() ?? '';
+const yesNo = (value: string | null) => (value === 'yes' ? true : value === 'no' ? false : null);
+const hasLogo = yesNo(params.get('logo'));
+const hasMembers = yesNo(params.get('members'));
+const hasPosts = yesNo(params.get('posts'));
+
+const SORTS = ['name', 'members', 'posts', 'downloads', 'updated'] as const;
+type SortField = (typeof SORTS)[number];
+const sort: SortField = SORTS.find((s) => s === params.get('sort')) ?? 'name';
+const dir: 'asc' | 'desc' =
+    params.get('dir') === 'asc' ? 'asc' : params.get('dir') === 'desc' ? 'desc' : sort === 'name' ? 'asc' : 'desc';
+
+const where: Prisma.DepartmentWhereInput = {
+    // Department users only ever see their own department.
+    ...(superadmin ? {} : { id: actor.departmentId ?? -1 }),
+    ...(q ? { OR: [{ name: { contains: q } }, { slug: { contains: q } }, { description: { contains: q } }] } : {}),
+    ...(hasLogo === true ? { logoPath: { not: null } } : hasLogo === false ? { logoPath: null } : {}),
+    ...(hasMembers === true ? { members: { some: {} } } : hasMembers === false ? { members: { none: {} } } : {}),
+    ...(hasPosts === true ? { posts: { some: {} } } : hasPosts === false ? { posts: { none: {} } } : {}),
+};
+const orderBy: Prisma.DepartmentOrderByWithRelationInput[] = [
+    sort === 'members'
+        ? { members: { _count: dir } }
+        : sort === 'posts'
+          ? { posts: { _count: dir } }
+          : sort === 'downloads'
+            ? { downloads: { _count: dir } }
+            : sort === 'updated'
+              ? { updatedAt: dir }
+              : { name: dir },
+    // Stable secondary order for ties on counts/dates.
+    { name: 'asc' },
+];
+
 const rows = await db.department.findMany({
-    where: superadmin ? {} : { id: actor.departmentId ?? -1 },
-    orderBy: { name: 'asc' },
+    where,
+    orderBy,
+    select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        logoPath: true,
+        updatedAt: true,
+        _count: { select: { members: true, posts: true, downloads: true } },
+    },
 });
+
+function sortHref(field: SortField) {
+    const next = new URL(Astro.url);
+    next.searchParams.set('sort', field);
+    next.searchParams.set('dir', sort === field && dir === 'asc' ? 'desc' : 'asc');
+    return `${next.pathname}${next.search}`;
+}
+const ariaSort = (field: SortField) => (sort === field ? (dir === 'asc' ? 'ascending' : 'descending') : undefined);
+const filtered = Boolean(q || hasLogo !== null || hasMembers !== null || hasPosts !== null);
+const columns: [SortField, string, string][] = [
+    ['name', 'Department', ''],
+    ['members', 'Members', 'text-right'],
+    ['posts', 'Posts', 'text-right'],
+    ['downloads', 'Downloads', 'text-right'],
+    ['updated', 'Updated', ''],
+];
+const filters = [
+    { name: 'logo', label: 'Logo', value: hasLogo, yes: 'With logo', no: 'Without logo' },
+    { name: 'members', label: 'Org chart', value: hasMembers, yes: 'With members', no: 'No members' },
+    { name: 'posts', label: 'Posts', value: hasPosts, yes: 'With posts', no: 'No posts' },
+];
 ---
 
 <AppLayout
@@ -35,59 +103,165 @@ const rows = await db.department.findMany({
             {superadmin && <AddLink href="/admin/departments/create">Add department</AddLink>}
         </PageHeader>
 
-        {rows.length === 0 ? (
-            <p class="rounded-xl border border-dashed border-border-strong p-10 text-center text-sm text-muted-foreground">
-                No departments yet.
-            </p>
-        ) : (
-            <ul class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {rows.map((dept) => {
-                    const logo = publicUrl(dept.logoPath);
-                    return (
-                        <li class="flex flex-col justify-between rounded-xl border border-border bg-card p-6 shadow-brand-sm">
-                            <div>
-                                <div class="flex items-center gap-3">
-                                    <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-surface-alt">
-                                        {logo ? (
-                                            <img
-                                                src={logo}
-                                                alt=""
-                                                class="h-full w-full object-contain p-0.5"
-                                                loading="lazy"
-                                            />
-                                        ) : (
-                                            <span class="text-xs font-bold text-brand-800 dark:text-gold-400">
-                                                {getInitials(dept.name)}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <h2 class="font-serif text-lg font-bold leading-tight text-foreground">
-                                        {dept.name}
-                                    </h2>
-                                </div>
-                                <p class="mt-4 line-clamp-3 text-sm leading-relaxed text-muted-foreground">
-                                    {dept.description || 'No description provided.'}
-                                </p>
-                            </div>
-                            <div class="mt-6 flex items-center gap-2 border-t border-border pt-4">
-                                <a
-                                    href={`/admin/departments/${dept.id}/edit`}
-                                    class="inline-flex flex-1 items-center justify-center rounded-lg border border-border-strong py-2 text-xs font-bold text-foreground transition-colors hover:bg-surface-alt"
+        <form
+            method="get"
+            action="/admin/departments"
+            class={`${cardClass} flex flex-col items-center justify-between gap-4 p-4 md:flex-row`}
+        >
+            <div class="relative w-full md:max-w-xs">
+                <Search
+                    class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                />
+                <input
+                    type="search"
+                    name="q"
+                    value={q}
+                    placeholder="Search name, slug or description…"
+                    aria-label="Search departments"
+                    class="w-full rounded-lg border border-border-strong bg-surface py-2 pr-4 pl-10 text-sm outline-none focus:border-brand-600"
+                />
+            </div>
+            <div class="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-center md:w-auto">
+                {filters.map((f) => (
+                    <select name={f.name} aria-label={`Filter by ${f.label.toLowerCase()}`} class={selectClass}>
+                        <option value="">{`Any ${f.label.toLowerCase()}`}</option>
+                        <option value="yes" selected={f.value === true}>
+                            {f.yes}
+                        </option>
+                        <option value="no" selected={f.value === false}>
+                            {f.no}
+                        </option>
+                    </select>
+                ))}
+                <input type="hidden" name="sort" value={sort} />
+                <input type="hidden" name="dir" value={dir} />
+                <button
+                    type="submit"
+                    class="rounded-lg bg-brand-800 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 dark:bg-gold-500 dark:text-brand-950 dark:hover:bg-gold-400"
+                >
+                    Filter
+                </button>
+                {filtered && (
+                    <a
+                        href="/admin/departments"
+                        class="rounded-lg border border-border-strong px-3 py-2 text-center text-sm font-semibold text-muted-foreground hover:bg-surface-alt"
+                    >
+                        Reset
+                    </a>
+                )}
+            </div>
+        </form>
+
+        <div class={`${cardClass} overflow-hidden`}>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-left">
+                    <caption class="sr-only">
+                        Departments, sorted by{sort}
+                        {dir === 'asc' ? 'ascending' : 'descending'}
+                    </caption>
+                    <thead>
+                        <tr class="border-b border-border bg-surface-alt">
+                            {columns.map(([field, label, align]) => (
+                                <th
+                                    scope="col"
+                                    class={`${thClass} ${align} ${field === 'name' ? '' : 'px-4! whitespace-nowrap'}`}
+                                    aria-sort={ariaSort(field)}
                                 >
-                                    Edit info
-                                </a>
-                                <a
-                                    href={`/admin/departments/${dept.id}/members`}
-                                    class="inline-flex flex-1 items-center justify-center rounded-lg bg-brand-800 py-2 text-xs font-bold text-white transition-colors hover:bg-brand-700 dark:bg-gold-500 dark:text-brand-950"
-                                >
-                                    Org chart
-                                </a>
-                                {superadmin && <DeleteDepartmentButton client:load id={dept.id} name={dept.name} />}
-                            </div>
-                        </li>
-                    );
-                })}
-            </ul>
-        )}
+                                    <a href={sortHref(field)} class="inline-flex items-center gap-1 hover:text-link">
+                                        {label} <ArrowUpDown class="h-3.5 w-3.5" aria-hidden="true" />
+                                    </a>
+                                </th>
+                            ))}
+                            <th scope="col" class={`${thClass} px-4! text-right`}>
+                                Actions
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border text-sm">
+                        {rows.map((dept) => {
+                            const logo = publicUrl(dept.logoPath);
+                            return (
+                                <tr class="hover:bg-surface-alt">
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-surface-alt">
+                                                {logo ? (
+                                                    <img
+                                                        src={logo}
+                                                        alt=""
+                                                        loading="lazy"
+                                                        class="h-full w-full object-contain p-0.5"
+                                                    />
+                                                ) : (
+                                                    <span class="text-xs font-bold text-brand-800 dark:text-gold-400">
+                                                        {getInitials(dept.name)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div class="min-w-0">
+                                                <a
+                                                    href={`/departments/${dept.slug}`}
+                                                    class="block max-w-64 truncate font-semibold text-foreground hover:text-link"
+                                                    title="View public page"
+                                                >
+                                                    {dept.name}
+                                                </a>
+                                                <span class="mt-0.5 block max-w-64 truncate text-xs text-muted-foreground">
+                                                    /{dept.slug}
+                                                    {dept.description && ` · ${dept.description}`}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-4 text-right tabular-nums text-foreground">
+                                        {dept._count.members}
+                                    </td>
+                                    <td class="px-4 py-4 text-right tabular-nums text-foreground">
+                                        {dept._count.posts}
+                                    </td>
+                                    <td class="px-4 py-4 text-right tabular-nums text-foreground">
+                                        {dept._count.downloads}
+                                    </td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-muted-foreground">
+                                        {formatDate(dept.updatedAt)}
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <div class="flex justify-end gap-1.5">
+                                            <a
+                                                href={`/admin/departments/${dept.id}/edit`}
+                                                class={iconLinkClass}
+                                                aria-label={`Edit ${dept.name}`}
+                                                title="Edit info"
+                                            >
+                                                <Pencil class="h-4 w-4" aria-hidden="true" />
+                                            </a>
+                                            <a
+                                                href={`/admin/departments/${dept.id}/members`}
+                                                class={iconLinkClass}
+                                                aria-label={`Org chart of ${dept.name}`}
+                                                title="Org chart"
+                                            >
+                                                <Network class="h-4 w-4" aria-hidden="true" />
+                                            </a>
+                                            {superadmin && (
+                                                <DeleteDepartmentButton client:visible id={dept.id} name={dept.name} />
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                        {rows.length === 0 && (
+                            <tr>
+                                <td colspan="6" class="px-6 py-12 text-center text-muted-foreground italic">
+                                    {filtered ? 'No departments match your filters.' : 'No departments yet.'}
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 </AppLayout>

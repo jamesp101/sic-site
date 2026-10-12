@@ -2,7 +2,12 @@
 /**
  * Admin shell: sidebar, header, breadcrumbs and toasts. Always noindex.
  * The sidebar island wraps the (server-rendered) page content slot.
+ *
+ * ClientRouter makes admin/settings navigation client-side: links and GET forms fetch only
+ * the next page's HTML (its view + data) and swap it in, without reloading CSS, fonts or JS.
+ * Pages without the router (public site, login) still get a normal full load.
  */
+import { ClientRouter } from 'astro:transitions';
 import AdminShell from '@/components/admin/AdminShell.svelte';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { takeFlash } from '@/lib/server/flash';
@@ -21,6 +26,7 @@ const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
 ---
 
 <BaseLayout {title} description="San Isidro College administration." noindex>
+    <ClientRouter slot="head" fallback="swap" />
     <AdminShell
         client:load
         user={{ id: user.id, name: user.name, email: user.email, role: user.role }}

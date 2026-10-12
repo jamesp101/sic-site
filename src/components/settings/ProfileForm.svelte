@@ -1,5 +1,6 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
+  import { reloadView } from '@/lib/navigation';
   import Field from '@/components/auth/Field.svelte';
   import Notice from '@/components/auth/Notice.svelte';
   import { fieldErrors } from '@/components/auth/action-errors';
@@ -22,8 +23,8 @@
     const { error: failure } = await actions.account.updateProfile({ name, email });
     processing = false;
     if (!failure) {
-      // The layout shows the queued toast and refreshes the user menu.
-      window.location.reload();
+      // The layout shows the queued toast and re-renders the user menu with the new name.
+      await reloadView();
       return;
     }
     errors = fieldErrors(failure);
