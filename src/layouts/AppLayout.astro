@@ -31,7 +31,7 @@ const scopeDepartments = Astro.locals.adminDepartments.map((d) => ({
     logoUrl: publicUrl(d.logoPath),
 }));
 
-const flash = await takeFlash(Astro);
+const flash = takeFlash(Astro);
 const sidebarOpen = Astro.cookies.get('sidebar_state')?.value !== 'false';
 const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
 ---

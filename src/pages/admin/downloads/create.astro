@@ -6,7 +6,7 @@ import { scopeDefaultDepartment } from '@/lib/server/admin-scope';
 import { isSuperAdmin, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
 import { db } from '@/lib/server/db';
-import { LIMITS, MB } from '@/lib/server/storage';
+import { directUploads, LIMITS, MB } from '@/lib/server/storage';
 
 let actor;
 try {
@@ -46,6 +46,7 @@ const [departments, directories] = await Promise.all([
             isSuperAdmin={isSuperAdmin(actor)}
             defaultDepartmentId={scopeDefaultDepartment(Astro.locals.adminScope) ?? null}
             maxMb={LIMITS.download / MB}
+            directUpload={directUploads}
         />
     </div>
 </AppLayout>

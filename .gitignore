@@ -19,3 +19,4 @@ prisma/schema.prisma
 e2e/.auth/
 storage/e2e-uploads*/
 dist-*/
+.vercel/

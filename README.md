@@ -2,7 +2,7 @@
 
 Full-stack Astro port of the Laravel/Inertia site. Server-rendered for SEO, Svelte islands only where interaction is needed.
 
-Stack: Astro 7 (`output: 'server'`, Node standalone) · Svelte 5 islands · Tailwind v4 · Prisma 7 (SQLite in dev; MySQL/MariaDB or PostgreSQL by URL) · Better Auth · Astro Actions · local-disk uploads · Vite+ (`vp`) for lint/format/test/tasks · devenv for the toolchain.
+Stack: Astro 7 (`output: 'server'`, Node standalone, or the Vercel adapter on Vercel) · Svelte 5 islands · Tailwind v4 · Prisma 7 (SQLite in dev; MySQL/MariaDB or PostgreSQL by URL) · Better Auth · Astro Actions · uploads on local disk, S3 or Vercel Blob · Vite+ (`vp`) for lint/format/test/tasks · devenv for the toolchain.
 
 ## Quick start
 
@@ -29,6 +29,7 @@ Site: <http://localhost:4321>. Seeded logins: `admin@email.com` (superadmin), `c
 | Everything CI runs                                      | `vp run ci`                                               |
 | New migration after editing `prisma/schema.base.prisma` | `vp run db:migrate`                                       |
 | Apply migrations / seed / reset                         | `vp run db:deploy` / `vp run db:seed` / `vp run db:reset` |
+| Create or reset a superadmin                            | `ADMIN_EMAIL=… ADMIN_NAME=… vp run db:create-admin`       |
 | Prisma Studio                                           | `vp run db:studio`                                        |
 
 `vp` is the project-local Vite+ CLI (`pnpm exec vp` outside devenv). Astro owns dev/build, so they run as tasks (`vp run dev`), never `vp dev`.
@@ -38,7 +39,7 @@ Site: <http://localhost:4321>. Seeded logins: `admin@email.com` (superadmin), `c
 - Edit `prisma/schema.base.prisma` only. `scripts/prisma-schema.mjs` renders the gitignored `prisma/schema.prisma` with the provider taken from `DATABASE_URL` (`file:` → sqlite, `mysql://`/`mariadb://` → mysql, `postgres(ql)://` → postgresql) and runs on install and every `db:*` task.
 - Runtime picks the matching driver adapter (`src/lib/server/db.ts`): better-sqlite3, mariadb or pg.
 - Migrations are provider-specific: `prisma/migrations/<provider>/`. Switching provider = set `DATABASE_URL`, then `vp run db:migrate` to create that provider's baseline.
-- Table and column names match the Laravel schema; Better Auth uses its own `auth_sessions`, `auth_accounts`, `auth_verifications` tables.
+- Table and column names match the Laravel schema; Better Auth uses its own `auth_sessions`, `auth_accounts`, `auth_verifications` and `auth_rate_limits` (shared rate-limit counters) tables.
 
 ## Visual block editor
 
@@ -57,8 +58,34 @@ Posts, hero sections and the landing page setting (`welcome_hero_content`) are e
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `local` (default) | `UPLOAD_DIR` on the server disk (default `storage/uploads`)                                                                                  | `/storage/<key>`, streamed by `src/pages/storage/[...path].ts`                                                                                 |
 | `s3`              | `S3_BUCKET` on AWS S3 or any S3-compatible service (`S3_ENDPOINT`, `S3_FORCE_PATH_STYLE=true` for self-hosted ones such as Garage/SeaweedFS) | `/storage/<key>` streamed from the bucket; with `S3_PUBLIC_URL` set, `<S3_PUBLIC_URL>/<key>` directly and `/storage/<key>` 301-redirects there |
+| `vercel-blob`     | A public Vercel Blob store (`BLOB_READ_WRITE_TOKEN`, optional `BLOB_PREFIX`)                                                                 | `<BLOB_PUBLIC_BASE_URL>/<key>` directly (required); `/storage/<key>` 301-redirects there                                                       |
 
-Legacy Laravel `/storage/...` links keep working with both drivers. `?download=<name>` always streams through the app so the attachment name applies. Switching drivers does not move existing files: copy `UPLOAD_DIR` into the bucket under `S3_PREFIX` with the same keys (e.g. `aws s3 sync storage/uploads s3://<bucket>/<prefix>`).
+Legacy Laravel `/storage/...` links keep working with every driver. `?download=<name>` always streams through the app (also for `vercel-blob`) so the attachment name applies. Switching drivers does not move existing files: copy `UPLOAD_DIR` into the bucket under `S3_PREFIX` with the same keys (e.g. `aws s3 sync storage/uploads s3://<bucket>/<prefix>`).
+
+### Large uploads on Vercel
+
+Vercel functions reject request bodies over ~4.5 MB, so with `STORAGE_DRIVER=vercel-blob`:
+
+- **Downloads (up to 20 MB)** are uploaded by the browser straight to Blob (`@vercel/blob/client` `upload()`). The server only hands out the right to do so: `POST /api/admin/uploads/blob` requires a signed-in user, issues a server-generated `downloads/<random>.<ext>` key with a signed, 10-minute ticket bound to the user and key (`type: 'issue-key'`), and `handleUpload` then issues a client token only for that exact pathname, limited to documents/archives/images and 20 MB. The `downloads.create` action receives `uploadedKey` instead of the file, validates the key shape and checks it exists with `head()` (size comes from Blob, not from the client). The admin form picks this path from a server flag (`directUploads`); local/s3 keep the multipart path.
+- **Images** stay multipart: they are compressed to WebP in the browser first, and `LIMITS.image` is lowered to 4 MB on `vercel-blob`, so an oversized pass-through file (GIF/SVG, or a browser without WebP encoding) gets a clear validation message instead of a platform 413.
+
+## Deploying to Vercel
+
+Vercel runs the app with the Vercel adapter (selected when `VERCEL` is set during `vercel build`, or with `ASTRO_ADAPTER=vercel`; `vercel.json` sets the build command `node scripts/prisma-schema.mjs && prisma generate && astro build`). The server keeps no state on disk: toasts use a short-lived httpOnly cookie (`sic_flash`), auth rate limits live in the `auth_rate_limits` table, uploads go to Blob.
+
+1. **Database (Neon)**: add the Neon integration to the Vercel project. Runtime `DATABASE_URL` is the **pooled** connection string (`postgresql://…-pooler…`). Migrations are not run by Vercel; CI runs `prisma migrate deploy` with the **direct** (non-pooled) URL before deploying, and `vercel.json` disables Vercel's Git deployments (`git.deploymentEnabled: false`) so nothing ships ahead of migrations.
+2. **Blob**: create a Blob store (public) and connect it to the project; this adds `BLOB_READ_WRITE_TOKEN`. Copy the store's public base URL into `BLOB_PUBLIC_BASE_URL` (`https://<id>.public.blob.vercel-storage.com`).
+3. **Environment variables** (Production): `DATABASE_URL`, `BETTER_AUTH_SECRET` (32+ random chars), `BETTER_AUTH_URL` and `SITE_URL` (the public origin), `STORAGE_DRIVER=vercel-blob`, `BLOB_READ_WRITE_TOKEN`, `BLOB_PUBLIC_BASE_URL`, optional `BLOB_PREFIX`, and `MAIL_MAILER=smtp` with `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `CONTACT_TO_ADDRESS`.
+4. **First admin**: nothing is seeded in production. Run once from a machine with the direct database URL:
+
+    ```sh
+    DATABASE_URL='<direct postgres url>' ADMIN_EMAIL=you@example.com ADMIN_NAME='Your Name' \
+      pnpm exec tsx prisma/create-admin.ts          # prompts for the password (no echo)
+    ```
+
+    `ADMIN_PASSWORD` may be set instead of the prompt (minimum 12 characters, never printed). Running it again for an existing email resets that user's password, makes them superadmin and signs out their sessions.
+
+Existing files are not moved: upload them to the store under the same keys (e.g. with the Vercel CLI or a script using `@vercel/blob`) before switching drivers. Vercel's function bundle also contains the unused SQLite driver; it is only loaded when `DATABASE_URL` is a `file:` URL.
 
 ## SEO
 

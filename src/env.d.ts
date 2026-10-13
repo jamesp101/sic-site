@@ -15,8 +15,4 @@ declare namespace App {
         adminDepartments: { id: number; name: string; slug: string; logoPath: string | null }[];
         session: { id: string | number; expiresAt: Date; createdAt: Date } | null;
     }
-    interface SessionData {
-        flash: { type: 'success' | 'error'; message: string };
-        passwordConfirmedAt: number;
-    }
 }

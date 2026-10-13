@@ -1,14 +1,18 @@
 // @ts-check
 import node from '@astrojs/node';
 import svelte from '@astrojs/svelte';
+import vercel from '@astrojs/vercel';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, envField } from 'astro/config';
 import 'dotenv/config';
 
+// Vercel builds (VERCEL=1 during `vercel build`, or ASTRO_ADAPTER=vercel) emit `.vercel/output`; everything else is a Node server.
+const useVercel = Boolean(process.env.VERCEL) || process.env.ASTRO_ADAPTER === 'vercel';
+
 export default defineConfig({
     site: process.env.SITE_URL ?? 'http://localhost:4321',
     output: 'server',
-    adapter: node({ mode: 'standalone' }),
+    adapter: useVercel ? vercel() : node({ mode: 'standalone' }),
     trailingSlash: 'never',
     integrations: [svelte()],
     security: { checkOrigin: true },
@@ -27,7 +31,7 @@ export default defineConfig({
             STORAGE_DRIVER: envField.enum({
                 context: 'server',
                 access: 'secret',
-                values: ['local', 's3'],
+                values: ['local', 's3', 'vercel-blob'],
                 default: 'local',
             }),
             UPLOAD_DIR: envField.string({ context: 'server', access: 'secret', default: './storage/uploads' }),
@@ -39,6 +43,9 @@ export default defineConfig({
             S3_FORCE_PATH_STYLE: envField.boolean({ context: 'server', access: 'secret', default: false }),
             S3_PREFIX: envField.string({ context: 'server', access: 'secret', optional: true }),
             S3_PUBLIC_URL: envField.string({ context: 'server', access: 'secret', optional: true }),
+            BLOB_READ_WRITE_TOKEN: envField.string({ context: 'server', access: 'secret', optional: true }),
+            BLOB_PUBLIC_BASE_URL: envField.string({ context: 'server', access: 'secret', optional: true }),
+            BLOB_PREFIX: envField.string({ context: 'server', access: 'secret', optional: true }),
             BETTER_AUTH_SECRET: envField.string({ context: 'server', access: 'secret' }),
             BETTER_AUTH_URL: envField.string({ context: 'server', access: 'secret', optional: true }),
             MAIL_MAILER: envField.enum({

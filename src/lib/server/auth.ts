@@ -61,6 +61,8 @@ export const auth = betterAuth({
     },
     rateLimit: {
         enabled: true,
+        // Shared across instances (serverless): counters live in `auth_rate_limits`.
+        storage: 'database',
         window: 60,
         max: 100,
         customRules: { '/sign-in/email': { window: 60, max: 5 } },

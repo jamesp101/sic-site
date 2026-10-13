@@ -14,6 +14,7 @@
     isSuperAdmin,
     defaultDepartmentId = null,
     maxMb = 20,
+    directUpload = false,
   }: {
     departments: { id: number; name: string }[];
     directories: string[];
@@ -21,6 +22,8 @@
     /** Admin scope's department, preselected (superadmins may change it). */
     defaultDepartmentId?: number | null;
     maxMb?: number;
+    /** True when the server stores files in Vercel Blob: upload from the browser, then submit only the key. */
+    directUpload?: boolean;
   } = $props();
 
   let file = $state<File | null>(null);
@@ -31,6 +34,29 @@
   let processing = $state(false);
   let errors = $state<Record<string, string>>({});
   let message = $state('');
+  let progress = $state<number | null>(null);
+  /** Already uploaded file, reused when the form is resubmitted after a validation error. */
+  let uploaded: { file: File; key: string } | null = null;
+
+  /** Uploads straight to Vercel Blob (request bodies over ~4.5 MB never reach the server) and returns the key. */
+  async function uploadDirect(chosen: File): Promise<string> {
+    const issued = await fetch('/api/admin/uploads/blob', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'issue-key', fileName: chosen.name }),
+    });
+    const ticket = (await issued.json().catch(() => null)) as { key: string; pathname: string; ticket: string; message?: string } | null;
+    if (!issued.ok || !ticket?.key) throw new Error(ticket?.message ?? 'Could not start the upload.');
+    const { upload } = await import('@vercel/blob/client');
+    await upload(ticket.pathname, chosen, {
+      access: 'public',
+      handleUploadUrl: '/api/admin/uploads/blob',
+      clientPayload: ticket.ticket,
+      contentType: chosen.type || undefined,
+      onUploadProgress: ({ percentage }) => (progress = Math.round(percentage)),
+    });
+    return ticket.key;
+  }
 
   function onFile(event: Event) {
     const chosen = (event.currentTarget as HTMLInputElement).files?.[0] ?? null;
@@ -49,12 +75,30 @@
 
     const form = new FormData();
     append(form, 'fileName', fileName);
-    append(form, 'file', file);
+    if (directUpload && file) {
+      if (file.size > maxMb * 1024 * 1024) {
+        errors = { file: `The file must not be larger than ${maxMb} MB.` };
+        processing = false;
+        return;
+      }
+      try {
+        if (uploaded?.file !== file) uploaded = { file, key: await uploadDirect(file) };
+        append(form, 'uploadedKey', uploaded.key);
+      } catch (error) {
+        message = error instanceof Error ? error.message : 'The upload failed.';
+        processing = false;
+        progress = null;
+        return;
+      }
+    } else {
+      append(form, 'file', file);
+    }
     append(form, 'directory', directory);
     append(form, 'tags', tags);
     append(form, 'departmentId', departmentId);
 
     const { error } = await actions.downloads.create(form);
+    progress = null;
     if (error) {
       const parsed = parseActionError(error);
       errors = parsed.fields;
@@ -79,6 +123,9 @@
       <p class="flex items-center gap-2 rounded-lg border border-gold-500/30 bg-gold-500/10 px-3 py-2 text-xs font-semibold text-foreground">
         <Upload class="h-4 w-4 shrink-0" aria-hidden="true" /> Ready to upload: {file.name} ({formatFileSize(file.size)})
       </p>
+    {/if}
+    {#if progress !== null}
+      <p class="text-xs font-semibold text-muted-foreground" role="status">Uploading… {progress}%</p>
     {/if}
     {#if errors.file}<p class="text-xs text-destructive" role="alert">{errors.file}</p>{/if}
   </div>

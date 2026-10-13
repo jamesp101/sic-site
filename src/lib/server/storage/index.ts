@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createLocalDriver } from './local';
 import { createS3Driver } from './s3';
 import type { StorageDriver, StoredObject } from './types';
+import { createVercelBlobDriver, type VercelBlobDriver } from './vercel-blob';
 
 export type { StorageDriver, StoredObject };
 
@@ -12,43 +13,74 @@ export type { StorageDriver, StoredObject };
  * - `local` (default): files under UPLOAD_DIR on the server's disk.
  * - `s3`: an S3-compatible bucket (S3_BUCKET, S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY_ID,
  *   S3_SECRET_ACCESS_KEY, S3_FORCE_PATH_STYLE, S3_PREFIX).
+ * - `vercel-blob`: a public Vercel Blob store (BLOB_READ_WRITE_TOKEN, BLOB_PUBLIC_BASE_URL, BLOB_PREFIX).
  *
  * The database stores bare keys (`posts/abc.jpg`). URLs default to `/storage/<key>`,
  * served by src/pages/storage/[...path].ts for both drivers, which keeps legacy Laravel
  * `/storage/...` links working. With S3_PUBLIC_URL set (bucket website, CDN), `publicUrl`
- * points straight at the bucket and the route redirects there instead.
+ * points straight at the bucket and the route redirects there instead. `vercel-blob` always
+ * has a public base URL, so inline URLs are direct blob URLs.
  */
-export type DriverName = 'local' | 's3';
+export type DriverName = 'local' | 's3' | 'vercel-blob';
 
 export const PREFIXES = ['posts', 'posts/inline', 'downloads', 'carousels', 'departments', 'members'] as const;
 export type StoragePrefix = (typeof PREFIXES)[number];
 
 export const MB = 1024 * 1024;
-export const LIMITS = { image: 5 * MB, memberImage: 2 * MB, download: 20 * MB } as const;
 
 function readDriverName(value: string | undefined): DriverName {
     const name = (value ?? 'local').trim().toLowerCase();
-    if (name === 'local' || name === 's3') return name;
-    throw new Error(`Unsupported STORAGE_DRIVER "${value}" (expected "local" or "s3")`);
+    if (name === 'local' || name === 's3' || name === 'vercel-blob') return name;
+    throw new Error(`Unsupported STORAGE_DRIVER "${value}" (expected "local", "s3" or "vercel-blob")`);
 }
 
 function required(name: string): string {
     const value = process.env[name]?.trim();
-    if (!value) throw new Error(`${name} is required when STORAGE_DRIVER=s3`);
+    if (!value) throw new Error(`${name} is required when STORAGE_DRIVER=${driverName}`);
     return value;
+}
+
+function cleanPrefix(name: string): string {
+    return process.env[name]?.trim().replace(/^\/+|\/+$/g, '') ?? '';
 }
 
 export const driverName: DriverName = readDriverName(process.env.STORAGE_DRIVER);
 
+/**
+ * True when the browser uploads large files straight to the store (Vercel functions reject request
+ * bodies over ~4.5 MB), so the multipart upload path is only for small files.
+ */
+export const directUploads: boolean = driverName === 'vercel-blob';
+
+const MULTIPART_BUDGET = 4 * MB;
+export const LIMITS = {
+    // Multipart bodies must stay under Vercel's ~4.5 MB request limit; larger downloads use direct uploads.
+    image: directUploads ? MULTIPART_BUDGET : 5 * MB,
+    memberImage: 2 * MB,
+    download: 20 * MB,
+} as const;
+
 /** Absolute base for direct object URLs (no trailing slash), or null to serve through /storage. */
-export const directBaseUrl: string | null =
-    driverName === 's3' && process.env.S3_PUBLIC_URL?.trim()
-        ? process.env.S3_PUBLIC_URL.trim().replace(/\/+$/, '')
-        : null;
+export const directBaseUrl: string | null = (() => {
+    if (driverName === 's3' && process.env.S3_PUBLIC_URL?.trim()) {
+        return process.env.S3_PUBLIC_URL.trim().replace(/\/+$/, '');
+    }
+    if (driverName === 'vercel-blob') {
+        const base = required('BLOB_PUBLIC_BASE_URL').replace(/\/+$/, '');
+        if (!base.startsWith('https://')) throw new Error('BLOB_PUBLIC_BASE_URL must be an https:// URL');
+        const prefix = cleanPrefix('BLOB_PREFIX');
+        return prefix ? `${base}/${prefix}` : base;
+    }
+    return null;
+})();
 
 function createDriver(): StorageDriver {
+    if (driverName === 'vercel-blob') {
+        const prefix = cleanPrefix('BLOB_PREFIX');
+        return createVercelBlobDriver({ token: required('BLOB_READ_WRITE_TOKEN'), prefix: prefix ? `${prefix}/` : '' });
+    }
     if (driverName === 'local') return createLocalDriver(process.env.UPLOAD_DIR ?? './storage/uploads');
-    const prefix = process.env.S3_PREFIX?.trim().replace(/^\/+|\/+$/g, '') ?? '';
+    const prefix = cleanPrefix('S3_PREFIX');
     return createS3Driver({
         bucket: required('S3_BUCKET'),
         region: process.env.S3_REGION?.trim() || 'us-east-1',
@@ -121,4 +153,16 @@ export async function read(value: string): Promise<StoredObject | null> {
         return null;
     }
     return driver.get(key);
+}
+
+/** Size of an object uploaded straight to Vercel Blob, or null when missing. Only valid for `vercel-blob`. */
+export async function headUpload(value: string): Promise<{ size: number } | null> {
+    if (driverName !== 'vercel-blob') throw new Error('Direct uploads require STORAGE_DRIVER=vercel-blob');
+    return (driver as VercelBlobDriver).head(toKey(value));
+}
+
+/** Blob pathname (prefix applied) a browser must upload to for `key`. Only valid for `vercel-blob`. */
+export function uploadPathname(key: string): string {
+    if (driverName !== 'vercel-blob') throw new Error('Direct uploads require STORAGE_DRIVER=vercel-blob');
+    return (driver as VercelBlobDriver).pathname(key);
 }

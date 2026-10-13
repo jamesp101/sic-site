@@ -3,7 +3,8 @@ import { z } from 'astro/zod';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { departmentForWrite, scopeDepartment } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
-import { LIMITS, MB, put, remove } from '@/lib/server/storage';
+import { isDirectUploadKey } from '@/lib/server/blob-upload';
+import { directUploads, headUpload, LIMITS, MB, put, remove } from '@/lib/server/storage';
 
 const DEFAULT_DIRECTORY = 'General';
 
@@ -12,13 +13,17 @@ export const downloads = {
         accept: 'form',
         input: z.object({
             fileName: z.string().trim().min(1, 'The display name is required.').max(255),
+            // Multipart upload (local/s3 drivers, small files).
             file: z
                 .instanceof(File, { error: 'Choose a file to upload.' })
                 .refine((file) => file.size > 0, 'Choose a file to upload.')
                 .refine(
                     (file) => file.size <= LIMITS.download,
                     `The file must not be larger than ${LIMITS.download / MB} MB.`,
-                ),
+                )
+                .optional(),
+            // Key of a file the browser already uploaded straight to Vercel Blob (`/api/admin/uploads/blob`).
+            uploadedKey: z.string().trim().max(255).optional(),
             tags: z.string().nullish(),
             directory: z.string().trim().max(255).nullish(),
             departmentId: z.number().int().nullish(),
@@ -44,13 +49,39 @@ export const downloads = {
                     .map((tag) => tag.trim())
                     .filter(Boolean);
 
-                const filePath = await put('downloads', input.file);
+                let filePath: string;
+                let fileSize: number;
+                if (input.uploadedKey) {
+                    if (!directUploads || !isDirectUploadKey(input.uploadedKey)) {
+                        throw new ActionError({ code: 'BAD_REQUEST', message: 'Invalid uploaded file.' });
+                    }
+                    const uploaded = await headUpload(input.uploadedKey);
+                    if (!uploaded)
+                        throw new ActionError({
+                            code: 'BAD_REQUEST',
+                            message: 'The uploaded file was not found. Upload it again.',
+                        });
+                    filePath = input.uploadedKey;
+                    fileSize = uploaded.size;
+                    if (fileSize > LIMITS.download) {
+                        await remove(filePath);
+                        throw new ActionError({
+                            code: 'BAD_REQUEST',
+                            message: `The file must not be larger than ${LIMITS.download / MB} MB.`,
+                        });
+                    }
+                } else {
+                    if (!input.file)
+                        throw new ActionError({ code: 'BAD_REQUEST', message: 'Choose a file to upload.' });
+                    filePath = await put('downloads', input.file);
+                    fileSize = input.file.size;
+                }
                 try {
                     const download = await db.download.create({
                         data: {
                             fileName: input.fileName,
                             filePath,
-                            fileSize: input.file.size,
+                            fileSize,
                             tags: JSON.stringify(tags),
                             directory: input.directory || DEFAULT_DIRECTORY,
                             departmentId,

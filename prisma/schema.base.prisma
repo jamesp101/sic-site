@@ -84,6 +84,16 @@ model Verification {
   @@map("auth_verifications")
 }
 
+/// Better Auth rate limiter (`rateLimit.storage: 'database'`), shared by every serverless instance.
+model RateLimit {
+  id          Int    @id @default(autoincrement())
+  key         String @unique
+  count       Int
+  lastRequest BigInt @map("last_request")
+
+  @@map("auth_rate_limits")
+}
+
 model Department {
   id          Int      @id @default(autoincrement())
   name        String

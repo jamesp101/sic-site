@@ -27,8 +27,9 @@ export default defineConfig({
         tasks: {
             // First-run bootstrap used by `devenv up` / `devenv test`: schema, client, migrations, seed (only when empty).
             setup: {
+                // astro sync generates .astro/ types (astro:env, actions) that type checks need on a fresh clone.
                 command:
-                    'node scripts/prisma-schema.mjs && prisma generate && prisma migrate deploy && tsx prisma/seed.ts --if-empty',
+                    'node scripts/prisma-schema.mjs && prisma generate && prisma migrate deploy && tsx prisma/seed.ts --if-empty && astro sync',
                 cache: false,
             },
             dev: { command: 'astro dev', cache: false },
@@ -41,10 +42,12 @@ export default defineConfig({
             'db:deploy': { command: 'node scripts/prisma-schema.mjs && prisma migrate deploy', cache: false },
             'db:seed': { command: 'tsx prisma/seed.ts', cache: false },
             'db:reset': { command: 'node scripts/prisma-schema.mjs && prisma migrate reset --force', cache: false },
+            'db:create-admin': { command: 'tsx prisma/create-admin.ts', cache: false },
             'db:studio': { command: 'prisma studio', cache: false },
             e2e: { command: 'playwright test', dependsOn: ['build'], cache: false },
             ci: {
-                command: 'vp check && vp run fmt:astro && vp run check:templates && vp test && vp run e2e',
+                command:
+                    'astro sync && vp check && vp run fmt:astro && vp run check:templates && vp test && vp run e2e',
                 cache: false,
             },
         },

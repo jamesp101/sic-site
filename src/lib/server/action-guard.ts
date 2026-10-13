@@ -1,5 +1,6 @@
 import { ActionError, type ActionAPIContext } from 'astro:actions';
 import { AuthzError, type Actor } from './authz';
+import { setFlash } from './flash';
 
 type ActionCode = ConstructorParameters<typeof ActionError>[0]['code'];
 
@@ -23,5 +24,5 @@ export function actorOf(context: ActionAPIContext): Actor & NonNullable<App.Loca
 
 /** Queues a toast shown by the next rendered admin/settings layout. */
 export function flash(context: ActionAPIContext, message: string, type: 'success' | 'error' = 'success'): void {
-    context.session?.set('flash', { type, message });
+    setFlash(context.cookies, { type, message }, context.url.protocol === 'https:');
 }

@@ -128,7 +128,6 @@ export const account = {
 
                 await clearAuthCookies(context);
                 await db.user.delete({ where: { id: actor.id } });
-                context.session?.destroy();
                 return { redirect: '/' };
             }),
     }),
@@ -139,7 +138,6 @@ export const account = {
             guarded(async () => {
                 const actor = actorOf(context);
                 await assertPassword(actor.id, input.password);
-                context.session?.set('passwordConfirmedAt', Date.now());
                 return { ok: true as const };
             }),
     }),
