@@ -48,7 +48,7 @@ const description = oneLine(department.description) || `${department.name} at ${
     ))}
 
     {members.length > 0 && (
-        <section class="border-b border-border bg-surface-alt py-16" aria-labelledby="people-heading">
+        <section id="org-chart" class="scroll-mt-24 border-b border-border bg-surface-alt py-16" aria-labelledby="people-heading">
             <div class="mx-auto w-full max-w-7xl px-6">
                 <div class="text-center">
                     <Eyebrow>People</Eyebrow>

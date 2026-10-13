@@ -1,8 +1,7 @@
 ---
 import AppLayout from '@/layouts/AppLayout.astro';
-import AddLink from '@/components/admin/shared/AddLink.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
-import MemberTable from '@/components/admin/members/MemberTable.svelte';
+import OrgChartEditor from '@/components/admin/members/OrgChartEditor.svelte';
 import { db } from '@/lib/server/db';
 import { AuthzError, requireUser, scopeDepartment } from '@/lib/server/authz';
 import { authzResponse, parseId } from '@/lib/server/authz-response';
@@ -14,7 +13,9 @@ try {
     const actor = requireUser(Astro.locals.user);
     const id = parseId(Astro.params.id);
     department =
-        id === null ? null : await db.department.findUnique({ where: { id }, select: { id: true, name: true } });
+        id === null
+            ? null
+            : await db.department.findUnique({ where: { id }, select: { id: true, name: true, slug: true } });
     if (!department) throw new AuthzError('NOT_FOUND');
     scopeDepartment(actor, { departmentId: department.id });
     members = (
@@ -44,11 +45,15 @@ try {
     <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
         <PageHeader
             title="Faculty & org chart"
-            description={`Manage the organizational structure and members of ${department.name}.`}
+            description={`Edit the organizational structure of ${department.name} the way it appears on the public page.`}
             backHref="/admin/departments"
-        >
-            <AddLink href={`/admin/departments/${department.id}/members/create`}>Add member</AddLink>
-        </PageHeader>
-        <MemberTable client:load departmentId={department.id} {members} />
+        />
+        <OrgChartEditor
+            client:load
+            departmentId={department.id}
+            departmentName={department.name}
+            departmentSlug={department.slug}
+            {members}
+        />
     </div>
 </AppLayout>

@@ -1,10 +1,11 @@
 import { ActionError, defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
 import { db } from '@/lib/server/db';
-import { actorOf, flash, guarded } from '@/lib/server/action-guard';
+import { actorOf, guarded } from '@/lib/server/action-guard';
 import { AuthzError, scopeDepartment, type Actor } from '@/lib/server/authz';
 import { imageFile } from '@/lib/server/image-file';
-import { LIMITS, put, remove } from '@/lib/server/storage';
+import { LIMITS, publicUrl, put, remove } from '@/lib/server/storage';
+import { placementsError, reparentOnDelete, wouldCycle } from '@/lib/org-tree';
 
 const fields = {
     departmentId: z.number().int(),
@@ -18,25 +19,21 @@ const fields = {
 /** Parent must be in the same department and must not be the member itself or one of its descendants. */
 async function assertValidParent(departmentId: number, parentId: number | null | undefined, memberId?: number) {
     if (parentId == null) return;
-    const tree = await db.member.findMany({ where: { departmentId }, select: { id: true, parentId: true } });
-    const parents = new Map(tree.map((node) => [node.id, node.parentId]));
-    if (!parents.has(parentId)) {
+    const tree = await db.member.findMany({
+        where: { departmentId },
+        select: { id: true, parentId: true, order: true },
+    });
+    if (!tree.some((node) => node.id === parentId)) {
         throw new ActionError({
             code: 'BAD_REQUEST',
             message: 'The selected parent does not belong to this department.',
         });
     }
-    if (memberId === undefined) return;
-    const seen = new Set<number>();
-    for (let cursor: number | null | undefined = parentId; cursor != null; cursor = parents.get(cursor)) {
-        if (cursor === memberId) {
-            throw new ActionError({
-                code: 'BAD_REQUEST',
-                message: 'A member cannot report to itself or to one of its own subordinates.',
-            });
-        }
-        if (seen.has(cursor)) break;
-        seen.add(cursor);
+    if (memberId !== undefined && wouldCycle(tree, memberId, parentId)) {
+        throw new ActionError({
+            code: 'BAD_REQUEST',
+            message: 'A member cannot report to itself or to one of its own subordinates.',
+        });
     }
 }
 
@@ -76,8 +73,7 @@ export const members = {
                             imagePath,
                         },
                     });
-                    flash(context, 'Member added to organization chart.');
-                    return { id: member.id };
+                    return { id: member.id, order: member.order, imageUrl: publicUrl(member.imagePath) };
                 } catch (error) {
                     await remove(imagePath);
                     throw error;
@@ -112,20 +108,61 @@ export const members = {
                 }
                 if (input.image) await remove(member.imagePath);
 
-                flash(context, 'Member updated.');
-                return { id: member.id };
+                return { id: member.id, order: input.order, imageUrl: publicUrl(imagePath) };
             }),
     }),
 
+    /** Applies the listed parent/order placements of one department's members in a single transaction. */
+    reorder: defineAction({
+        input: z.object({
+            departmentId: z.number().int(),
+            placements: z
+                .array(
+                    z.object({
+                        id: z.number().int(),
+                        parentId: z.number().int().nullable(),
+                        order: z.number().int().min(0),
+                    }),
+                )
+                .min(1)
+                .max(1000),
+        }),
+        handler: ({ departmentId, placements }, context) =>
+            guarded(async () => {
+                await departmentFor(actorOf(context), departmentId);
+                await db.$transaction(async (tx) => {
+                    const existing = await tx.member.findMany({
+                        where: { departmentId },
+                        select: { id: true, parentId: true, order: true },
+                    });
+                    const problem = placementsError(existing, placements);
+                    if (problem) throw new ActionError({ code: 'BAD_REQUEST', message: problem });
+                    for (const { id, parentId, order } of placements) {
+                        await tx.member.update({ where: { id }, data: { parentId, order } });
+                    }
+                });
+                return { count: placements.length };
+            }),
+    }),
+
+    /** Deletes a member; their direct reports move up to the member's manager (or become top level). */
     delete: defineAction({
         input: z.object({ departmentId: z.number().int(), id: z.number().int() }),
         handler: ({ departmentId, id }, context) =>
             guarded(async () => {
                 const actor = actorOf(context);
                 const member = await memberFor(actor, departmentId, id);
-                await db.member.delete({ where: { id: member.id } });
+                await db.$transaction(async (tx) => {
+                    const existing = await tx.member.findMany({
+                        where: { departmentId },
+                        select: { id: true, parentId: true, order: true },
+                    });
+                    for (const { id: childId, parentId, order } of reparentOnDelete(existing, member.id)) {
+                        await tx.member.update({ where: { id: childId }, data: { parentId, order } });
+                    }
+                    await tx.member.delete({ where: { id: member.id } });
+                });
                 await remove(member.imagePath);
-                flash(context, 'Member removed.');
                 return { id };
             }),
     }),
