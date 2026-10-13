@@ -23,7 +23,9 @@ export default defineConfig({
     ],
     webServer: {
         // Fresh, seeded SQLite DB and upload dir per run so tests never write into the dev database.
-        command: `node -e "const fs=require('node:fs');fs.rmSync('${DB}',{force:true});fs.rmSync('${UPLOADS}',{recursive:true,force:true})" && prisma migrate deploy && tsx prisma/seed.ts && node ${DIST}/server/entry.mjs`,
+        // E2E_DATABASE_URL (e.g. a CI PostgreSQL service) replaces the SQLite file; it must point at an
+        // empty database, and the build must have been made for the same provider.
+        command: `node -e "const fs=require('node:fs');fs.rmSync('${DB}',{force:true});fs.rmSync('${UPLOADS}',{recursive:true,force:true})" && node scripts/prisma-schema.mjs && prisma migrate deploy && tsx prisma/seed.ts && node ${DIST}/server/entry.mjs`,
         port: PORT,
         reuseExistingServer: false,
         timeout: 120_000,
@@ -32,7 +34,7 @@ export default defineConfig({
             HOST: '127.0.0.1',
             SITE_URL: `http://localhost:${PORT}`,
             BETTER_AUTH_URL: `http://localhost:${PORT}`,
-            DATABASE_URL: `file:./${DB}`,
+            DATABASE_URL: process.env.E2E_DATABASE_URL ?? `file:./${DB}`,
             STORAGE_DRIVER: 'local',
             UPLOAD_DIR: `./${UPLOADS}`,
         },

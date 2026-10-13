@@ -9,6 +9,7 @@ import { scopeWhere } from '@/lib/server/admin-scope';
 import { departmentFilter, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
 import { db } from '@/lib/server/db';
+import { textContains } from '@/lib/server/search';
 import type { Prisma } from '@/generated/prisma/client';
 
 let actor;
@@ -28,7 +29,7 @@ const dir: 'asc' | 'desc' = params.get('dir') === 'desc' ? 'desc' : 'asc';
 const scope = Astro.locals.adminScope;
 const where: Prisma.HeroSectionWhereInput = {
     ...departmentFilter(actor),
-    ...(q ? { OR: [{ title: { contains: q } }, { content: { contains: q } }] } : {}),
+    ...(q ? { OR: [{ title: textContains(q) }, { content: textContains(q) }] } : {}),
     ...scopeWhere(scope),
 };
 const orderBy: Prisma.HeroSectionOrderByWithRelationInput =

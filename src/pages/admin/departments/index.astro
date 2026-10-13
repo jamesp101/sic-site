@@ -9,6 +9,7 @@ import { getInitials } from '@/lib/initials';
 import { isSuperAdmin, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
 import { db } from '@/lib/server/db';
+import { textContains } from '@/lib/server/search';
 import { publicUrl } from '@/lib/server/storage';
 import type { Prisma } from '@/generated/prisma/client';
 
@@ -36,7 +37,7 @@ const dir: 'asc' | 'desc' =
 const where: Prisma.DepartmentWhereInput = {
     // Department users only ever see their own department.
     ...(superadmin ? {} : { id: actor.departmentId ?? -1 }),
-    ...(q ? { OR: [{ name: { contains: q } }, { slug: { contains: q } }, { description: { contains: q } }] } : {}),
+    ...(q ? { OR: [{ name: textContains(q) }, { slug: textContains(q) }, { description: textContains(q) }] } : {}),
     ...(hasLogo === true ? { logoPath: { not: null } } : hasLogo === false ? { logoPath: null } : {}),
     ...(hasMembers === true ? { members: { some: {} } } : hasMembers === false ? { members: { none: {} } } : {}),
     ...(hasPosts === true ? { posts: { some: {} } } : hasPosts === false ? { posts: { none: {} } } : {}),

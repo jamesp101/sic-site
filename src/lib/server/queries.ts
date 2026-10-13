@@ -16,16 +16,12 @@ import type {
 import { parseOverlay } from '@/lib/carousel-overlay-schema';
 import { extensionOf, fileKind } from '@/lib/files';
 import { toPlainText } from '@/lib/markdown';
-import { db, dbProvider } from './db';
+import { db } from './db';
+import { textContains } from './search';
 import { downloadUrl, publicUrl } from './storage';
 
 const EXCERPT_LENGTH = 200;
 const DEFAULT_DIRECTORY = 'General';
-
-/** Case-insensitive `contains`; SQLite/MySQL are already case-insensitive for ASCII, PostgreSQL needs `mode`. */
-function contains(value: string): { contains: string; mode?: 'insensitive' } {
-    return dbProvider === 'postgresql' ? { contains: value, mode: 'insensitive' } : { contains: value };
-}
 
 function excerptOf(content: string): string {
     const text = toPlainText(content);
@@ -239,7 +235,7 @@ export async function listPosts(filters: PostFilters = {}): Promise<PostSummary[
     if (filters.type) where.type = filters.type;
     if (filters.departmentId) where.departmentId = filters.departmentId;
     const search = filters.search?.trim();
-    if (search) where.OR = [{ title: contains(search) }, { content: contains(search) }];
+    if (search) where.OR = [{ title: textContains(search) }, { content: textContains(search) }];
 
     const rows = await db.post.findMany({
         where,
@@ -308,7 +304,13 @@ export async function listDownloads(filters: DownloadFilters = {}): Promise<Down
     }
     const search = filters.search?.trim();
     if (search) {
-        and.push({ OR: [{ fileName: contains(search) }, { tags: contains(search) }, { directory: contains(search) }] });
+        and.push({
+            OR: [
+                { fileName: textContains(search) },
+                { tags: textContains(search) },
+                { directory: textContains(search) },
+            ],
+        });
     }
 
     const rows = await db.download.findMany({
