@@ -1,5 +1,4 @@
 import AxeBuilder from '@axe-core/playwright';
-import path from 'node:path';
 import { expect, test } from '@playwright/test';
 
 import { ADMIN, CIT } from './auth-state';
@@ -59,12 +58,39 @@ test.describe('as superadmin', () => {
     });
 
     test('creates a post with a highlight image and it is visible publicly', async ({ page }) => {
+        test.slow();
         const title = `E2E post ${Date.now()}`;
         await page.goto('/admin/posts/create');
         await page.getByLabel('Post title').fill(title);
         await page.getByRole('button', { name: 'Add Text', exact: true }).click();
         await page.getByLabel('Text', { exact: true }).fill('Body from the end-to-end test.');
-        await page.locator('#highlightImage').setInputFiles(path.resolve('public/sic-seal.png'));
+        // A 3200x1800 noisy PNG is far above the 5 MB server limit; client-side WebP compression must
+        // shrink and downscale it so the upload is accepted. Built and attached inside the page so the
+        // ~17 MB file never crosses the Playwright protocol.
+        const pngBytes = await page.evaluate(async () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 3200;
+            canvas.height = 1800;
+            const context = canvas.getContext('2d')!;
+            const pixels = context.createImageData(canvas.width, canvas.height);
+            for (let i = 0; i < pixels.data.length; i += 4) {
+                pixels.data[i] = (i * 7) % 255;
+                pixels.data[i + 1] = Math.floor(Math.random() * 255);
+                pixels.data[i + 2] = (i >> 10) % 255;
+                pixels.data[i + 3] = 255;
+            }
+            context.putImageData(pixels, 0, 0);
+            const { promise, resolve } = Promise.withResolvers<Blob | null>();
+            canvas.toBlob(resolve, 'image/png');
+            const blob = (await promise)!;
+            const input = document.querySelector<HTMLInputElement>('#highlightImage')!;
+            const transfer = new DataTransfer();
+            transfer.items.add(new File([blob], 'campus.png', { type: 'image/png' }));
+            input.files = transfer.files;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            return blob.size;
+        });
+        expect(pngBytes).toBeGreaterThan(5 * 1024 * 1024);
         await page.getByRole('button', { name: 'Apply Crop' }).click();
         // Hover the sidebar "Posts" link first so a pre-save copy of the list sits in the prefetch cache.
         const prefetched = page.waitForResponse((res) => res.url().endsWith('/admin/posts'));
@@ -85,7 +111,17 @@ test.describe('as superadmin', () => {
         expect(src).toBeTruthy();
         const image = await page.request.get(src!);
         expect(image.status()).toBe(200);
-        expect(image.headers()['content-type']).toMatch(/^image\//);
+        expect(image.headers()['content-type']).toBe('image/webp');
+        expect(src).toMatch(/\.webp$/);
+        const stored = await image.body();
+        expect(stored.length).toBeLessThan(5 * 1024 * 1024);
+        // Decoded size stays within the highlight box (1600 px) yet keeps real resolution (> cropper viewport).
+        const size = await page.evaluate(async (url) => {
+            const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+            return { width: bitmap.width, height: bitmap.height };
+        }, src!);
+        expect(Math.max(size.width, size.height)).toBeLessThanOrEqual(1600);
+        expect(Math.max(size.width, size.height)).toBeGreaterThan(1000);
     });
 
     test('admin screens have no serious axe violations', async ({ page }) => {

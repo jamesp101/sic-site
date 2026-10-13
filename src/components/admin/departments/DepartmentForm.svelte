@@ -73,6 +73,7 @@
   <ImageField
     bind:file={logo}
     id="logo"
+    target="logo"
     label="Department logo"
     existingUrl={initial?.logoUrl ?? null}
     aspectRatio={1}

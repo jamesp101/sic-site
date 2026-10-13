@@ -1,5 +1,6 @@
 <script lang="ts">
     import ImageCropper from './ImageCropper.svelte';
+    import type { ImageTarget } from '@/lib/image-compress';
     import { Crop, X } from '@lucide/svelte';
 
     let {
@@ -8,6 +9,7 @@
         aspectRatio = undefined,
         title = 'Crop Image',
         isUploading = false,
+        target = undefined,
         onCrop,
         onCancel,
     }: {
@@ -16,6 +18,8 @@
         aspectRatio?: number;
         title?: string;
         isUploading?: boolean;
+        /** Output box and WebP quality for the cropped file. */
+        target?: ImageTarget;
         onCrop: (file: File, previewUrl: string) => void;
         onCancel: () => void;
     } = $props();
@@ -57,6 +61,7 @@
                     {imageSrc}
                     {aspectRatio}
                     {isUploading}
+                    {target}
                     {onCrop}
                     {onCancel}
                 />

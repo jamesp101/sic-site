@@ -1,6 +1,7 @@
 <script lang="ts">
     import { untrack } from 'svelte';
     import { parseMarkdown } from '@/lib/markdown';
+    import { compressImage } from '@/lib/image-compress';
     import { themeState } from '@/lib/theme.svelte';
     import { EditorView, basicSetup } from 'codemirror';
     import { EditorState, Compartment } from '@codemirror/state';
@@ -150,10 +151,9 @@
         if (!files || files.length === 0) return;
 
         const file = files[0];
-        const formData = new FormData();
-        formData.append('image', file);
-
         isUploading = true;
+        const formData = new FormData();
+        formData.append('image', await compressImage(file, 'content'));
 
         try {
             const response = await fetch('/api/admin/uploads/image', {

@@ -32,6 +32,7 @@
   <ImageField
     bind:file
     id="slide-image"
+    target="slide"
     label="Slide image"
     required={!savedImageUrl}
     existingUrl={savedImageUrl}

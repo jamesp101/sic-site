@@ -152,6 +152,7 @@
       <ImageField
         bind:file={highlightImage}
         id="highlightImage"
+        target="highlight"
         label="Highlight image"
         existingUrl={initial?.highlightImageUrl ?? null}
         cropTitle="Crop highlight image"

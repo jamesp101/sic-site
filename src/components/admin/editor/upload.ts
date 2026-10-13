@@ -1,3 +1,5 @@
+import { compressImage } from '@/lib/image-compress';
+
 /** Uploads an image through the inline upload API and reads its natural size (for width/height attributes). */
 export interface UploadedImage {
     url: string;
@@ -19,8 +21,12 @@ function measure(file: File): Promise<{ width: number | null; height: number | n
     return promise;
 }
 
-/** Throws an `Error` with a user-presentable message when the upload fails. */
-export async function uploadImage(file: File): Promise<UploadedImage> {
+/**
+ * Compresses to WebP in the browser (content box, 1600 px) before uploading.
+ * Throws an `Error` with a user-presentable message when the upload fails.
+ */
+export async function uploadImage(original: File): Promise<UploadedImage> {
+    const file = await compressImage(original, 'content');
     const form = new FormData();
     form.append('image', file);
     const [response, size] = await Promise.all([

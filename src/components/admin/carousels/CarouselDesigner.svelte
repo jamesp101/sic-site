@@ -1,5 +1,6 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
+  import { compressImage } from '@/lib/image-compress';
   import {
     Eye,
     EyeOff,
@@ -241,7 +242,7 @@
     uploading = true;
     try {
       const body = new FormData();
-      body.append('image', file);
+      body.append('image', await compressImage(file, 'layer'));
       const { data: result, error } = await actions.carousels.uploadImage(body);
       if (error || !result) {
         toast.error(parseActionError(error).message || 'The image could not be uploaded.');

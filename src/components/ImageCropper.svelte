@@ -2,6 +2,7 @@
     import { untrack } from 'svelte';
     // cropperjs defines custom elements at import time; load it in the browser only (SSR has no HTMLElement).
     import type Cropper from 'cropperjs';
+    import { IMAGE_TARGETS, encodeWebp, fitWithin, type ImageTarget } from '@/lib/image-compress';
     import {
         ZoomIn,
         ZoomOut,
@@ -27,16 +28,15 @@
         aspectRatio = undefined,
         onCrop,
         onCancel,
-        outputType = 'image/jpeg',
-        outputQuality = 0.9,
+        target = IMAGE_TARGETS.content,
         isUploading = false,
     }: {
         imageSrc: string | null;
         aspectRatio?: number;
         onCrop?: (file: File, previewUrl: string) => void;
         onCancel?: () => void;
-        outputType?: string;
-        outputQuality?: number;
+        /** Output box and WebP quality for the cropped file. */
+        target?: ImageTarget;
         isUploading?: boolean;
     } = $props();
 
@@ -279,7 +279,7 @@
         activeAspectRatio = ratio;
     }
 
-    // Apply crop & output File
+    // Apply crop & output a WebP File at source resolution (capped by `target`)
     async function handleApplyCrop() {
         if (!cropperRef.instance || !isReady || isProcessing || isUploading) return;
 
@@ -291,31 +291,35 @@
                 throw new Error('No crop selection found');
             }
 
-            const canvas = await selection.$toCanvas();
-
-            if (!canvas) {
-                throw new Error('Failed to render cropped canvas');
-            }
-
-            canvas.toBlob(
-                (blob) => {
-                    if (!blob) {
-                        isProcessing = false;
-                        return;
-                    }
-
-                    const ext = outputType === 'image/png' ? 'png' : 'jpg';
-                    const file = new File([blob], `cropped_image_${Date.now()}.${ext}`, { type: outputType });
-                    const previewUrl = URL.createObjectURL(blob);
-
-                    isProcessing = false;
-                    onCrop?.(file, previewUrl);
-                },
-                outputType,
-                outputQuality
+            // The selection is measured in on-screen pixels; divide by the image's display scale so the
+            // crop keeps the photo's real resolution instead of the size of the cropper viewport.
+            const [a = 1, b = 0] = cropperRef.instance.getCropperImage()?.$getTransform() ?? [];
+            const displayScale = Math.hypot(a, b) || 1;
+            const size = fitWithin(
+                selection.width / displayScale,
+                selection.height / displayScale,
+                target.maxWidth,
+                target.maxHeight,
             );
+            const canvas = await selection.$toCanvas({ width: size.width });
+
+            const encoded = await encodeWebp(canvas, target);
+            let blob: Blob | null = encoded?.blob ?? null;
+            let type = 'image/webp';
+            if (!blob) {
+                // Browser cannot encode WebP: fall back to JPEG at the same size.
+                const { promise, resolve } = Promise.withResolvers<Blob | null>();
+                canvas.toBlob(resolve, 'image/jpeg', target.quality);
+                blob = await promise;
+                type = 'image/jpeg';
+            }
+            if (!blob) throw new Error('Failed to encode the cropped image');
+
+            const file = new File([blob], `cropped_image_${Date.now()}.${type === 'image/webp' ? 'webp' : 'jpg'}`, { type });
+            onCrop?.(file, URL.createObjectURL(blob));
         } catch (error) {
             console.error('Error during image cropping:', error);
+        } finally {
             isProcessing = false;
         }
     }

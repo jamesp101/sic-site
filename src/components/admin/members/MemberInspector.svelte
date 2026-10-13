@@ -116,6 +116,7 @@
     <ImageField
       bind:file={image}
       id="member-image"
+      target="portrait"
       label="Photo"
       existingUrl={initial?.imageUrl ?? null}
       aspectRatio={1}

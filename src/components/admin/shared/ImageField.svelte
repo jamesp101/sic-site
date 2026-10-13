@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Crop, FileImage, Trash2, Upload, ZoomIn } from '@lucide/svelte';
   import ImageCropperModal from '@/components/ImageCropperModal.svelte';
+  import { IMAGE_TARGETS, type ImageTargetName } from '@/lib/image-compress';
   import ImageViewerModal from '@/components/ImageViewerModal.svelte';
   import { formatFileSize, secondaryButtonClass } from './form-utils';
 
@@ -15,6 +16,7 @@
     required = false,
     error = '',
     fit = 'contain',
+    target = 'content',
   }: {
     file: File | null;
     id: string;
@@ -27,6 +29,8 @@
     required?: boolean;
     error?: string;
     fit?: 'contain' | 'cover';
+    /** Size box the cropped image is compressed to (WebP). */
+    target?: ImageTargetName;
   } = $props();
 
   let cropperSrc = $state<string | null>(null);
@@ -64,7 +68,15 @@
   }
 </script>
 
-<ImageCropperModal isOpen={cropperOpen} imageSrc={cropperSrc} {aspectRatio} title={cropTitle} {onCrop} {onCancel} />
+<ImageCropperModal
+  isOpen={cropperOpen}
+  imageSrc={cropperSrc}
+  {aspectRatio}
+  title={cropTitle}
+  target={IMAGE_TARGETS[target]}
+  {onCrop}
+  {onCancel}
+/>
 <ImageViewerModal isOpen={viewerOpen} imageSrc={shownUrl} title={label} onClose={() => (viewerOpen = false)} />
 
 <div class="space-y-2">
