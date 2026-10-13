@@ -160,3 +160,143 @@ export function reorderError(items: ReorderItem[], existing: { id: number; paren
     }
     return null;
 }
+
+// ---- link kinds, suggestions, warnings ---------------------------------------------------------
+
+export type NavLinkKind =
+    | 'page'
+    | 'department'
+    | 'post'
+    | 'departments-menu'
+    | 'anchor'
+    | 'external'
+    | 'email'
+    | 'phone';
+
+export const NAV_KIND_LABEL: Record<NavLinkKind, string> = {
+    page: 'Page',
+    department: 'Department',
+    post: 'Post',
+    'departments-menu': 'Departments menu (auto)',
+    anchor: 'Anchor',
+    external: 'External',
+    email: 'Email',
+    phone: 'Phone',
+};
+
+/** URL that the public header turns into a dropdown of every department. */
+export const DEPARTMENTS_MENU_URL = '#departments';
+
+/** Detects what a navigation URL points at. Returns null for an empty URL. */
+export function classifyUrl(raw: string): NavLinkKind | null {
+    const url = raw.trim();
+    if (!url) return null;
+    if (url === DEPARTMENTS_MENU_URL) return 'departments-menu';
+    if (url.startsWith('#')) return 'anchor';
+    if (/^mailto:/i.test(url)) return 'email';
+    if (/^tel:/i.test(url)) return 'phone';
+    if (/^https?:\/\//i.test(url)) return 'external';
+    if (url.startsWith('/') && !url.startsWith('//')) {
+        const path = internalPath(url);
+        if (/^\/departments\/[^/]+$/.test(path)) return 'department';
+        if (/^\/posts\/[^/]+$/.test(path)) return 'post';
+        return 'page';
+    }
+    return null;
+}
+
+export interface LinkSuggestion {
+    group: 'Pages' | 'Departments' | 'Posts';
+    label: string;
+    url: string;
+}
+
+/** The links every site has; the editor offers them as suggestions and treats them as known paths. */
+export const PAGE_SUGGESTIONS: LinkSuggestion[] = [
+    { group: 'Pages', label: 'Home', url: '/' },
+    { group: 'Pages', label: 'News & Events', url: '/posts' },
+    { group: 'Pages', label: 'Articles', url: '/posts?type=article' },
+    { group: 'Pages', label: 'Events', url: '/posts?type=event' },
+    { group: 'Pages', label: 'Announcements', url: '/posts?type=announcement' },
+    { group: 'Pages', label: 'Downloads', url: '/downloads' },
+    { group: 'Pages', label: 'Contact', url: '/contact' },
+];
+
+/** Static internal paths that exist besides departments and posts. */
+export const STATIC_PATHS = ['/', '/posts', '/downloads', '/contact', '/login', '/rss.xml', '/sitemap.xml'];
+
+/** Links created by “Use the default menu”; mirrors the public header fallback. */
+export const DEFAULT_NAV_LINKS: { label: string; url: string }[] = [
+    { label: 'Home', url: '/' },
+    { label: 'Departments', url: DEPARTMENTS_MENU_URL },
+    { label: 'News & Events', url: '/posts' },
+    { label: 'Downloads', url: '/downloads' },
+    { label: 'Contact', url: '/contact' },
+];
+
+/** Path of an internal URL without query or hash and without a trailing slash (except the root). */
+export function internalPath(url: string): string {
+    const path = url.trim().split(/[?#]/, 1)[0];
+    let decoded = path;
+    try {
+        decoded = decodeURI(path);
+    } catch {
+        // keep the raw path
+    }
+    return decoded.length > 1 ? decoded.replace(/\/+$/, '') || '/' : decoded;
+}
+
+export type NavWarningKind = 'internal-missing' | 'duplicate';
+
+export interface NavWarning {
+    kind: NavWarningKind;
+    message: string;
+}
+
+/** True when the public header ignores this link's own URL (it opens a dropdown instead). */
+export function opensDropdown(node: NavNode, isTopLevel: boolean): boolean {
+    return isTopLevel && (node.url.trim() === DEPARTMENTS_MENU_URL || node.children.length > 0);
+}
+
+/**
+ * Warnings per link id. `internal-missing`: an internal path that matches no known page, department or post
+ * (`/storage/*` is always allowed). `duplicate`: two visible links share the same URL at the same level.
+ * Links whose URL is not used (dropdown parents) are skipped. Warnings never block saving.
+ */
+export function navWarnings(tree: NavNode[], knownPaths: Iterable<string>): Map<number, NavWarning[]> {
+    const known = new Set<string>();
+    for (const path of knownPaths) known.add(internalPath(path));
+    const result = new Map<number, NavWarning[]>();
+    const add = (id: number, warning: NavWarning) => result.set(id, [...(result.get(id) ?? []), warning]);
+
+    const check = (nodes: NavNode[], isTopLevel: boolean) => {
+        const seen = new Map<string, NavNode[]>();
+        for (const node of nodes) {
+            if (opensDropdown(node, isTopLevel)) continue;
+            const url = node.url.trim();
+            if (url.startsWith('/') && !url.startsWith('//')) {
+                const path = internalPath(url);
+                if (!known.has(path) && !path.startsWith('/storage/')) {
+                    add(node.id, {
+                        kind: 'internal-missing',
+                        message: `No page, department or post exists at ${path}. Visitors would see a “not found” page.`,
+                    });
+                }
+            }
+            if (node.isActive) seen.set(url, [...(seen.get(url) ?? []), node]);
+        }
+        for (const [url, group] of seen) {
+            if (group.length < 2) continue;
+            for (const node of group) {
+                add(node.id, {
+                    kind: 'duplicate',
+                    message: `${group.length - 1 === 1 ? 'Another visible link' : 'Other visible links'} at the same level also point to ${url}.`,
+                });
+            }
+        }
+    };
+
+    check(tree, true);
+    for (const top of tree) check(top.children, false);
+    return result;
+}

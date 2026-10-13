@@ -5,7 +5,7 @@ import NavLinksEditor from '@/components/admin/navlinks/NavLinksEditor.svelte';
 import { db } from '@/lib/server/db';
 import { requireSuperAdmin } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
-import type { NavNode } from '@/lib/nav-tree';
+import { PAGE_SUGGESTIONS, STATIC_PATHS, DEPARTMENTS_MENU_URL, type LinkSuggestion, type NavNode } from '@/lib/nav-tree';
 
 try {
     requireSuperAdmin(Astro.locals.user);
@@ -28,6 +28,24 @@ const links: NavNode[] = all
         ...toNode(top),
         children: all.filter((child) => child.parentId === top.id).map(toNode),
     }));
+
+const [departments, posts] = await Promise.all([
+    db.department.findMany({ orderBy: { name: 'asc' }, select: { name: true, slug: true } }),
+    db.post.findMany({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { title: true, slug: true } }),
+]);
+
+// Suggestions for the link picker: pages, the auto departments menu, every department, the 30 newest posts.
+const suggestions: LinkSuggestion[] = [
+    ...PAGE_SUGGESTIONS,
+    { group: 'Pages', label: 'Departments menu (auto)', url: DEPARTMENTS_MENU_URL },
+    ...departments.map((d): LinkSuggestion => ({ group: 'Departments', label: d.name, url: `/departments/${d.slug}` })),
+    ...posts.slice(0, 30).map((p): LinkSuggestion => ({ group: 'Posts', label: p.title, url: `/posts/${p.slug}` })),
+];
+const knownPaths = [
+    ...STATIC_PATHS,
+    ...departments.map((d) => `/departments/${d.slug}`),
+    ...posts.map((p) => `/posts/${p.slug}`),
+];
 ---
 
 <AppLayout
@@ -39,6 +57,6 @@ const links: NavNode[] = all
             title="Navigation links"
             description="Arrange the links in the main website navigation bar. Drag to reorder or nest; changes go live as you drop."
         />
-        <NavLinksEditor client:load {links} />
+        <NavLinksEditor client:load {links} {departments} {suggestions} {knownPaths} />
     </div>
 </AppLayout>

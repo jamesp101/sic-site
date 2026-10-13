@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
     canIndent,
+    classifyUrl,
+    internalPath,
+    navWarnings,
     indent,
     moveDown,
     moveUp,
@@ -116,5 +119,67 @@ describe('navUrlError', () => {
     it('rejects unsafe or malformed values', () => {
         for (const url of ['', 'javascript:alert(1)', 'data:text/html,x', '//evil.com', 'posts', '/a b'])
             expect(navUrlError(url)).not.toBeNull();
+    });
+});
+
+describe('classifyUrl', () => {
+    it('detects the link type', () => {
+        expect(classifyUrl('/')).toBe('page');
+        expect(classifyUrl('/posts?type=event')).toBe('page');
+        expect(classifyUrl('/departments/cba')).toBe('department');
+        expect(classifyUrl('/posts/hello-world')).toBe('post');
+        expect(classifyUrl('#departments')).toBe('departments-menu');
+        expect(classifyUrl('#contact')).toBe('anchor');
+        expect(classifyUrl('https://example.com')).toBe('external');
+        expect(classifyUrl('mailto:a@b.c')).toBe('email');
+        expect(classifyUrl('tel:+63')).toBe('phone');
+        expect(classifyUrl('  ')).toBeNull();
+        expect(classifyUrl('nonsense')).toBeNull();
+    });
+
+    it('ignores query, hash and trailing slash in paths', () => {
+        expect(internalPath('/posts/?type=event#x')).toBe('/posts');
+        expect(internalPath('/')).toBe('/');
+        expect(internalPath('/?a=1')).toBe('/');
+    });
+});
+
+describe('navWarnings', () => {
+    const link = (id: number, url: string, extra: Partial<NavNode> = {}): NavNode => ({ ...n(id), url, ...extra });
+    const known = ['/', '/posts', '/departments/cba', '/posts/hello'];
+
+    it('flags internal paths that match nothing, ignoring query and hash', () => {
+        const tree = [
+            link(1, '/posts?type=event'),
+            link(2, '/missing'),
+            link(3, '/departments/cba#top'),
+            link(4, '/storage/file.pdf'),
+            link(5, 'https://example.com/missing'),
+            link(6, '#nowhere'),
+        ];
+        const warnings = navWarnings(tree, known);
+        expect([...warnings.keys()]).toEqual([2]);
+        expect(warnings.get(2)?.[0].kind).toBe('internal-missing');
+    });
+
+    it('flags visible duplicates at the same level only', () => {
+        const tree = [
+            link(1, '/posts'),
+            link(2, '/posts'),
+            link(3, '/', { children: [link(4, '/posts'), link(5, '/posts', { isActive: false })] }),
+            link(6, '/posts', { isActive: false }),
+        ];
+        const warnings = navWarnings(tree, known);
+        expect(warnings.get(1)?.map((w) => w.kind)).toEqual(['duplicate']);
+        expect(warnings.get(2)?.map((w) => w.kind)).toEqual(['duplicate']);
+        expect(warnings.has(4)).toBe(false);
+        expect(warnings.has(5)).toBe(false);
+        expect(warnings.has(6)).toBe(false);
+    });
+
+    it('skips links whose URL is not used because they open a dropdown', () => {
+        const tree = [link(1, '/missing', { children: [link(2, '/ok-child')] }), link(3, '#departments')];
+        const warnings = navWarnings(tree, known);
+        expect([...warnings.keys()]).toEqual([2]);
     });
 });

@@ -2,8 +2,10 @@
   import { actions } from 'astro:actions';
   import { untrack } from 'svelte';
   import { reloadView } from '@/lib/navigation';
-  import { navUrlError } from '@/lib/nav-tree';
+  import { navUrlError, type LinkSuggestion } from '@/lib/nav-tree';
   import Field from '../shared/Field.svelte';
+  import NavKindBadge from './NavKindBadge.svelte';
+  import NavLinkPicker from './NavLinkPicker.svelte';
   import { inputClass, parseActionError, primaryButtonClass, secondaryButtonClass } from '../shared/form-utils';
 
   export interface NavLinkFormValues {
@@ -20,6 +22,7 @@
     parentId = null,
     parentLabel = '',
     nextOrder = 1,
+    suggestions = [],
     prefix,
     oncancel,
   }: {
@@ -29,6 +32,8 @@
     parentId?: number | null;
     parentLabel?: string;
     nextOrder?: number;
+    /** Grouped link suggestions for the URL combobox. */
+    suggestions?: LinkSuggestion[];
     /** Makes element ids unique when several forms are open. */
     prefix: string;
     oncancel: () => void;
@@ -46,6 +51,10 @@
   $effect(() => {
     labelInput?.focus();
   });
+
+  function onpick(suggestion: LinkSuggestion) {
+    if (!label.trim()) label = suggestion.label;
+  }
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
@@ -109,8 +118,26 @@
         placeholder="e.g. Admissions"
       />
     </Field>
-    <Field id={`${prefix}-url`} label="URL" required error={errors.url} hint="A path such as /posts or a full https:// URL.">
-      <input id={`${prefix}-url`} type="text" required maxlength="255" bind:value={url} class={inputClass} placeholder="/posts" />
+    <Field
+      id={`${prefix}-url`}
+      label="URL"
+      required
+      error={errors.url}
+      hint="Pick a page, department or post, or type a path such as /posts or a full https:// URL."
+    >
+      <div class="flex items-start gap-2">
+        <div class="min-w-0 flex-1">
+          <NavLinkPicker
+            id={`${prefix}-url`}
+            bind:value={url}
+            {suggestions}
+            invalid={Boolean(errors.url)}
+            describedBy={errors.url ? `${prefix}-url-error` : undefined}
+            {onpick}
+          />
+        </div>
+        <span class="mt-2"><NavKindBadge {url} /></span>
+      </div>
     </Field>
   </div>
 
