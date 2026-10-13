@@ -13,7 +13,9 @@ export const MAX_OVERLAY_JSON = 40_000;
 
 export const LAYER_TYPES = ['text', 'button', 'badge', 'shape', 'image'] as const;
 export const ROLES = ['heading', 'subtitle', 'body'] as const;
-export const SIZES = ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl'] as const;
+export const SIZES = ['sm', 'md', 'lg'] as const;
+/** Sizes stored by the first designer version; mapped to the nearest SIZES step on read. */
+export const LEGACY_SIZES = ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl'] as const;
 export const COLORS = ['white', 'gold', 'navy', 'navy-deep', 'sky', 'foreground', 'surface'] as const;
 export const ALIGNS = ['left', 'center', 'right'] as const;
 export const FONTS = ['serif', 'sans'] as const;
@@ -77,26 +79,75 @@ export interface ImageLayer extends LayerBase {
 }
 export type Layer = TextLayer | ButtonLayer | BadgeLayer | ShapeLayer | ImageLayer;
 
-/** Font size per step, in hundredths of the slide width (container query width units). */
-export const SIZE_CQW: Record<Size, number> = {
-    xs: 1.1,
-    sm: 1.4,
-    md: 1.8,
-    lg: 2.4,
-    xl: 3.4,
-    '2xl': 4.6,
-    '3xl': 6,
+/** Which scale a layer uses: text layers by role, plus button and badge. */
+export type ScaleKind = Role | 'button' | 'badge';
+
+/** Font size per element kind and step, in hundredths of the slide width (cqw). The single source for the public slide and the editor. */
+export const TYPE_SCALE: Record<ScaleKind, Record<Size, number>> = {
+    heading: { sm: 3.4, md: 4.6, lg: 6 },
+    subtitle: { sm: 1.8, md: 2.2, lg: 2.6 },
+    body: { sm: 1.4, md: 1.6, lg: 1.8 },
+    button: { sm: 1.2, md: 1.4, lg: 1.6 },
+    badge: { sm: 1.0, md: 1.1, lg: 1.3 },
 };
 
-export const SIZE_LABEL: Record<Size, string> = {
-    xs: 'Extra small',
-    sm: 'Small',
-    md: 'Medium',
-    lg: 'Large',
-    xl: 'Extra large',
-    '2xl': 'Huge',
-    '3xl': 'Display',
+export const DEFAULT_SIZE: Record<ScaleKind, Size> = {
+    heading: 'lg',
+    subtitle: 'md',
+    body: 'md',
+    button: 'md',
+    badge: 'sm',
 };
+
+export const SIZE_LABEL: Record<Size, string> = { sm: 'Small', md: 'Medium', lg: 'Large' };
+
+/** Text box width presets (percent of the slide). */
+export const WIDTH_PRESETS = [
+    { label: 'Narrow', w: 40 },
+    { label: 'Medium', w: 55 },
+    { label: 'Wide', w: 75 },
+] as const;
+
+/** Logo / image height presets (percent of the slide height). */
+export const IMAGE_PRESETS = [
+    { label: 'S', h: 12 },
+    { label: 'M', h: 18 },
+    { label: 'L', h: 26 },
+] as const;
+
+/** Safe-area margin (percent) kept free at every slide edge by default alignment. */
+export const SAFE_MARGIN = 6;
+
+export function scaleKind(layer: Layer): ScaleKind | null {
+    return layer.type === 'text' ? layer.role : layer.type === 'button' || layer.type === 'badge' ? layer.type : null;
+}
+
+const LEGACY_CQW: Record<string, number> = { xs: 1.1, sm: 1.4, md: 1.8, lg: 2.4, xl: 3.4, '2xl': 4.6, '3xl': 6 };
+
+/** Nearest current step for a stored size (current or legacy) of the given element kind. */
+export function normalizeSize(kind: ScaleKind, size: unknown): Size {
+    if ((SIZES as readonly unknown[]).includes(size)) return size as Size;
+    const cqw = typeof size === 'string' ? LEGACY_CQW[size] : undefined;
+    if (cqw === undefined) return DEFAULT_SIZE[kind];
+    return SIZES.reduce((best, step) =>
+        Math.abs(TYPE_SCALE[kind][step] - cqw) < Math.abs(TYPE_SCALE[kind][best] - cqw) ? step : best,
+    );
+}
+
+/** Upgrades one stored layer (unknown shape) in place of its legacy `size`; other input passes through. */
+export function upgradeLayer(candidate: unknown): unknown {
+    if (!candidate || typeof candidate !== 'object' || !('size' in candidate)) return candidate;
+    const layer = candidate as { type?: unknown; role?: unknown; size: unknown };
+    const kind =
+        layer.type === 'text' && (ROLES as readonly unknown[]).includes(layer.role)
+            ? (layer.role as Role)
+            : layer.type === 'button' || layer.type === 'badge'
+              ? layer.type
+              : null;
+    // Unknown strings stay as they are so strict validation rejects them.
+    const known = typeof layer.size === 'string' && layer.size in LEGACY_CQW;
+    return kind && known ? { ...layer, size: normalizeSize(kind, layer.size) } : candidate;
+}
 
 export const COLOR_LABEL: Record<ColorKey, string> = {
     white: 'White',
@@ -239,12 +290,12 @@ export function defaultLayer(type: LayerType): Layer {
                 type,
                 id,
                 ...common,
-                x: 8,
+                x: 6,
                 y: 36,
-                w: 52,
+                w: 55,
                 role: 'heading',
                 text: 'Your headline',
-                size: '2xl',
+                size: 'lg',
                 align: 'left',
                 color: 'white',
                 font: 'serif',
@@ -260,14 +311,14 @@ export function defaultLayer(type: LayerType): Layer {
                 href: '/',
                 variant: 'solid',
                 color: 'gold',
-                size: 'sm',
+                size: 'md',
             };
         case 'badge':
-            return { type, id, ...common, x: 8, y: 26, text: 'New', color: 'gold', size: 'xs' };
+            return { type, id, ...common, x: 8, y: 26, text: 'New', color: 'gold', size: 'sm' };
         case 'shape':
             return { type, id, ...common, opacity: 55, x: 0, y: 0, w: 62, h: 100, color: 'navy-deep', radius: 'none' };
         case 'image':
-            return { type, id, ...common, x: 8, y: 8, w: 12, h: 21, src: '/', alt: '', radius: 'none' };
+            return { type, id, ...common, x: 8, y: 8, w: 10.1, h: 18, src: '/', alt: '', radius: 'none' };
     }
 }
 

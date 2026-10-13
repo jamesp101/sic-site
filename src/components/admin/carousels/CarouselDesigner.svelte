@@ -27,10 +27,12 @@
     patchLayer,
     redo,
     undo,
+    type Box,
     type History,
     type ZMove,
   } from '@/lib/carousel-editor';
   import {
+    IMAGE_PRESETS,
     MAX_LAYERS,
     TYPE_LABEL,
     defaultLayer,
@@ -246,11 +248,15 @@
         return;
       }
       const ratio = await naturalRatio(result.url);
-      const width = 14;
       const layer = { ...defaultLayer('image'), src: result.url, alt: '' } as Extract<Layer, { type: 'image' }>;
-      layer.w = width;
-      // Slide percentages are of a 16:9 box, so the height share depends on the image ratio.
-      layer.h = Math.min(80, Math.max(2, (width / ratio) * (16 / 9)));
+      // Snap the box to the file's natural aspect ratio (slide percentages are of a 16:9 box).
+      const height = IMAGE_PRESETS[1].h;
+      layer.h = height;
+      layer.w = Math.round(height * ratio * (9 / 16) * 100) / 100;
+      if (layer.w > 60) {
+        layer.w = 60;
+        layer.h = Math.round(((60 / ratio) * (16 / 9)) * 100) / 100;
+      }
       addLayer(layer);
       await tick();
       document.getElementById('layer-alt')?.focus();
@@ -302,6 +308,19 @@
   }
   const doUndo = () => history(undo);
   const doRedo = () => history(redo);
+
+  /** Rendered box of the selected layer in percent of the slide, read from the canvas DOM. */
+  function measureSelected(): Box | null {
+    const el = document.querySelector<HTMLElement>(`[data-designer-area] [data-layer-id="${selectedId}"]`);
+    const stage = el?.parentElement;
+    if (!el || !stage?.clientWidth || !stage.clientHeight) return null;
+    return {
+      x: (el.offsetLeft / stage.clientWidth) * 100,
+      y: (el.offsetTop / stage.clientHeight) * 100,
+      w: (el.offsetWidth / stage.clientWidth) * 100,
+      h: (el.offsetHeight / stage.clientHeight) * 100,
+    };
+  }
 
   function nudge(dx: number, dy: number) {
     if (!selected) return;
@@ -702,6 +721,7 @@
               onmove={moveSelected}
               onduplicate={duplicateSelected}
               ondelete={removeSelected}
+              measure={measureSelected}
             />
           {:else}
             <SlideSettings

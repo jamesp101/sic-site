@@ -17,6 +17,7 @@ import {
     rounded,
     safeHref,
     safeImageSrc,
+    upgradeLayer,
     type Layer,
 } from './carousel-overlay';
 
@@ -97,6 +98,12 @@ const imageLayer = z.strictObject({
 
 export const layerSchema = z.discriminatedUnion('type', [textLayer, buttonLayer, badgeLayer, shapeLayer, imageLayer]);
 
+/** Old stored sizes (xs…3xl) become the nearest current step before validation. */
+function upgradeDocument(data: unknown): unknown {
+    if (!data || typeof data !== 'object' || !Array.isArray((data as { layers?: unknown }).layers)) return data;
+    return { ...data, layers: (data as { layers: unknown[] }).layers.map(upgradeLayer) };
+}
+
 const uniqueIds = (layers: Layer[]) => new Set(layers.map((layer) => layer.id)).size === layers.length;
 
 export const overlaySchema = z.strictObject({
@@ -122,7 +129,7 @@ export function parseOverlayStrict(raw: string): OverlayResult {
     } catch {
         return { ok: false, error: 'The slide design is not valid JSON.' };
     }
-    const parsed = overlaySchema.safeParse(data);
+    const parsed = overlaySchema.safeParse(upgradeDocument(data));
     if (!parsed.success) {
         const issue = parsed.error.issues[0];
         const layer = typeof issue?.path[1] === 'number' ? ` (layer ${issue.path[1] + 1})` : '';
@@ -150,7 +157,7 @@ export function parseOverlay(raw: string | null | undefined): Layer[] | null {
     const seen = new Set<string>();
     const layers: Layer[] = [];
     for (const candidate of doc.layers.slice(0, MAX_LAYERS)) {
-        const parsed = layerSchema.safeParse(candidate);
+        const parsed = layerSchema.safeParse(upgradeLayer(candidate));
         if (!parsed.success || seen.has(parsed.data.id)) continue;
         seen.add(parsed.data.id);
         layers.push(parsed.data);

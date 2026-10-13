@@ -9,6 +9,9 @@ import {
     safeHref,
     safeImageSrc,
     serializeOverlay,
+    normalizeSize,
+    TYPE_SCALE,
+    DEFAULT_SIZE,
     type Layer,
 } from './carousel-overlay';
 import { parseOverlay, parseOverlayStrict } from './carousel-overlay-schema';
@@ -167,5 +170,39 @@ describe('readingOrder', () => {
             ['b', 2],
             ['a', 1],
         ]);
+    });
+});
+
+describe('type scale', () => {
+    test('every kind has exactly sm/md/lg, increasing, and defaults are on the scale', () => {
+        for (const [kind, steps] of Object.entries(TYPE_SCALE)) {
+            expect(Object.keys(steps)).toEqual(['sm', 'md', 'lg']);
+            expect(steps.sm).toBeLessThan(steps.md);
+            expect(steps.md).toBeLessThan(steps.lg);
+            expect(steps[DEFAULT_SIZE[kind as keyof typeof DEFAULT_SIZE]]).toBeGreaterThan(0);
+        }
+    });
+
+    test('legacy sizes map to the nearest step per element kind', () => {
+        expect(normalizeSize('button', '3xl')).toBe('lg');
+        expect(normalizeSize('button', 'xs')).toBe('sm');
+        expect(normalizeSize('heading', '2xl')).toBe('md');
+        expect(normalizeSize('heading', 'xs')).toBe('sm');
+        expect(normalizeSize('badge', 'xl')).toBe('lg');
+        expect(normalizeSize('body', 'md')).toBe('md');
+        expect(normalizeSize('subtitle', 'nope')).toBe('md');
+        expect(normalizeSize('heading', 'lg')).toBe('lg');
+    });
+
+    test('old-format documents load, in both parsers, and are saved in the new form', () => {
+        const old = { ...defaultLayer('button'), size: '3xl' };
+        const raw = JSON.stringify({ v: 1, layers: [old, { ...defaultLayer('text'), size: '2xl' }] });
+        for (const layers of [parseOverlay(raw), (parseOverlayStrict(raw) as { layers: Layer[] }).layers]) {
+            expect(layers?.map((l) => (l as { size?: string }).size)).toEqual(['lg', 'md']);
+        }
+        expect(serializeOverlay(parseOverlay(raw) as Layer[])).not.toContain('3xl');
+        expect(
+            parseOverlayStrict(JSON.stringify({ v: 1, layers: [{ ...defaultLayer('button'), size: 'huge' }] })).ok,
+        ).toBe(false);
     });
 });

@@ -98,14 +98,14 @@ test.describe('slide designer (superadmin)', () => {
         await page.keyboard.press('ArrowDown');
         await page.keyboard.press('ArrowDown');
         await page.keyboard.press('ArrowRight');
-        await expect(page.locator('#layer-y')).toHaveValue('73');
-        await expect(page.locator('#layer-x')).toHaveValue('8.5');
+        await expect(page.locator('#layer-y')).toHaveValue('74');
+        await expect(page.locator('#layer-x')).toHaveValue('9');
 
         // Undo (Ctrl+Z) walks the nudges back in one step, redo restores it.
         await page.keyboard.press('Control+z');
         await expect(page.locator('#layer-y')).toHaveValue('72');
         await page.keyboard.press('Control+Shift+z');
-        await expect(page.locator('#layer-y')).toHaveValue('73');
+        await expect(page.locator('#layer-y')).toHaveValue('74');
 
         const update = saved(page, 'update');
         await page.keyboard.press('Control+s');
@@ -117,7 +117,7 @@ test.describe('slide designer (superadmin)', () => {
         expect(alphaId).not.toBe('');
         await tile(page, ALPHA.headline).click();
         await page.getByRole('button', { name: `Button: ${ALPHA.label}` }).click();
-        await expect(page.locator('#layer-y')).toHaveValue('73');
+        await expect(page.locator('#layer-y')).toHaveValue('74');
         await expect(page.locator('#layer-href')).toHaveValue(ALPHA.href);
 
         const home = await publicHome(browser);
@@ -215,6 +215,76 @@ test.describe('slide designer (superadmin)', () => {
             });
             expect(response.status(), `${JSON.stringify(bad)} id=${alphaId} ${await response.text()}`).toBe(400);
         }
+    });
+});
+
+test.describe('element sizes', () => {
+    test.use({ storageState: ADMIN });
+
+    test('old-format sizes load as the nearest step and equal buttons render at equal height', async ({
+        page,
+        browser,
+    }) => {
+        await page.goto('/admin/carousels');
+        const origin = new URL(page.url()).origin;
+        const base = { rotation: 0, opacity: 100 };
+        const button = (id: string, label: string, y: number) => ({
+            type: 'button',
+            id,
+            ...base,
+            x: 6,
+            y,
+            label,
+            href: '/',
+            variant: 'solid',
+            color: 'gold',
+            size: '3xl', // stored by the first designer version
+        });
+        const overlay = JSON.stringify({
+            v: 1,
+            layers: [
+                {
+                    type: 'text',
+                    id: 'h1x',
+                    ...base,
+                    x: 6,
+                    y: 20,
+                    w: 55,
+                    role: 'heading',
+                    text: ALPHA.headline,
+                    size: '2xl',
+                    align: 'left',
+                    color: 'white',
+                    font: 'serif',
+                },
+                button('b1x', ALPHA.label, 60),
+                button('b2x', `${ALPHA.label} two`, 75),
+            ],
+        });
+        const response = await page.request.post('/_actions/carousels.update', {
+            headers: { Origin: origin },
+            multipart: { id: alphaId, overlay },
+        });
+        expect(response.status()).toBe(200);
+
+        // Saved in the new form: the button is Large and the heading Medium.
+        await page.goto('/admin/carousels');
+        await tile(page, ALPHA.headline).click();
+        await page.getByRole('button', { name: `Button: ${ALPHA.label}`, exact: true }).click();
+        await expect(page.getByRole('group', { name: 'Size' }).getByRole('button', { name: 'Large' })).toHaveAttribute(
+            'aria-pressed',
+            'true',
+        );
+
+        const context = await browser.newContext({ javaScriptEnabled: false });
+        const home = await context.newPage();
+        await home.goto('/');
+        const links = home.locator('section[aria-roledescription="carousel"] a', { hasText: ALPHA.label });
+        await expect(links).toHaveCount(2);
+        const [a, b] = await links.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+        expect(a).toBeGreaterThan(10);
+        expect(Math.abs(a - b)).toBeLessThan(0.5);
+        await context.close();
     });
 });
 

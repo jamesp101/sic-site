@@ -11,7 +11,7 @@
     Copy,
     Trash2,
   } from '@lucide/svelte';
-  import type { ZMove } from '@/lib/carousel-editor';
+  import { alignBox, type AlignTo, type Box, type ZMove } from '@/lib/carousel-editor';
   import {
     ALIGNS,
     BG_COLOR_CLASS,
@@ -21,8 +21,11 @@
     RADII,
     ROLES,
     ROLE_LABEL,
+    DEFAULT_SIZE,
+    IMAGE_PRESETS,
     SIZES,
     SIZE_LABEL,
+    WIDTH_PRESETS,
     TYPE_LABEL,
     safeHref,
     type Align,
@@ -39,6 +42,7 @@
     onmove,
     onduplicate,
     ondelete,
+    measure,
   }: {
     layer: Layer;
     index: number;
@@ -48,6 +52,8 @@
     onmove: (move: ZMove) => void;
     onduplicate: () => void;
     ondelete: () => void;
+    /** Rendered box of the layer in percent of the slide (height is automatic for text, buttons and badges). */
+    measure: () => Box | null;
   } = $props();
 
   const set = (patch: object, key?: string) => onchange(patch as unknown as Partial<Layer>, key);
@@ -55,6 +61,24 @@
   const numberInput = `${inputClass} !px-2 !py-1.5`;
   const iconButton = `${secondaryButtonClass} !px-2 !py-1.5`;
   const alignIcons = { left: AlignLeft, center: AlignCenter, right: AlignRight } as const;
+
+  const placeButtons: [AlignTo, string][] = [
+    ['left', 'Left'],
+    ['center', 'Center'],
+    ['right', 'Right'],
+    ['top', 'Top'],
+    ['middle', 'Middle'],
+    ['bottom', 'Bottom'],
+  ];
+  function place(to: AlignTo) {
+    const box = measure();
+    if (box) set(alignBox(box, to));
+  }
+  /** Height preset for images; the width follows the image's current aspect ratio. */
+  function imageSize(h: number) {
+    if (layer.type !== 'image') return;
+    set({ h, w: Math.min(100, Math.round(((layer.w / layer.h) * h) * 100) / 100) });
+  }
 
   const hrefInvalid = $derived(layer.type === 'button' && layer.href !== '' && safeHref(layer.href) === null);
 
@@ -90,12 +114,30 @@
 
 {#snippet sizeSelect(current: string)}
   <div>
-    <label for="layer-size" class={label}>Size</label>
-    <select id="layer-size" value={current} class={inputClass} onchange={(e) => set({ size: e.currentTarget.value })}>
+    <span class={label} id="layer-size-label">Size</span>
+    <div role="group" aria-labelledby="layer-size-label" class="grid grid-cols-3 gap-1">
       {#each SIZES as size (size)}
-        <option value={size}>{SIZE_LABEL[size]}</option>
+        <button
+          type="button"
+          aria-pressed={current === size}
+          onclick={() => set({ size })}
+          class="{iconButton} text-xs {current === size ? '!border-brand-600 !bg-accent' : ''}"
+        >
+          {SIZE_LABEL[size]}
+        </button>
       {/each}
-    </select>
+    </div>
+  </div>
+{/snippet}
+
+{#snippet alignTo()}
+  <div>
+    <span class={label} id="layer-place-label">Align to slide</span>
+    <div role="group" aria-labelledby="layer-place-label" class="grid grid-cols-3 gap-1">
+      {#each placeButtons as [to, text] (to)}
+        <button type="button" class="{iconButton} text-xs" onclick={() => place(to)}>{text}</button>
+      {/each}
+    </div>
   </div>
 {/snippet}
 
@@ -127,13 +169,23 @@
     <div class="grid grid-cols-2 gap-3">
       <div>
         <label for="layer-role" class={label}>Role</label>
-        <select id="layer-role" value={layer.role} class={inputClass} onchange={(e) => set({ role: e.currentTarget.value })}>
+        <select id="layer-role" value={layer.role} class={inputClass} onchange={(e) => set({ role: e.currentTarget.value, size: DEFAULT_SIZE[e.currentTarget.value as 'heading'] })}>
           {#each ROLES as role (role)}
             <option value={role}>{ROLE_LABEL[role]}</option>
           {/each}
         </select>
       </div>
-      {@render sizeSelect(layer.size)}
+    </div>
+    {@render sizeSelect(layer.size)}
+    <div>
+      <span class={label} id="layer-width-label">Text width</span>
+      <div role="group" aria-labelledby="layer-width-label" class="grid grid-cols-3 gap-1">
+        {#each WIDTH_PRESETS as preset (preset.w)}
+          <button type="button" aria-pressed={layer.w === preset.w} onclick={() => set({ w: preset.w })} class="{iconButton} text-xs {layer.w === preset.w ? '!border-brand-600 !bg-accent' : ''}">
+            {preset.label}
+          </button>
+        {/each}
+      </div>
     </div>
     {#if layer.role === 'heading'}
       <div>
@@ -245,6 +297,17 @@
       {/if}
     </div>
     <div>
+      <span class={label} id="layer-img-size-label">Size</span>
+      <div role="group" aria-labelledby="layer-img-size-label" class="grid grid-cols-3 gap-1">
+        {#each IMAGE_PRESETS as preset (preset.h)}
+          <button type="button" aria-pressed={Math.abs(layer.h - preset.h) < 0.6} onclick={() => imageSize(preset.h)} class="{iconButton} text-xs {Math.abs(layer.h - preset.h) < 0.6 ? '!border-brand-600 !bg-accent' : ''}">
+            {preset.label}
+          </button>
+        {/each}
+      </div>
+      <p class="mt-1 text-xs text-muted-foreground">Resizing keeps the aspect ratio (hold Shift on a corner to stretch).</p>
+    </div>
+    <div>
       <label for="layer-radius" class={label}>Corners</label>
       <select id="layer-radius" value={layer.radius} class={inputClass} onchange={(e) => set({ radius: e.currentTarget.value })}>
         {#each RADII as radius (radius)}
@@ -254,16 +317,18 @@
     </div>
   {/if}
 
+  {@render alignTo()}
+
   <fieldset class="space-y-3 rounded-lg border border-border bg-surface-alt p-3">
     <legend class="px-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">Position &amp; size (%)</legend>
     <div class="grid grid-cols-2 gap-3">
       <div>
         <label for="layer-x" class={label}>X</label>
-        <input id="layer-x" type="number" min="0" max="100" step="0.5" value={Math.round(layer.x * 10) / 10} class={numberInput} oninput={(e) => geometry('x', e)} />
+        <input id="layer-x" type="number" min="0" max="100" step="1" value={Math.round(layer.x * 10) / 10} class={numberInput} oninput={(e) => geometry('x', e)} />
       </div>
       <div>
         <label for="layer-y" class={label}>Y</label>
-        <input id="layer-y" type="number" min="0" max="100" step="0.5" value={Math.round(layer.y * 10) / 10} class={numberInput} oninput={(e) => geometry('y', e)} />
+        <input id="layer-y" type="number" min="0" max="100" step="1" value={Math.round(layer.y * 10) / 10} class={numberInput} oninput={(e) => geometry('y', e)} />
       </div>
       {#if 'w' in layer}
         <div>

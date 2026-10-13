@@ -3,7 +3,7 @@
  * z-order and slide ordering. No DOM, no Svelte, no `astro:*`, so it is unit-testable.
  * All geometry is in percent of the slide.
  */
-import type { Layer } from './carousel-overlay';
+import { SAFE_MARGIN, WIDTH_PRESETS, type Layer } from './carousel-overlay';
 
 export interface Box {
     x: number;
@@ -14,7 +14,8 @@ export interface Box {
 
 export const MIN_SIZE = 2;
 export const SNAP_THRESHOLD = 1.2;
-export const NUDGE = 0.5;
+export const GRID = 1;
+export const NUDGE = 1;
 export const NUDGE_BIG = 2;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -93,17 +94,20 @@ export function snapMove(
     others: Box[],
     threshold = SNAP_THRESHOLD,
 ): { x: number; y: number; guides: Guides } {
-    const vTargets = [0, 50, 100];
-    const hTargets = [0, 50, 100];
+    // Slide edges, safe-area margins and the centre; other layers add their edges and centres.
+    const vTargets = [0, SAFE_MARGIN, 50, 100 - SAFE_MARGIN, 100];
+    const hTargets = [0, SAFE_MARGIN, 50, 100 - SAFE_MARGIN, 100];
     for (const other of others) {
         vTargets.push(other.x, other.x + other.w / 2, other.x + other.w);
         hTargets.push(other.y, other.y + other.h / 2, other.y + other.h);
     }
     const sx = snapAxis(box.x, box.w, vTargets, threshold);
     const sy = snapAxis(box.y, box.h, hTargets, threshold);
+    // Without a guide hit, positions fall on the 1% grid.
+    const grid = (value: number) => Math.round(value / GRID) * GRID;
     return {
-        x: box.x + sx.delta,
-        y: box.y + sy.delta,
+        x: sx.guide === null ? grid(box.x) : box.x + sx.delta,
+        y: sy.guide === null ? grid(box.y) : box.y + sy.delta,
         guides: { v: sx.guide === null ? [] : [sx.guide], h: sy.guide === null ? [] : [sy.guide] },
     };
 }
@@ -160,6 +164,32 @@ export function resizeBox(
         if (y < 0 || y + h > 100) return start;
     }
     return { x, y, w, h };
+}
+
+/** Snaps a text width to the nearest preset (within `threshold`), otherwise to the 1% grid. */
+export function snapWidth(w: number, threshold = 2.5): number {
+    const preset = WIDTH_PRESETS.find((p) => Math.abs(p.w - w) <= threshold);
+    return preset ? preset.w : Math.max(MIN_SIZE, Math.round(w / GRID) * GRID);
+}
+
+export type AlignTo = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
+
+/** New x or y that aligns `box` to the safe area (left/right/top/bottom) or the slide centre. */
+export function alignBox(box: Box, to: AlignTo): { x: number } | { y: number } {
+    switch (to) {
+        case 'left':
+            return { x: SAFE_MARGIN };
+        case 'right':
+            return { x: 100 - SAFE_MARGIN - box.w };
+        case 'center':
+            return { x: (100 - box.w) / 2 };
+        case 'top':
+            return { y: SAFE_MARGIN };
+        case 'bottom':
+            return { y: 100 - SAFE_MARGIN - box.h };
+        case 'middle':
+            return { y: (100 - box.h) / 2 };
+    }
 }
 
 // ---------------------------------------------------------------------------

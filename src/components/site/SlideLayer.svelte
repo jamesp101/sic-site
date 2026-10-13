@@ -5,7 +5,8 @@
     BORDER_COLOR_CLASS,
     ON_COLOR_CLASS,
     RADIUS_CLASS,
-    SIZE_CQW,
+    TYPE_SCALE,
+    scaleKind,
     TEXT_COLOR_CLASS,
     TYPE_LABEL,
     layerLabel,
@@ -33,7 +34,8 @@
     if ('h' in layer) parts.push(`height:${layer.h}%`);
     if (layer.opacity < 100) parts.push(`opacity:${layer.opacity / 100}`);
     if (layer.rotation) parts.push(`transform:rotate(${layer.rotation}deg)`);
-    if ('size' in layer) parts.push(`--fs:${SIZE_CQW[layer.size]}`);
+    const kind = scaleKind(layer);
+    if (kind && 'size' in layer) parts.push(`--fs:${TYPE_SCALE[kind][layer.size]}`);
     return parts.join(';');
   });
 
@@ -54,10 +56,10 @@
   const buttonClass = $derived(
     layer.type === 'button'
       ? [
-          'sl sl-fs inline-flex items-center gap-[0.6em] rounded-xl px-[1.5em] py-[0.8em] font-semibold uppercase tracking-widest leading-none',
+          'sl sl-fs inline-flex min-w-[10em] items-center justify-center gap-[0.6em] rounded-xl border-2 px-[1.5em] py-[0.8em] font-semibold uppercase tracking-widest leading-none',
           layer.variant === 'solid'
-            ? `${BG_COLOR_CLASS[layer.color]} ${ON_COLOR_CLASS[layer.color]} shadow-brand-md`
-            : `border-2 border-current ${TEXT_COLOR_CLASS[layer.color]}`,
+            ? `border-transparent ${BG_COLOR_CLASS[layer.color]} ${ON_COLOR_CLASS[layer.color]} shadow-brand-md`
+            : `border-current ${TEXT_COLOR_CLASS[layer.color]}`,
           !preview && 'transition hover:-translate-y-0.5',
         ]
           .filter(Boolean)
@@ -133,8 +135,8 @@
     margin: 0;
   }
   :global(.sl-fs) {
-    /* --min-fs is set by the public carousel (12 px floor); the admin canvas stays exact. */
-    font-size: max(var(--min-fs, 0px), calc(var(--fs) * 1cqw));
+    /* One formula on desktop and mobile: --k widens the scale in the stacked layout. */
+    font-size: max(var(--min-fs, 0px), min(var(--max-fs, 100rem), calc(var(--fs) * var(--k, 1) * 1cqw)));
   }
   :global(.sl-img) {
     display: block;
@@ -155,7 +157,9 @@
       align-self: stretch;
     }
     :global(.sl-fs) {
-      font-size: clamp(0.875rem, calc(var(--fs) * 2.4cqw), 2.75rem);
+      --k: 2.4;
+      --min-fs: 0.875rem;
+      --max-fs: 2.75rem;
     }
     :global(.sl-shape) {
       display: none;

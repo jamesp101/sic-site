@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vite-plus/test';
 import {
+    alignBox,
     assignOrders,
+    snapWidth,
     clampToSlide,
     commit,
     createHistory,
@@ -47,7 +49,7 @@ describe('snapMove', () => {
         const centred = snapMove({ x: 24.5, y: 10, w: 50, h: 10 }, []);
         expect(centred.x).toBeCloseTo(25);
         expect(centred.guides.v).toEqual([50]);
-        const edge = snapMove({ x: 0.8, y: 99.2 - 10, w: 20, h: 10 }, []);
+        const edge = snapMove({ x: 0.8, y: 95.2, w: 20, h: 4 }, []);
         expect(edge.x).toBe(0);
         expect(edge.guides.h).toEqual([100]);
     });
@@ -114,5 +116,31 @@ describe('assignOrders', () => {
         expect(assignOrders([5, 1, 9])).toEqual([1, 5, 9]);
         expect(assignOrders([3, 3, 4])).toEqual([3, 4, 5]);
         expect(assignOrders([])).toEqual([]);
+    });
+});
+
+describe('grid, safe area and presets', () => {
+    test('positions fall on the 1% grid and snap to the safe margin', () => {
+        expect(snapMove({ x: 20.4, y: 30.6, w: 10, h: 10 }, [])).toMatchObject({ x: 20, y: 31 });
+        const safe = snapMove({ x: 6.7, y: 40, w: 10, h: 10 }, []);
+        expect(safe.x).toBe(6);
+        expect(safe.guides.v).toEqual([6]);
+    });
+
+    test('text widths snap to presets, otherwise to the grid', () => {
+        expect(snapWidth(41.5)).toBe(40);
+        expect(snapWidth(54)).toBe(55);
+        expect(snapWidth(74)).toBe(75);
+        expect(snapWidth(63.4)).toBe(63);
+    });
+
+    test('align buttons target the safe area and centre', () => {
+        const box = { x: 30, y: 30, w: 20, h: 10 };
+        expect(alignBox(box, 'left')).toEqual({ x: 6 });
+        expect(alignBox(box, 'right')).toEqual({ x: 74 });
+        expect(alignBox(box, 'center')).toEqual({ x: 40 });
+        expect(alignBox(box, 'top')).toEqual({ y: 6 });
+        expect(alignBox(box, 'bottom')).toEqual({ y: 84 });
+        expect(alignBox(box, 'middle')).toEqual({ y: 45 });
     });
 });
