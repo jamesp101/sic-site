@@ -8,3 +8,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # Pinned to the versions nixpkgs ships in devenv.nix (Playwright browsers, Prisma schema engine);
+      # bump together with devenv.lock, not on their own.
+      - dependency-name: '@playwright/test'
+      - dependency-name: prisma
+      - dependency-name: '@prisma/*'

@@ -2,12 +2,22 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [master]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  ci:
+  sqlite:
+    name: Checks + e2e (SQLite, devenv)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
@@ -16,6 +26,58 @@ jobs:
           name: devenv
       - name: Install devenv
         run: nix profile install nixpkgs#devenv
-      # Same single command as local: install, migrate + seed SQLite, vp run ci (check, templates, tests, build, e2e).
+      # Same single command as local: install, migrate + seed SQLite, vp run ci
+      # (format, lint, types, template types, unit tests, build, e2e).
       - name: devenv test
         run: devenv test
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-sqlite
+          path: test-results/
+          retention-days: 7
+
+  postgres:
+    name: Build + e2e (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: sic
+          POSTGRES_PASSWORD: sic
+          POSTGRES_DB: sic_e2e
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U sic -d sic_e2e"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Selects the PostgreSQL provider for schema rendering, client generation, build and e2e.
+      DATABASE_URL: postgresql://sic:sic@localhost:5432/sic_e2e
+      E2E_DATABASE_URL: postgresql://sic:sic@localhost:5432/sic_e2e
+      BETTER_AUTH_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install (renders the PostgreSQL schema and generates the client)
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build
+        run: pnpm exec astro build
+      - name: e2e against PostgreSQL
+        run: pnpm exec playwright test
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-postgres
+          path: test-results/
+          retention-days: 7
