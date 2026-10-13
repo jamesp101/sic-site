@@ -79,12 +79,18 @@
     initialId,
     superadmin,
     lockedDepartmentId,
+    scopeName = null,
+    defaultDepartmentId = null,
   }: {
     slides: DesignerSlide[];
     departments: { id: number; name: string }[];
     initialId: number | null;
     superadmin: boolean;
     lockedDepartmentId: number | null;
+    /** Current admin scope label (superadmins), shown under the title. */
+    scopeName?: string | null;
+    /** Department preselected for a new slide (the scoped department; null = main page). */
+    defaultDepartmentId?: number | null;
   } = $props();
 
   function fromSlide(slide: DesignerSlide): Draft {
@@ -114,7 +120,6 @@
   let uploading = $state(false);
   let errorMessage = $state('');
   let status = $state('');
-  let departmentFilter = $state('');
   let showVisibleArea = $state(true);
   let deleteKey = $state<string | null>(null);
   let deleting = $state(false);
@@ -123,13 +128,6 @@
   let discarding = false;
   let fileInput = $state<HTMLInputElement | null>(null);
 
-  const visible = $derived(
-    drafts.filter((draft) => {
-      if (!superadmin || draft.id === null || departmentFilter === '') return true;
-      if (departmentFilter === 'main') return draft.departmentId === null;
-      return String(draft.departmentId) === departmentFilter;
-    }),
-  );
   const active = $derived(drafts.find((draft) => draft.key === activeKey) ?? null);
   const layers = $derived(active?.history.present ?? []);
   const selectedIndex = $derived(layers.findIndex((layer) => layer.id === selectedId));
@@ -142,7 +140,7 @@
   const legacyPending = $derived(active?.baseline === LEGACY);
 
   const strip = $derived<StripSlide[]>(
-    visible.map((draft) => ({
+    drafts.map((draft) => ({
       key: draft.key,
       id: draft.id,
       imageUrl: draft.previewUrl ?? draft.imageUrl,
@@ -156,7 +154,7 @@
 
   // Keep the open slide inside the filtered strip; selecting a slide or layer picks the matching panel.
   $effect(() => {
-    if (activeKey !== null && !visible.some((draft) => draft.key === activeKey)) activeKey = visible[0]?.key ?? null;
+    if (activeKey !== null && !drafts.some((draft) => draft.key === activeKey)) activeKey = drafts[0]?.key ?? null;
   });
   $effect(() => {
     tab = selectedId ? 'layer' : 'slide';
@@ -392,7 +390,6 @@
 
   function addSlide() {
     if (drafts.some((draft) => draft.id === null)) return;
-    const filterDepartment = departmentFilter && departmentFilter !== 'main' ? Number(departmentFilter) : null;
     drafts = [
       ...drafts,
       {
@@ -401,7 +398,7 @@
         imageUrl: null,
         file: null,
         previewUrl: null,
-        departmentId: lockedDepartmentId ?? filterDepartment,
+        departmentId: lockedDepartmentId ?? defaultDepartmentId,
         showOnMain: true,
         title: '',
         history: createHistory<Layer[]>([]),
@@ -498,7 +495,7 @@
   }
 
   function moveSlide(key: string, direction: -1 | 1) {
-    const ids = visible.flatMap((draft) => (draft.id === null ? [] : [draft.id]));
+    const ids = drafts.flatMap((draft) => (draft.id === null ? [] : [draft.id]));
     const from = ids.indexOf(Number(key));
     const to = from + direction;
     if (from < 0 || to < 0 || to >= ids.length) return;
@@ -558,10 +555,10 @@
       }
     }
     if (draft.previewUrl) URL.revokeObjectURL(draft.previewUrl);
-    const index = visible.findIndex((item) => item.key === draft.key);
+    const index = drafts.findIndex((item) => item.key === draft.key);
     drafts = drafts.filter((item) => item.key !== draft.key);
     if (activeKey === draft.key) {
-      const rest = visible.filter((item) => item.key !== draft.key);
+      const rest = drafts.filter((item) => item.key !== draft.key);
       const neighbour = rest[Math.min(index, rest.length - 1)];
       if (neighbour) selectSlide(neighbour.key);
       else activeKey = null;
@@ -602,17 +599,11 @@
     <!-- Slides -->
     <aside aria-label="Slides" class="flex min-h-0 flex-col gap-3 lg:overflow-hidden">
       <h1 class="text-lg font-bold text-foreground">Slide designer</h1>
-      {#if superadmin}
-        <div>
-          <label for="slide-filter" class="mb-1 block text-xs font-semibold text-muted-foreground">Show slides for</label>
-          <select id="slide-filter" bind:value={departmentFilter} class={inputClass}>
-            <option value="">All slides</option>
-            <option value="main">Main page only</option>
-            {#each departments as department (department.id)}
-              <option value={String(department.id)}>{department.name}</option>
-            {/each}
-          </select>
-        </div>
+      {#if scopeName}
+        <p class="text-xs text-muted-foreground" data-testid="scope-indicator">
+          Showing: <span class="font-semibold text-foreground">{scopeName}</span> ·
+          <button type="button" data-scope-change class="rounded-sm font-semibold text-link underline underline-offset-2 hover:no-underline focus-visible:ring-2 focus-visible:ring-ring">change</button>
+        </p>
       {/if}
       <SlideStrip
         slides={strip}

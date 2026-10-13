@@ -16,3 +16,16 @@ export interface NavItem {
     href: string;
     icon?: import('svelte').Component<{ class?: string }>;
 }
+
+export interface ScopeOption {
+    id: number;
+    name: string;
+    logoUrl: string | null;
+}
+
+/** Resolved admin scope as shown in the sidebar switcher. */
+export interface ScopeSummary {
+    kind: 'all' | 'main' | 'department';
+    id: number | null;
+    label: string;
+}

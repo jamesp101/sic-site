@@ -2,6 +2,7 @@
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import HeroSectionForm from '@/components/admin/hero-sections/HeroSectionForm.svelte';
 import AppLayout from '@/layouts/AppLayout.astro';
+import { scopeDefaultDepartment } from '@/lib/server/admin-scope';
 import { isSuperAdmin, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
 import { db } from '@/lib/server/db';
@@ -34,6 +35,11 @@ const departments = await db.department.findMany({
             description="Design a new hero block for the landing page or a department page with the visual editor."
             backHref="/admin/hero-sections"
         />
-        <HeroSectionForm client:load {departments} isSuperAdmin={isSuperAdmin(actor)} />
+        <HeroSectionForm
+            client:load
+            {departments}
+            isSuperAdmin={isSuperAdmin(actor)}
+            defaultDepartmentId={scopeDefaultDepartment(Astro.locals.adminScope) ?? null}
+        />
     </div>
 </AppLayout>

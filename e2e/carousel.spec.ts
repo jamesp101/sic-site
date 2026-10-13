@@ -296,7 +296,7 @@ test.describe('department user', () => {
         expect((await page.goto('/admin/carousels'))?.status()).toBe(200);
         await expect(page.getByRole('heading', { level: 1, name: 'Slide designer' })).toBeVisible();
         await expect(page.locator(`[data-slide-id][aria-label*="${RUN}"]`)).toHaveCount(0);
-        await expect(page.getByLabel('Show slides for')).toHaveCount(0);
+        await expect(page.getByTestId('scope-static')).toBeVisible();
 
         const origin = new URL(page.url()).origin;
         const overlay = JSON.stringify({ v: 1, layers: [] });

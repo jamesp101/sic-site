@@ -27,10 +27,13 @@
   let {
     departments,
     isSuperAdmin,
+    defaultDepartmentId = null,
     post = null,
   }: {
     departments: { id: number; name: string }[];
     isSuperAdmin: boolean;
+    /** Admin scope's department, preselected when creating (superadmins may change it). */
+    defaultDepartmentId?: number | null;
     post?: PostValues | null;
   } = $props();
 
@@ -48,7 +51,7 @@
   let type = $state(initial?.type ?? 'article');
   let startDate = $state(toLocalInput(initial?.startDate ?? null));
   let endDate = $state(toLocalInput(initial?.endDate ?? null));
-  let departmentId = $state(initial?.departmentId ? String(initial.departmentId) : isSuperAdmin ? '' : String(untrack(() => departments)[0]?.id ?? ''));
+  let departmentId = $state(initial?.departmentId ? String(initial.departmentId) : isSuperAdmin ? (initial ? '' : String(untrack(() => defaultDepartmentId) ?? '')) : String(untrack(() => departments)[0]?.id ?? ''));
   let isFeatured = $state(initial?.isFeatured ?? false);
   let highlightImage = $state<File | null>(null);
   let slugEdited = $state(initial !== null);

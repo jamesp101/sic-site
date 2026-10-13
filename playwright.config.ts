@@ -9,6 +9,10 @@ const UPLOADS = `storage/e2e-uploads-${PORT}`;
 export default defineConfig({
     testDir: 'e2e',
     fullyParallel: true,
+    // All workers share one Node server (SSR + uploads + editors); more than 3 starves it and
+    // turns hydration waits into flaky timeouts.
+    workers: process.env.CI ? 2 : 3,
+    timeout: 60_000,
     forbidOnly: !!process.env.CI,
     retries: process.env.CI ? 1 : 0,
     reporter: process.env.CI ? 'github' : 'list',

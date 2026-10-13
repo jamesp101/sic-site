@@ -5,7 +5,13 @@ import NavLinksEditor from '@/components/admin/navlinks/NavLinksEditor.svelte';
 import { db } from '@/lib/server/db';
 import { requireSuperAdmin } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
-import { PAGE_SUGGESTIONS, STATIC_PATHS, DEPARTMENTS_MENU_URL, type LinkSuggestion, type NavNode } from '@/lib/nav-tree';
+import {
+    PAGE_SUGGESTIONS,
+    STATIC_PATHS,
+    DEPARTMENTS_MENU_URL,
+    type LinkSuggestion,
+    type NavNode,
+} from '@/lib/nav-tree';
 
 try {
     requireSuperAdmin(Astro.locals.user);

@@ -10,7 +10,10 @@
 import { ClientRouter } from 'astro:transitions';
 import AdminShell from '@/components/admin/AdminShell.svelte';
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import { scopeLabel } from '@/lib/server/admin-scope';
 import { takeFlash } from '@/lib/server/flash';
+import { isSuperAdmin } from '@/lib/server/authz';
+import { publicUrl } from '@/lib/server/storage';
 
 interface Props {
     title: string;
@@ -19,6 +22,14 @@ interface Props {
 
 const { title, breadcrumbs = [] } = Astro.props;
 const user = Astro.locals.user!; // middleware redirects guests before any admin page renders
+
+const scope = Astro.locals.adminScope;
+const scopeSummary = { kind: scope.kind, id: scope.kind === 'department' ? scope.id : null, label: scopeLabel(scope) };
+const scopeDepartments = Astro.locals.adminDepartments.map((d) => ({
+    id: d.id,
+    name: d.name,
+    logoUrl: publicUrl(d.logoPath),
+}));
 
 const flash = await takeFlash(Astro);
 const sidebarOpen = Astro.cookies.get('sidebar_state')?.value !== 'false';
@@ -33,6 +44,9 @@ const currentPath = Astro.url.pathname.replace(/\/$/, '') || '/';
         {currentPath}
         {breadcrumbs}
         {sidebarOpen}
+        scope={scopeSummary}
+        {scopeDepartments}
+        scopeLocked={!isSuperAdmin(user)}
         {flash}
     >
         <slot />

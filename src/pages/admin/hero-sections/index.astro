@@ -3,9 +3,10 @@ import { ArrowUpDown, Eye, EyeOff, Pencil, Search, Sparkles } from '@lucide/svel
 import AddLink from '@/components/admin/shared/AddLink.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DeleteHeroSectionButton from '@/components/admin/hero-sections/DeleteHeroSectionButton.svelte';
-import { cardClass, iconLinkClass, selectClass, thClass } from '@/components/admin/ui';
+import { cardClass, iconLinkClass, thClass } from '@/components/admin/ui';
 import AppLayout from '@/layouts/AppLayout.astro';
-import { departmentFilter, isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { scopeWhere } from '@/lib/server/admin-scope';
+import { departmentFilter, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
 import { db } from '@/lib/server/db';
 import type { Prisma } from '@/generated/prisma/client';
@@ -19,20 +20,16 @@ try {
 
 const params = Astro.url.searchParams;
 const q = params.get('q')?.trim() ?? '';
-const location = params.get('location') ?? '';
 const sort = ['title', 'department', 'order', 'active'].includes(params.get('sort') ?? '')
     ? params.get('sort')!
     : 'order';
 const dir: 'asc' | 'desc' = params.get('dir') === 'desc' ? 'desc' : 'asc';
 
+const scope = Astro.locals.adminScope;
 const where: Prisma.HeroSectionWhereInput = {
     ...departmentFilter(actor),
     ...(q ? { OR: [{ title: { contains: q } }, { content: { contains: q } }] } : {}),
-    ...(location === 'welcome'
-        ? { departmentId: null }
-        : /^\d+$/.test(location) && isSuperAdmin(actor)
-          ? { departmentId: Number(location) }
-          : {}),
+    ...scopeWhere(scope),
 };
 const orderBy: Prisma.HeroSectionOrderByWithRelationInput =
     sort === 'title'
@@ -43,12 +40,18 @@ const orderBy: Prisma.HeroSectionOrderByWithRelationInput =
             ? { isActive: dir }
             : { order: dir };
 
-const [sections, departments] = await Promise.all([
-    db.heroSection.findMany({ where, orderBy, include: { department: { select: { name: true } } } }),
-    isSuperAdmin(actor)
-        ? db.department.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } })
-        : Promise.resolve([]),
-]);
+const sections = await db.heroSection.findMany({
+    where,
+    orderBy,
+    include: { department: { select: { name: true } } },
+});
+const showLocation = scope.kind === 'all';
+const columns = [
+    ['title', 'Section'],
+    ...(showLocation ? [['department', 'Page location']] : []),
+    ['order', 'Order'],
+    ['active', 'Status'],
+];
 
 function sortHref(field: string) {
     const next = new URL(Astro.url);
@@ -62,6 +65,7 @@ const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascendin
 <AppLayout title="Hero Sections" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Hero Sections' }]}>
     <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
         <PageHeader
+            scoped
             title="Hero sections"
             description="Manage rich content blocks for the landing page and department pages."
         >
@@ -88,19 +92,6 @@ const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascendin
                 />
             </div>
             <div class="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-center md:w-auto">
-                {departments.length > 0 && (
-                    <select name="location" aria-label="Filter by page" class={selectClass}>
-                        <option value="">All pages / departments</option>
-                        <option value="welcome" selected={location === 'welcome'}>
-                            Welcome page (main landing)
-                        </option>
-                        {departments.map((d) => (
-                            <option value={String(d.id)} selected={String(d.id) === location}>
-                                {d.name}
-                            </option>
-                        ))}
-                    </select>
-                )}
                 <input type="hidden" name="sort" value={sort} />
                 <input type="hidden" name="dir" value={dir} />
                 <button
@@ -109,7 +100,7 @@ const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascendin
                 >
                     Filter
                 </button>
-                {(q || location) && (
+                {q && (
                     <a
                         href="/admin/hero-sections"
                         class="rounded-lg border border-border-strong px-3 py-2 text-center text-sm font-semibold text-muted-foreground hover:bg-surface-alt"
@@ -125,12 +116,7 @@ const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascendin
                 <table class="w-full border-collapse text-left">
                     <thead>
                         <tr class="border-b border-border bg-surface-alt">
-                            {[
-                                ['title', 'Section'],
-                                ['department', 'Page location'],
-                                ['order', 'Order'],
-                                ['active', 'Status'],
-                            ].map(([field, label]) => (
+                            {columns.map(([field, label]) => (
                                 <th scope="col" class={thClass} aria-sort={ariaSort(field)}>
                                     <a href={sortHref(field)} class="inline-flex items-center gap-1 hover:text-link">
                                         {label} <ArrowUpDown class="h-3.5 w-3.5" aria-hidden="true" />
@@ -161,17 +147,19 @@ const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascendin
                                         </div>
                                     </div>
                                 </td>
-                                <td class="px-6 py-4">
-                                    {hs.department ? (
-                                        <span class="rounded bg-secondary px-2 py-1 text-xs font-semibold text-secondary-foreground">
-                                            {hs.department.name}
-                                        </span>
-                                    ) : (
-                                        <span class="rounded bg-file-archive-bg px-2 py-1 text-xs font-semibold text-file-archive-fg">
-                                            Welcome page
-                                        </span>
-                                    )}
-                                </td>
+                                {showLocation && (
+                                    <td class="px-6 py-4">
+                                        {hs.department ? (
+                                            <span class="rounded bg-secondary px-2 py-1 text-xs font-semibold text-secondary-foreground">
+                                                {hs.department.name}
+                                            </span>
+                                        ) : (
+                                            <span class="rounded bg-file-archive-bg px-2 py-1 text-xs font-semibold text-file-archive-fg">
+                                                Welcome page
+                                            </span>
+                                        )}
+                                    </td>
+                                )}
                                 <td class="px-6 py-4 font-mono text-xs text-muted-foreground">#{hs.order}</td>
                                 <td class="px-6 py-4">
                                     {hs.isActive ? (
@@ -205,7 +193,10 @@ const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascendin
                         ))}
                         {sections.length === 0 && (
                             <tr>
-                                <td colspan="5" class="px-6 py-12 text-center text-muted-foreground italic">
+                                <td
+                                    colspan={columns.length + 1}
+                                    class="px-6 py-12 text-center text-muted-foreground italic"
+                                >
                                     No hero sections found.
                                 </td>
                             </tr>

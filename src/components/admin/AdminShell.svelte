@@ -7,13 +7,16 @@
   import AppSidebar from '@/components/AppSidebar.svelte';
   import AppSidebarHeader from '@/components/AppSidebarHeader.svelte';
   import { Toaster } from '@/components/ui/sonner';
-  import type { AdminUser, BreadcrumbItem } from './types';
+  import type { AdminUser, BreadcrumbItem, ScopeOption, ScopeSummary } from './types';
 
   let {
     user,
     currentPath,
     breadcrumbs = [],
     sidebarOpen = true,
+    scope,
+    scopeDepartments,
+    scopeLocked,
     flash = null,
     children,
   }: {
@@ -21,6 +24,9 @@
     currentPath: string;
     breadcrumbs?: BreadcrumbItem[];
     sidebarOpen?: boolean;
+    scope: ScopeSummary;
+    scopeDepartments: ScopeOption[];
+    scopeLocked: boolean;
     flash?: { type: 'success' | 'error'; message: string } | null;
     children?: Snippet;
   } = $props();
@@ -31,7 +37,7 @@
 </script>
 
 <AppShell {sidebarOpen}>
-  <AppSidebar {user} {currentPath} />
+  <AppSidebar {user} {currentPath} {scope} {scopeDepartments} {scopeLocked} />
   <AppContent class="overflow-x-hidden">
     <AppSidebarHeader {breadcrumbs} />
     {@render children?.()}

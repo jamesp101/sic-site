@@ -20,10 +20,13 @@
   let {
     departments,
     isSuperAdmin,
+    defaultDepartmentId = null,
     section = null,
   }: {
     departments: { id: number; name: string }[];
     isSuperAdmin: boolean;
+    /** Admin scope's department, preselected when creating (superadmins may change it). */
+    defaultDepartmentId?: number | null;
     section?: HeroValues | null;
   } = $props();
 
@@ -32,7 +35,7 @@
   let content = $state(initial?.content ?? '');
   let order = $state(initial?.order ?? 0);
   let isActive = $state(initial?.isActive ?? true);
-  let departmentId = $state(initial?.departmentId ? String(initial.departmentId) : isSuperAdmin ? '' : String(untrack(() => departments)[0]?.id ?? ''));
+  let departmentId = $state(initial?.departmentId ? String(initial.departmentId) : isSuperAdmin ? (initial ? '' : String(untrack(() => defaultDepartmentId) ?? '')) : String(untrack(() => departments)[0]?.id ?? ''));
 
   let processing = $state(false);
   let errors = $state<Record<string, string>>({});

@@ -1,5 +1,7 @@
 import { defineMiddleware } from 'astro:middleware';
+import { parseScope, resolveScope, SCOPE_COOKIE } from '@/lib/server/admin-scope';
 import { auth } from '@/lib/server/auth';
+import { db } from '@/lib/server/db';
 
 const PROTECTED = [
     /^\/dashboard(\/|$)/,
@@ -8,6 +10,7 @@ const PROTECTED = [
     /^\/confirm-password$/,
     /^\/verify-email$/,
 ];
+const SCOPED = [/^\/dashboard(\/|$)/, /^\/admin(\/|$)/, /^\/settings(\/|$)/];
 const PRIVATE = [...PROTECTED, /^\/api\//, /^\/login$/, /^\/forgot-password$/, /^\/reset-password$/];
 
 export const onRequest = defineMiddleware(async (context, next) => {
@@ -35,6 +38,20 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (!context.locals.user && PROTECTED.some((re) => re.test(pathname))) {
         const target = `/login?redirect=${encodeURIComponent(pathname + context.url.search)}`;
         return context.redirect(target, 302);
+    }
+
+    if (context.locals.user && SCOPED.some((re) => re.test(pathname))) {
+        // Validated on every request: unknown ids fall back to `all`, department users ignore the cookie.
+        const departments = await db.department.findMany({
+            orderBy: { name: 'asc' },
+            select: { id: true, name: true, slug: true, logoPath: true },
+        });
+        context.locals.adminDepartments = departments;
+        context.locals.adminScope = resolveScope(
+            context.locals.user,
+            parseScope(context.cookies.get(SCOPE_COOKIE)?.value),
+            departments,
+        );
     }
 
     const response = await next();

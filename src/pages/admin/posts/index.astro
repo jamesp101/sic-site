@@ -6,7 +6,8 @@ import DeletePostButton from '@/components/admin/posts/DeletePostButton.svelte';
 import { cardClass, formatDate, iconLinkClass, selectClass, thClass } from '@/components/admin/ui';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { POST_TYPES } from '@/lib/content-types';
-import { departmentFilter, isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { scopeWhere } from '@/lib/server/admin-scope';
+import { departmentFilter, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
 import { db } from '@/lib/server/db';
 import { publicUrl } from '@/lib/server/storage';
@@ -22,7 +23,6 @@ try {
 const params = Astro.url.searchParams;
 const q = params.get('q')?.trim() ?? '';
 const type = POST_TYPES.find((t) => t === params.get('type')) ?? '';
-const departmentParam = /^\d+$/.test(params.get('department') ?? '') ? Number(params.get('department')) : null;
 const featured = params.get('featured') === 'yes' ? true : params.get('featured') === 'no' ? false : null;
 const sort = ['title', 'type', 'department', 'featured', 'created'].includes(params.get('sort') ?? '')
     ? params.get('sort')!
@@ -30,11 +30,12 @@ const sort = ['title', 'type', 'department', 'featured', 'created'].includes(par
 const dir: 'asc' | 'desc' =
     params.get('dir') === 'asc' ? 'asc' : params.get('dir') === 'desc' ? 'desc' : sort === 'created' ? 'desc' : 'asc';
 
+const scope = Astro.locals.adminScope;
 const where: Prisma.PostWhereInput = {
     ...departmentFilter(actor),
+    ...scopeWhere(scope),
     ...(q ? { OR: [{ title: { contains: q } }, { content: { contains: q } }] } : {}),
     ...(type ? { type } : {}),
-    ...(departmentParam !== null && isSuperAdmin(actor) ? { departmentId: departmentParam } : {}),
     ...(featured !== null ? { isFeatured: featured } : {}),
 };
 const orderBy: Prisma.PostOrderByWithRelationInput =
@@ -48,16 +49,11 @@ const orderBy: Prisma.PostOrderByWithRelationInput =
               ? { isFeatured: dir }
               : { createdAt: dir };
 
-const [posts, departments] = await Promise.all([
-    db.post.findMany({
-        where,
-        orderBy,
-        include: { department: { select: { name: true } }, user: { select: { name: true } } },
-    }),
-    isSuperAdmin(actor)
-        ? db.department.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } })
-        : Promise.resolve([]),
-]);
+const posts = await db.post.findMany({
+    where,
+    orderBy,
+    include: { department: { select: { name: true } }, user: { select: { name: true } } },
+});
 
 function sortHref(field: string) {
     const next = new URL(Astro.url);
@@ -72,12 +68,24 @@ const typeClass: Record<string, string> = {
     announcement: 'bg-status-announcement-bg text-status-announcement-fg',
 };
 const typeIcon = { article: FileText, event: Calendar, announcement: Megaphone } as const;
-const filtered = Boolean(q || type || departmentParam !== null || featured !== null);
+const filtered = Boolean(q || type || featured !== null);
+/** A single department or main page: the Department column adds nothing. */
+const showDepartment = scope.kind === 'all';
+const columns = [
+    ['title', 'Post'],
+    ['type', 'Type'],
+    ...(showDepartment ? [['department', 'Department']] : []),
+    ['featured', 'Featured'],
+];
 ---
 
 <AppLayout title="Manage Posts" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Posts' }]}>
     <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
-        <PageHeader title="Posts" description="Create, edit or delete articles, announcements and campus events.">
+        <PageHeader
+            scoped
+            title="Posts"
+            description="Create, edit or delete articles, announcements and campus events."
+        >
             <AddLink href="/admin/posts/create">Create post</AddLink>
         </PageHeader>
 
@@ -109,16 +117,6 @@ const filtered = Boolean(q || type || departmentParam !== null || featured !== n
                         </option>
                     ))}
                 </select>
-                {departments.length > 0 && (
-                    <select name="department" aria-label="Filter by department" class={selectClass}>
-                        <option value="">All departments</option>
-                        {departments.map((d) => (
-                            <option value={String(d.id)} selected={d.id === departmentParam}>
-                                {d.name}
-                            </option>
-                        ))}
-                    </select>
-                )}
                 <select name="featured" aria-label="Filter by featured" class={selectClass}>
                     <option value="">All featured</option>
                     <option value="yes" selected={featured === true}>
@@ -152,12 +150,7 @@ const filtered = Boolean(q || type || departmentParam !== null || featured !== n
                 <table class="w-full border-collapse text-left">
                     <thead>
                         <tr class="border-b border-border bg-surface-alt">
-                            {[
-                                ['title', 'Post'],
-                                ['type', 'Type'],
-                                ['department', 'Department'],
-                                ['featured', 'Featured'],
-                            ].map(([field, label]) => (
+                            {columns.map(([field, label]) => (
                                 <th scope="col" class={thClass} aria-sort={ariaSort(field)}>
                                     <a href={sortHref(field)} class="inline-flex items-center gap-1 hover:text-link">
                                         {label} <ArrowUpDown class="h-3.5 w-3.5" aria-hidden="true" />
@@ -211,9 +204,11 @@ const filtered = Boolean(q || type || departmentParam !== null || featured !== n
                                             {post.type}
                                         </span>
                                     </td>
-                                    <td class="px-6 py-4 text-muted-foreground">
-                                        {post.department?.name ?? 'General (all departments)'}
-                                    </td>
+                                    {showDepartment && (
+                                        <td class="px-6 py-4 text-muted-foreground">
+                                            {post.department?.name ?? 'General (all departments)'}
+                                        </td>
+                                    )}
                                     <td class="px-6 py-4">
                                         {post.isFeatured ? (
                                             <span class="inline-flex items-center gap-1 rounded bg-file-archive-bg px-2 py-0.5 text-xs font-semibold text-file-archive-fg">
@@ -244,7 +239,10 @@ const filtered = Boolean(q || type || departmentParam !== null || featured !== n
                         })}
                         {posts.length === 0 && (
                             <tr>
-                                <td colspan="6" class="px-6 py-12 text-center text-muted-foreground italic">
+                                <td
+                                    colspan={columns.length + 2}
+                                    class="px-6 py-12 text-center text-muted-foreground italic"
+                                >
                                     No posts match your filters.
                                 </td>
                             </tr>

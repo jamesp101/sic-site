@@ -1,6 +1,7 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
   import { navigate } from 'astro:transitions/client';
+  import { untrack } from 'svelte';
   import { Folder, Tag, Upload } from '@lucide/svelte';
   import Field from '@/components/admin/shared/Field.svelte';
   import FormActions from '@/components/admin/shared/FormActions.svelte';
@@ -11,11 +12,14 @@
     departments,
     directories,
     isSuperAdmin,
+    defaultDepartmentId = null,
     maxMb = 20,
   }: {
     departments: { id: number; name: string }[];
     directories: string[];
     isSuperAdmin: boolean;
+    /** Admin scope's department, preselected (superadmins may change it). */
+    defaultDepartmentId?: number | null;
     maxMb?: number;
   } = $props();
 
@@ -23,7 +27,7 @@
   let fileName = $state('');
   let directory = $state('');
   let tags = $state('');
-  let departmentId = $state(isSuperAdmin ? '' : String(departments[0]?.id ?? ''));
+  let departmentId = $state(isSuperAdmin ? String(untrack(() => defaultDepartmentId) ?? '') : String(departments[0]?.id ?? ''));
   let processing = $state(false);
   let errors = $state<Record<string, string>>({});
   let message = $state('');

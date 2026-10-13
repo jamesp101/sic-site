@@ -57,7 +57,6 @@
 
   let viewMode = $state<'grid' | 'list'>('grid');
   let search = $state('');
-  let filterDept = $state('');
   let filterDir = $state('');
   let sortField = $state<SortField>('createdAt');
   let sortDesc = $state(true);
@@ -91,7 +90,6 @@
     const q = search.trim().toLowerCase();
     const rows = downloads.filter((d) => {
       if (q && !(d.fileName.toLowerCase().includes(q) || d.directory?.toLowerCase().includes(q) || d.tags.some((t) => t.toLowerCase().includes(q)))) return false;
-      if (filterDept && String(d.departmentId) !== filterDept) return false;
       if (filterDir === 'Uncategorized') return !d.directory;
       if (filterDir && d.directory !== filterDir) return false;
       return true;
@@ -114,7 +112,6 @@
 
   function resetFilters() {
     search = '';
-    filterDept = '';
     filterDir = '';
     sortField = 'createdAt';
     sortDesc = true;
@@ -204,10 +201,6 @@
       <input type="search" placeholder="Search filename, category, tags…" aria-label="Search files" bind:value={search} class="w-full rounded-lg border border-border-strong bg-surface py-2 pr-4 pl-10 text-sm shadow-brand-sm outline-none focus:border-brand-600" />
     </div>
     <div class="flex w-full flex-wrap items-center justify-end gap-2.5 md:w-auto">
-      <select bind:value={filterDept} aria-label="Filter by department" class={selectClass}>
-        <option value="">All departments</option>
-        {#each departments as dept (dept.id)}<option value={String(dept.id)}>{dept.name}</option>{/each}
-      </select>
       <select bind:value={filterDir} aria-label="Filter by category" class={selectClass}>
         <option value="">All categories</option>
         {#each folders as dir (dir.name)}<option value={dir.name}>{dir.name} ({dir.count})</option>{/each}

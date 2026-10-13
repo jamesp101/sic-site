@@ -1,10 +1,14 @@
 ---
+import ScopeIndicator from '@/components/admin/shared/ScopeIndicator.astro';
+
 interface Props {
     title: string;
     description?: string;
     backHref?: string;
+    /** Show the admin scope indicator under the title. */
+    scoped?: boolean;
 }
-const { title, description, backHref } = Astro.props;
+const { title, description, backHref, scoped = false } = Astro.props;
 ---
 
 <header class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -33,6 +37,11 @@ const { title, description, backHref } = Astro.props;
         <div>
             <h1 class="font-serif text-2xl font-bold tracking-tight text-foreground">{title}</h1>
             {description && <p class="mt-1 text-sm text-muted-foreground">{description}</p>}
+            {scoped && (
+                <div class="mt-1">
+                    <ScopeIndicator />
+                </div>
+            )}
         </div>
     </div>
     <div class="flex items-center gap-2 self-start md:self-auto">

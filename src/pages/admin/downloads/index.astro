@@ -2,6 +2,7 @@
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DownloadsManager from '@/components/admin/downloads/DownloadsManager.svelte';
 import AppLayout from '@/layouts/AppLayout.astro';
+import { scopeWhere } from '@/lib/server/admin-scope';
 import { departmentFilter, isSuperAdmin, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
 import { db } from '@/lib/server/db';
@@ -32,7 +33,7 @@ function parseTags(raw: string | null): string[] {
 
 const [rows, departments, directories] = await Promise.all([
     db.download.findMany({
-        where: departmentFilter(actor),
+        where: { ...departmentFilter(actor), ...scopeWhere(Astro.locals.adminScope) },
         orderBy: { createdAt: 'desc' },
         include: { department: { select: { name: true } } },
     }),
@@ -41,7 +42,14 @@ const [rows, departments, directories] = await Promise.all([
         orderBy: { name: 'asc' },
         select: { id: true, name: true },
     }),
-    db.downloadDirectory.findMany({ orderBy: { name: 'asc' } }),
+    // General folders (no department) are shared, so a department scope still lists them.
+    db.downloadDirectory.findMany({
+        where:
+            Astro.locals.adminScope.kind === 'department'
+                ? { OR: [{ departmentId: Astro.locals.adminScope.id }, { departmentId: null }] }
+                : scopeWhere(Astro.locals.adminScope),
+        orderBy: { name: 'asc' },
+    }),
 ]);
 
 const downloads = rows.map((row) => {
@@ -70,6 +78,7 @@ const folderRows = directories.map((d) => ({
 <AppLayout title="Downloads" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Downloads' }]}>
     <div class="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-6">
         <PageHeader
+            scoped
             title="Downloads"
             description="Upload and organise forms, manuals and resources for the public downloads page."
         />
