@@ -112,3 +112,35 @@ describe('driver selection', () => {
         expect(storage.publicUrl('posts/a.jpg')).toBe('/storage/posts/a.jpg');
     });
 });
+
+describe('s3 direct uploads', () => {
+    const S3 = {
+        STORAGE_DRIVER: 's3',
+        S3_BUCKET: 'sic',
+        S3_REGION: 'ap-southeast-1',
+        S3_PREFIX: 'site',
+        S3_ACCESS_KEY_ID: 'AKIATEST',
+        S3_SECRET_ACCESS_KEY: 'secret',
+    };
+
+    it('is enabled only for s3, which keeps multipart images under the Vercel request limit', async () => {
+        const s3 = await loadStorage(S3);
+        expect(s3.directUploads).toBe(true);
+        expect(s3.LIMITS.image).toBe(4 * s3.MB);
+
+        const local = await loadStorage({ UPLOAD_DIR: dir });
+        expect(local.directUploads).toBe(false);
+        await expect(local.presignUpload('downloads/a.pdf', 'application/pdf', 10)).rejects.toThrow(
+            'Direct uploads require STORAGE_DRIVER=s3',
+        );
+    });
+
+    it('presigns a PUT under the prefix that pins content type and length, without SDK checksums', async () => {
+        const storage = await loadStorage(S3);
+        const url = new URL(await storage.presignUpload('downloads/a.pdf', 'application/pdf', 1234));
+        expect(url.pathname).toBe('/site/downloads/a.pdf');
+        expect(url.searchParams.get('X-Amz-SignedHeaders')).toBe('content-length;content-type;host');
+        expect(url.searchParams.get('X-Amz-Expires')).toBe('600');
+        expect([...url.searchParams.keys()].filter((name) => /checksum/i.test(name))).toEqual([]);
+    });
+});

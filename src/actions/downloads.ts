@@ -3,7 +3,7 @@ import { z } from 'astro/zod';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { departmentForWrite, scopeDepartment } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
-import { isDirectUploadKey } from '@/lib/server/blob-upload';
+import { isDirectUploadKey } from '@/lib/server/direct-upload';
 import { directUploads, headUpload, LIMITS, MB, put, remove } from '@/lib/server/storage';
 
 const DEFAULT_DIRECTORY = 'General';
@@ -13,7 +13,7 @@ export const downloads = {
         accept: 'form',
         input: z.object({
             fileName: z.string().trim().min(1, 'The display name is required.').max(255),
-            // Multipart upload (local/s3 drivers, small files).
+            // Multipart upload (local driver).
             file: z
                 .instanceof(File, { error: 'Choose a file to upload.' })
                 .refine((file) => file.size > 0, 'Choose a file to upload.')
@@ -22,7 +22,7 @@ export const downloads = {
                     `The file must not be larger than ${LIMITS.download / MB} MB.`,
                 )
                 .optional(),
-            // Key of a file the browser already uploaded straight to Vercel Blob (`/api/admin/uploads/blob`).
+            // Key of a file the browser already uploaded straight to the S3 bucket (`/api/admin/uploads/direct`).
             uploadedKey: z.string().trim().max(255).optional(),
             tags: z.string().nullish(),
             directory: z.string().trim().max(255).nullish(),

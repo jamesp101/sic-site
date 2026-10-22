@@ -26,7 +26,7 @@ const TYPES: Record<string, string> = {
 
 /**
  * Serves uploaded files (and legacy Laravel /storage/* URLs) from the configured driver.
- * With S3_PUBLIC_URL set (or STORAGE_DRIVER=vercel-blob), inline requests redirect to the object URL;
+ * With S3_PUBLIC_URL set, inline requests redirect to the object URL;
  * `?download=` is always streamed here so the attachment filename is honoured.
  */
 export const GET: APIRoute = async ({ params, url, redirect }) => {
