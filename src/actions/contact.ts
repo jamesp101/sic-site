@@ -1,7 +1,8 @@
-import { defineAction } from 'astro:actions';
+import { ActionError, defineAction } from 'astro:actions';
 import { CONTACT_TO_ADDRESS } from 'astro:env/server';
 import { z } from 'astro/zod';
 import { sendMail } from '@/lib/server/mail';
+import { consumeRateLimit, RATE_LIMITS } from '@/lib/server/rate-limit';
 
 const oneLine = (max: number, message: string) =>
     z
@@ -31,9 +32,15 @@ export const contact = {
             /** Honeypot: real visitors never see or fill this. */
             website: z.string().optional(),
         }),
-        handler: async (input) => {
+        handler: async (input, context) => {
             // Bots that fill the honeypot get a normal-looking success and nothing is sent.
             if (input.website) return { sent: true };
+            if (!(await consumeRateLimit(`contact:${context.clientAddress}`, RATE_LIMITS.contact))) {
+                throw new ActionError({
+                    code: 'TOO_MANY_REQUESTS',
+                    message: 'Too many messages from your network. Please try again later.',
+                });
+            }
 
             await sendMail({
                 to: CONTACT_TO_ADDRESS,

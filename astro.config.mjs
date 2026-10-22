@@ -9,13 +9,22 @@ import 'dotenv/config';
 // Vercel builds (VERCEL=1 during `vercel build`, or ASTRO_ADAPTER=vercel) emit `.vercel/output`; everything else is a Node server.
 const useVercel = Boolean(process.env.VERCEL) || process.env.ASTRO_ADAPTER === 'vercel';
 
+// Node behind a reverse proxy: comma-separated public hostnames (build time). Only for these hosts does
+// Astro trust X-Forwarded-Host/-Proto/-For, so per-IP rate limits see real clients. Leave unset when
+// the server is reachable directly: anyone could then forge X-Forwarded-For.
+const allowedDomains = (process.env.ALLOWED_DOMAINS ?? '')
+    .split(',')
+    .map((hostname) => hostname.trim())
+    .filter(Boolean)
+    .map((hostname) => ({ hostname }));
+
 export default defineConfig({
     site: process.env.SITE_URL ?? 'http://localhost:4321',
     output: 'server',
     adapter: useVercel ? vercel() : node({ mode: 'standalone' }),
     trailingSlash: 'never',
     integrations: [svelte()],
-    security: { checkOrigin: true },
+    security: { checkOrigin: true, allowedDomains },
     // ClientRouter would prefetch every link by default; admin pages are `no-store`, so prefetched
     // HTML could never be reused. Keep prefetch opt-in (`data-astro-prefetch`).
     prefetch: { prefetchAll: false },

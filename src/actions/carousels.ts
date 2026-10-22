@@ -10,6 +10,7 @@ import { actorOf, guarded } from '@/lib/server/action-guard';
 import { AuthzError, departmentForWrite, scopeDepartment, type Actor } from '@/lib/server/authz';
 import { overlayImageSrcs, ownedImageKey, removeUnusedLayerImages, toDesignerSlide } from '@/lib/server/carousel-admin';
 import { imageFile } from '@/lib/server/image-file';
+import { consumeRateLimit, RATE_LIMITS } from '@/lib/server/rate-limit';
 import { LIMITS, publicUrl, put, read, remove } from '@/lib/server/storage';
 
 const overlayField = z.string().max(60_000, 'The slide design is too large.');
@@ -48,7 +49,13 @@ export const carousels = {
         input: z.object({ image: imageFile(LIMITS.image) }),
         handler: ({ image }, context) =>
             guarded(async () => {
-                actorOf(context);
+                const actor = actorOf(context);
+                if (!(await consumeRateLimit(`upload:${actor.id}`, RATE_LIMITS.upload))) {
+                    throw new ActionError({
+                        code: 'TOO_MANY_REQUESTS',
+                        message: 'Too many uploads. Try again in a few minutes.',
+                    });
+                }
                 const key = await put('carousels', image);
                 return { url: publicUrl(key) as string };
             }),

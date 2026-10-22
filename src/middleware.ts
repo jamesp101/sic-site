@@ -65,5 +65,19 @@ export const onRequest = defineMiddleware(async (context, next) => {
         );
     }
     if (PRIVATE.some((re) => re.test(pathname))) response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+
+    // No page may be framed. /storage sets its own per-type policy (PDFs must stay viewable).
+    if (!pathname.startsWith('/storage/') && !response.headers.has('Content-Security-Policy')) {
+        response.headers.set(
+            'Content-Security-Policy',
+            "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'",
+        );
+    }
+    response.headers.set('X-Frame-Options', 'DENY');
+    response.headers.set('X-Content-Type-Options', 'nosniff');
+    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    if (context.url.protocol === 'https:') {
+        response.headers.set('Strict-Transport-Security', 'max-age=31536000');
+    }
     return response;
 });
