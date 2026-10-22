@@ -5,7 +5,7 @@ import { SITE } from '@/lib/site';
 
 export const GET: APIRoute = async ({ site, url }) => {
     const origin = site ?? new URL(url.origin);
-    const posts = (await listPosts({ sort: 'newest' })).slice(0, 20);
+    const posts = (await listPosts({ sort: 'newest' }, { perPage: 20 })).items;
     const feedUrl = absoluteUrl('/rss.xml', origin);
 
     const items = posts

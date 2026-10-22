@@ -13,6 +13,7 @@ import HeroCarousel from './HeroCarousel.svelte';
 import MarkdownSection from './MarkdownSection.astro';
 import OrgChart from './OrgChart.astro';
 import PageBanner from './PageBanner.astro';
+import Pagination from './Pagination.astro';
 import PostCard from './PostCard.astro';
 import TypePill from './TypePill.astro';
 import { btnGold, btnOnDark, btnOutline, btnPrimary } from './classes';
@@ -239,6 +240,9 @@ const h = 'mb-6 mt-16 border-b border-border pb-2 font-sans text-xl font-semibol
         actionHref="#top"
         actionLabel="Show all posts"
     />
+
+    <h3 class={h}>Pagination</h3>
+    <Pagination page={6} pageCount={10} href={(page) => `#page-${page}`} label="Sample pages" />
 
     <h3 class={h}>Contact info</h3>
     <div class="max-w-xl">

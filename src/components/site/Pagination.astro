@@ -1,0 +1,57 @@
+---
+import { pageWindow } from '@/lib/pagination';
+
+interface Props {
+    page: number;
+    pageCount: number;
+    /** URL of a page, keeping the list's other query parameters. */
+    href: (page: number) => string;
+    /** Accessible name of the navigation landmark. */
+    label?: string;
+}
+
+const { page, pageCount, href, label = 'Pagination' } = Astro.props;
+
+const item =
+    'inline-flex min-w-10 items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors';
+const link = `${item} text-muted-foreground hover:bg-surface hover:text-foreground`;
+---
+
+{pageCount > 1 && (
+    <nav aria-label={label} class="mt-12 flex justify-center">
+        <ul class="flex flex-wrap items-center gap-1">
+            {page > 1 && (
+                <li>
+                    <a href={href(page - 1)} rel="prev" class={link}>
+                        <span aria-hidden="true">←</span>&nbsp;Previous
+                    </a>
+                </li>
+            )}
+            {pageWindow(page, pageCount).map((entry) =>
+                entry === null ? (
+                    <li aria-hidden="true" class={`${item} text-muted-foreground`}>
+                        …
+                    </li>
+                ) : (
+                    <li>
+                        <a
+                            href={href(entry)}
+                            aria-current={entry === page ? 'page' : undefined}
+                            aria-label={`Page ${entry}`}
+                            class={entry === page ? `${item} bg-primary text-primary-foreground` : link}
+                        >
+                            {entry}
+                        </a>
+                    </li>
+                ),
+            )}
+            {page < pageCount && (
+                <li>
+                    <a href={href(page + 1)} rel="next" class={link}>
+                        Next&nbsp;<span aria-hidden="true">→</span>
+                    </a>
+                </li>
+            )}
+        </ul>
+    </nav>
+)}
