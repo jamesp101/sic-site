@@ -2,6 +2,7 @@
     "$schema": "https://openapi.vercel.sh/vercel.json",
     "framework": "astro",
     "buildCommand": "node scripts/prisma-schema.mjs && prisma generate && astro build",
+    "regions": ["sin1"],
     "git": { "deploymentEnabled": false },
     "headers": [
         {
