@@ -30,6 +30,9 @@ export default defineConfig({
     prefetch: { prefetchAll: false },
     vite: {
         plugins: [tailwindcss()],
+        // `cropperjs` is only loaded through a dynamic import() in ImageCropper.svelte. Pre-bundle it at
+        // dev startup so Vite does not re-optimize mid-session and answer 504 "Outdated Optimize Dep".
+        optimizeDeps: { include: ['cropperjs'] },
         ssr: { external: ['better-sqlite3', '@prisma/adapter-better-sqlite3'] },
     },
     env: {

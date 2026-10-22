@@ -14,23 +14,24 @@ Requires [devenv](https://devenv.sh) (Nix). Everything else (Node 24, pnpm, Pris
 | Run every check: format, lint, types, template types, unit tests, build, e2e                   | `devenv test`  |
 | Shell with the toolchain                                                                       | `devenv shell` |
 
-Site: <http://localhost:4321>. Seeded logins: `admin@email.com` (superadmin), `cit@sic.edu`, `cba@sic.edu` (department users); passwords come from `SEED_SUPERADMIN_PASSWORD` / `SEED_DEPARTMENT_PASSWORD` in `.env` (created from `.env.example`).
+Site: <http://localhost:4321>. Seeded logins: `admin@sic.edu.ph` (superadmin), `cit@sic.edu.ph`, `cba@sic.edu.ph` (department users); passwords come from `SEED_SUPERADMIN_PASSWORD` / `SEED_DEPARTMENT_PASSWORD` in `.env` (created from `.env.example`).
 
 ## Daily commands (inside `devenv shell`)
 
-| Task                                                    | Command                                                   |
-| ------------------------------------------------------- | --------------------------------------------------------- |
-| Dev server                                              | `vp run dev`                                              |
-| Format + lint + TS types                                | `vp check` (`--fix` to apply)                             |
-| `.astro` / `.svelte` template types                     | `vp run check:templates`                                  |
-| Unit tests                                              | `vp test`                                                 |
-| Production build / serve                                | `vp run build` / `vp run preview`                         |
-| E2E (Playwright, builds first)                          | `vp run e2e`                                              |
-| Everything CI runs                                      | `vp run ci`                                               |
-| New migration after editing `prisma/schema.base.prisma` | `vp run db:migrate`                                       |
-| Apply migrations / seed / reset                         | `vp run db:deploy` / `vp run db:seed` / `vp run db:reset` |
-| Create or reset a superadmin                            | `ADMIN_EMAIL=… ADMIN_NAME=… vp run db:create-admin`       |
-| Prisma Studio                                           | `vp run db:studio`                                        |
+| Task                                                                                                           | Command                                                   |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Dev server                                                                                                     | `vp run dev`                                              |
+| Format + lint + TS types                                                                                       | `vp check` (`--fix` to apply)                             |
+| `.astro` / `.svelte` template types                                                                            | `vp run check:templates`                                  |
+| Unit tests                                                                                                     | `vp test`                                                 |
+| Production build / serve                                                                                       | `vp run build` / `vp run preview`                         |
+| E2E (Playwright, builds first)                                                                                 | `vp run e2e`                                              |
+| Everything CI runs                                                                                             | `vp run ci`                                               |
+| New migration after editing `prisma/schema.base.prisma`                                                        | `vp run db:migrate`                                       |
+| Apply migrations / seed / reset                                                                                | `vp run db:deploy` / `vp run db:seed` / `vp run db:reset` |
+| Sample schools: 5 departments, 20 posts and 7–15 members each (recreate: `tsx prisma/seed-schools.ts --reset`) | `vp run db:seed:schools`                                  |
+| Create or reset a superadmin                                                                                   | `ADMIN_EMAIL=… ADMIN_NAME=… vp run db:create-admin`       |
+| Prisma Studio                                                                                                  | `vp run db:studio`                                        |
 
 `vp` is the project-local Vite+ CLI (`pnpm exec vp` outside devenv). Astro owns dev/build, so they run as tasks (`vp run dev`), never `vp dev`.
 
@@ -69,7 +70,7 @@ Vercel functions reject request bodies over ~4.5 MB, so with `STORAGE_DRIVER=s3`
 
 - **Downloads (up to 20 MB)** are uploaded by the browser straight to the bucket with a presigned PUT URL. `POST /api/admin/uploads/direct` (`{ fileName, contentType, size }`) requires a signed-in user, checks the type (`file-types.ts` allowlist) and size (20 MB), and returns a server-generated `downloads/<random>.<ext>` key plus a 10-minute URL with the content type and length signed in. The key is recorded in `pending_uploads` as issued to that user; `downloads.create` receives `uploadedKey` instead of the file, claims it (only the issuing user, once, within an hour) and checks the stored size with `HeadObject`. Keys never claimed are deleted with their objects by later direct-upload requests. The admin form picks this path from a server flag (`directUploads`); `local` keeps the multipart path.
 - **Bucket CORS**: the browser PUTs cross-origin, so the bucket needs a rule like `[{"AllowedOrigins":["https://<site>"],"AllowedMethods":["PUT"],"AllowedHeaders":["content-type"],"MaxAgeSeconds":3600}]` (`aws s3api put-bucket-cors`, or the provider's CORS settings).
-- **Images** stay multipart: they are compressed to WebP in the browser first, and `LIMITS.image` is lowered to 4 MB on `s3`, so an oversized pass-through file (GIF/SVG, or a browser without WebP encoding) gets a clear validation message instead of a platform 413.
+- **Images** stay multipart: they are compressed to WebP in the browser first, and `LIMITS.image` is lowered to 4 MB on `s3`, so an oversized pass-through file (GIF, or a browser without WebP encoding) gets a clear validation message instead of a platform 413. The server converts every accepted image to WebP inside its size box (sharp, `src/lib/server/image-webp.ts`), keeping already-compressed WebP untouched.
 
 ## Deploying to Vercel
 

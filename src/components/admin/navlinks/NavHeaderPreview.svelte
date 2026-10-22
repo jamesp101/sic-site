@@ -118,7 +118,7 @@
     <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3">
       <div class="flex min-w-0 items-center gap-3">
         <img
-          src="/sic-seal.png"
+          src="/sic-seal-96.webp"
           alt=""
           width="44"
           height="44"

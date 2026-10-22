@@ -60,7 +60,7 @@ export const posts = {
     create: defineAction({
         accept: 'form',
         input: z
-            .object({ ...fields, highlightImage: imageFile(LIMITS.image).nullish() })
+            .object({ ...fields, highlightImage: imageFile(LIMITS.image, 'highlight').nullish() })
             .refine(endAfterStart.check, endAfterStart.options),
         handler: (input, context) =>
             guarded(async () => {
@@ -96,7 +96,7 @@ export const posts = {
     update: defineAction({
         accept: 'form',
         input: z
-            .object({ id: z.number().int(), ...fields, highlightImage: imageFile(LIMITS.image).nullish() })
+            .object({ id: z.number().int(), ...fields, highlightImage: imageFile(LIMITS.image, 'highlight').nullish() })
             .refine(endAfterStart.check, endAfterStart.options),
         handler: (input, context) =>
             guarded(async () => {

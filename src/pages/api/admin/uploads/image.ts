@@ -26,11 +26,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
         return json({ message: 'Expected multipart form data.' }, 400);
     }
 
-    const parsed = imageFile(LIMITS.image).safeParse(form.get('image'));
-    if (!parsed.success) return json({ message: parsed.error.issues[0]?.message ?? 'Invalid image.' }, 422);
+    // Counted before decoding: conversion to WebP is the expensive part.
     if (!(await consumeRateLimit(`upload:${user.id}`, RATE_LIMITS.upload))) {
         return json({ message: 'Too many uploads. Try again in a few minutes.' }, 429);
     }
+    const parsed = await imageFile(LIMITS.image, 'content').safeParseAsync(form.get('image'));
+    if (!parsed.success) return json({ message: parsed.error.issues[0]?.message ?? 'Invalid image.' }, 422);
 
     const key = await put('posts/inline', parsed.data);
     return json({ url: publicUrl(key) });

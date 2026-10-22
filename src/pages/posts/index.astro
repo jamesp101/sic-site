@@ -2,11 +2,16 @@
 import EmptyState from '@/components/site/EmptyState.astro';
 import FilterBar from '@/components/site/FilterBar.svelte';
 import PageBanner from '@/components/site/PageBanner.astro';
+import Pagination from '@/components/site/Pagination.astro';
 import PostCard from '@/components/site/PostCard.astro';
 import PublicLayout from '@/layouts/PublicLayout.astro';
 import { POST_TYPES, type PostFilters, type PostType } from '@/lib/content-types';
+import { parsePage } from '@/lib/pagination';
 import { postsItemList } from '@/lib/seo';
 import { getDepartments, listPosts } from '@/lib/server/queries';
+
+/** Three full rows of the three-column grid. */
+const PER_PAGE = 12;
 
 const params = Astro.url.searchParams;
 const typeParam = params.get('type');
@@ -15,14 +20,19 @@ const departmentParam = Number(params.get('department_id'));
 const departmentId = Number.isInteger(departmentParam) && departmentParam > 0 ? departmentParam : undefined;
 const search = params.get('search')?.trim().slice(0, 100) ?? '';
 const sort: NonNullable<PostFilters['sort']> = params.get('sort') === 'oldest' ? 'oldest' : 'newest';
+const page = parsePage(params.get('page'));
 
-const [departments, posts] = await Promise.all([
+const [departments, result] = await Promise.all([
     getDepartments(),
-    listPosts({ type, departmentId, search: search || undefined, sort }),
+    listPosts({ type, departmentId, search: search || undefined, sort }, { page, perPage: PER_PAGE }),
 ]);
+if (page > result.pageCount) return new Response(null, { status: 404, statusText: 'Not Found' });
+const posts = result.items;
 
 const filtered = Boolean(type || departmentId || search || sort === 'oldest');
 const site = Astro.site ?? new URL(Astro.url.origin);
+const title = page > 1 ? `News, Events & Announcements (page ${page})` : 'News, Events & Announcements';
+const first = (page - 1) * PER_PAGE + 1;
 
 const tabs: { label: string; type?: PostType }[] = [
     { label: 'All posts' },
@@ -31,25 +41,27 @@ const tabs: { label: string; type?: PostType }[] = [
     { label: 'Announcements', type: 'announcement' },
 ];
 
-function tabHref(tabType?: PostType): string {
+/** List URL with the current filters; changing the type starts again at page 1. */
+function listHref(listType: PostType | undefined, listPage = 1): string {
     const next = new URLSearchParams();
-    if (tabType) next.set('type', tabType);
+    if (listType) next.set('type', listType);
     if (departmentId) next.set('department_id', String(departmentId));
     if (search) next.set('search', search);
     if (sort === 'oldest') next.set('sort', 'oldest');
+    if (listPage > 1) next.set('page', String(listPage));
     const query = next.toString();
     return query ? `/posts?${query}` : '/posts';
 }
 ---
 
 <PublicLayout
-    title="News, Events & Announcements"
+    title={title}
     description="Latest news, campus events and official announcements from San Isidro College in Malaybalay City, Bukidnon."
-    canonical="/posts"
+    canonical={page > 1 ? `/posts?page=${page}` : '/posts'}
     noindex={filtered}
     follow
     breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'News & Events' }]}
-    jsonLd={postsItemList(posts, site, 'News, Events & Announcements')}
+    jsonLd={postsItemList(posts, site, title)}
 >
     <PageBanner
         eyebrow="News & events"
@@ -66,7 +78,7 @@ function tabHref(tabType?: PostType): string {
                         return (
                             <li>
                                 <a
-                                    href={tabHref(tab.type)}
+                                    href={listHref(tab.type)}
                                     aria-current={current ? 'page' : undefined}
                                     class:list={[
                                         'inline-flex rounded-lg px-4 py-2 text-sm font-semibold transition-colors',
@@ -98,8 +110,10 @@ function tabHref(tabType?: PostType): string {
             />
 
             <p class="mt-6 text-sm text-muted-foreground" role="status">
-                {posts.length} {posts.length === 1 ? 'post' : 'posts'}
-                {filtered ? ' match your filters' : ''}.
+                {result.pageCount > 1
+                    ? `Showing ${first}–${first + posts.length - 1} of ${result.total} posts`
+                    : `${result.total} ${result.total === 1 ? 'post' : 'posts'}`}
+                {filtered ? ' matching your filters' : ''}.
             </p>
 
             {posts.length > 0 ? (
@@ -118,6 +132,13 @@ function tabHref(tabType?: PostType): string {
                     />
                 </div>
             )}
+
+            <Pagination
+                page={page}
+                pageCount={result.pageCount}
+                href={(target) => listHref(type, target)}
+                label="Posts pages"
+            />
         </div>
     </section>
 </PublicLayout>

@@ -2,5 +2,11 @@
     "$schema": "https://openapi.vercel.sh/vercel.json",
     "framework": "astro",
     "buildCommand": "node scripts/prisma-schema.mjs && prisma generate && astro build",
-    "git": { "deploymentEnabled": false }
+    "git": { "deploymentEnabled": false },
+    "headers": [
+        {
+            "source": "/sic-seal(.*)",
+            "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=604800" }]
+        }
+    ]
 }

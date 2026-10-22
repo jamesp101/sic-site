@@ -100,6 +100,15 @@ export interface PostFilters {
     sort?: 'newest' | 'oldest';
 }
 
+/** One page of a list: `page` is 1-based; `pageCount` is at least 1 even when `total` is 0. */
+export interface Paginated<T> {
+    items: T[];
+    total: number;
+    page: number;
+    perPage: number;
+    pageCount: number;
+}
+
 export interface DownloadFilters {
     search?: string;
     departmentId?: number;

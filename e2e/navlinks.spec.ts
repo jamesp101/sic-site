@@ -141,7 +141,7 @@ test.describe('as superadmin', () => {
         const preview = page.getByTestId('nav-preview');
         await expect(page.locator('#nav-preview-title')).toBeVisible();
         await expect(
-            page.locator('section[aria-labelledby="nav-preview-title"] img[src="/sic-seal.png"]'),
+            page.locator('section[aria-labelledby="nav-preview-title"] img[src="/sic-seal-96.webp"]'),
         ).toHaveAttribute('alt', '');
 
         // "#departments" becomes a dropdown of the real departments, not a plain link.

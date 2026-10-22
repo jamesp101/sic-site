@@ -8,6 +8,7 @@ import type {
     HeroSectionView,
     MemberNode,
     NavLinkView,
+    Paginated,
     PostDetail,
     PostFilters,
     PostSummary,
@@ -230,19 +231,34 @@ export async function getDepartmentPage(slug: string): Promise<{
     };
 }
 
-export async function listPosts(filters: PostFilters = {}): Promise<PostSummary[]> {
+/** Posts matching `filters`, newest (or oldest) first, one page at a time. */
+export async function listPosts(
+    filters: PostFilters,
+    { page = 1, perPage }: { page?: number; perPage: number },
+): Promise<Paginated<PostSummary>> {
     const where: Prisma.PostWhereInput = {};
     if (filters.type) where.type = filters.type;
     if (filters.departmentId) where.departmentId = filters.departmentId;
     const search = filters.search?.trim();
     if (search) where.OR = [{ title: textContains(search) }, { content: textContains(search) }];
 
-    const rows = await db.post.findMany({
-        where,
-        orderBy: [{ createdAt: filters.sort === 'oldest' ? 'asc' : 'desc' }, { id: 'desc' }],
-        select: postSelect,
-    });
-    return rows.map(toPostSummary);
+    const [total, rows] = await Promise.all([
+        db.post.count({ where }),
+        db.post.findMany({
+            where,
+            orderBy: [{ createdAt: filters.sort === 'oldest' ? 'asc' : 'desc' }, { id: 'desc' }],
+            skip: (page - 1) * perPage,
+            take: perPage,
+            select: postSelect,
+        }),
+    ]);
+    return {
+        items: rows.map(toPostSummary),
+        total,
+        page,
+        perPage,
+        pageCount: Math.max(1, Math.ceil(total / perPage)),
+    };
 }
 
 export async function getPostBySlug(slug: string): Promise<PostDetail | null> {

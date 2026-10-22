@@ -200,7 +200,7 @@ test.describe('as department user', () => {
 
 test('wrong password shows an error', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel(/email/i).fill('admin@email.com');
+    await page.getByLabel(/email/i).fill('admin@sic.edu.ph');
     await page.getByLabel(/^password$/i).fill('not-the-password');
     await page.getByRole('button', { name: /log in|sign in/i }).click();
     await expect(page).toHaveURL(/\/login/);
@@ -214,11 +214,11 @@ test('login works without JavaScript and never puts credentials in the URL', asy
     page.on('request', (request) => urls.push(request.url()));
 
     await page.goto('/login?redirect=/admin/posts');
-    await page.getByLabel(/email/i).fill('admin@email.com');
+    await page.getByLabel(/email/i).fill('admin@sic.edu.ph');
     await page.getByLabel(/^password$/i).fill('not-the-password');
     await page.getByRole('button', { name: /log in/i }).click();
     await expect(page.getByRole('alert')).toContainText('These credentials do not match our records.');
-    await expect(page.getByLabel(/email/i)).toHaveValue('admin@email.com');
+    await expect(page.getByLabel(/email/i)).toHaveValue('admin@sic.edu.ph');
 
     await page.getByLabel(/^password$/i).fill(process.env.SEED_SUPERADMIN_PASSWORD ?? 'password');
     await page.getByRole('button', { name: /log in/i }).click();

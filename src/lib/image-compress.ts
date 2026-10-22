@@ -1,13 +1,14 @@
 /**
  * Client-side image compression for admin uploads: decode, downscale to a per-use box, re-encode as
  * WebP. Runs in the browser only (canvas); pure helpers (`fitWithin`, `webpName`, `IMAGE_TARGETS`)
- * are importable anywhere and unit-tested.
+ * are importable anywhere and unit-tested. The server converts whatever still arrives as another
+ * format (`src/lib/server/image-webp.ts`), so every stored image upload is WebP; compressing here
+ * keeps request bodies small and avoids a second lossy encode on the server.
  *
  * Rules:
  * - Never upscale; keep aspect ratio.
- * - GIF (may be animated) and SVG pass through untouched.
- * - If the browser cannot encode WebP (canvas falls back to PNG), keep the original file.
- * - If re-encoding did not help (no resize and the result is not smaller), keep the original file.
+ * - GIF (may be animated) passes through; the server converts it to (animated) WebP.
+ * - If the browser cannot encode WebP (canvas falls back to PNG), send the original file.
  */
 
 export interface ImageTarget {
@@ -36,7 +37,7 @@ export const IMAGE_TARGETS = {
 
 export type ImageTargetName = keyof typeof IMAGE_TARGETS;
 
-const PASS_THROUGH = new Set(['image/gif', 'image/svg+xml']);
+const PASS_THROUGH = new Set(['image/gif']);
 
 /** Largest size that fits inside the box without upscaling (integers, at least 1 px). */
 export function fitWithin(
@@ -90,7 +91,7 @@ export async function encodeWebp(
     return { blob, width, height, resized: width !== source.width || height !== source.height };
 }
 
-/** Compresses an uploaded file to WebP for `target`; returns the original file when that is better. */
+/** Compresses an uploaded file to WebP for `target`; returns the original file when the browser cannot. */
 export async function compressImage(file: File, targetName: ImageTargetName): Promise<File> {
     if (!file.type.startsWith('image/') || PASS_THROUGH.has(file.type)) return file;
     let bitmap: ImageBitmap;
@@ -103,7 +104,6 @@ export async function compressImage(file: File, targetName: ImageTargetName): Pr
     try {
         const encoded = await encodeWebp(bitmap, IMAGE_TARGETS[targetName]);
         if (!encoded) return file;
-        if (!encoded.resized && encoded.blob.size >= file.size) return file;
         return new File([encoded.blob], webpName(file.name), { type: 'image/webp', lastModified: Date.now() });
     } finally {
         bitmap.close();
