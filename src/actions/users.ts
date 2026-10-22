@@ -99,6 +99,15 @@ export const users = {
                         },
                     });
                     if (!hash) return;
+                    // A reset password must also end every session that may belong to whoever knew the old
+                    // one; an admin resetting their own password keeps the session they are using.
+                    const currentSessionId = context.locals.session ? Number(context.locals.session.id) : null;
+                    await tx.session.deleteMany({
+                        where: {
+                            userId: existing.id,
+                            ...(currentSessionId === null ? {} : { NOT: { id: currentSessionId } }),
+                        },
+                    });
                     const credential = await tx.account.findFirst({
                         where: { userId: existing.id, providerId: 'credential' },
                         select: { id: true },

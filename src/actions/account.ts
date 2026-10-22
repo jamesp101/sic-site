@@ -3,7 +3,9 @@ import { z } from 'astro/zod';
 import { auth } from '@/lib/server/auth';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { db } from '@/lib/server/db';
+import { sendMail } from '@/lib/server/mail';
 import { hashPassword, verifyPassword } from '@/lib/server/password';
+import { consumeRateLimit, RATE_LIMITS } from '@/lib/server/rate-limit';
 
 const MIN_PASSWORD = 8;
 
@@ -15,7 +17,14 @@ async function credentialHash(userId: number): Promise<string | null> {
     return user?.password ?? null;
 }
 
+/** Verifies the signed-in user's current password; attempts are rate-limited per user. */
 async function assertPassword(userId: number, password: string): Promise<void> {
+    if (!(await consumeRateLimit(`password:${userId}`, RATE_LIMITS.password))) {
+        throw new ActionError({
+            code: 'TOO_MANY_REQUESTS',
+            message: 'Too many password attempts. Try again in 15 minutes.',
+        });
+    }
     const hash = await credentialHash(userId);
     if (!hash || !(await verifyPassword(hash, password))) {
         throw new ActionError({ code: 'BAD_REQUEST', message: 'The provided password was incorrect.' });
@@ -27,6 +36,8 @@ export const account = {
         input: z.object({
             name: z.string().trim().min(1, 'Name is required.').max(255),
             email: z.string().trim().toLowerCase().max(255).pipe(z.email('Enter a valid email address.')),
+            /** Required only when the email address changes. */
+            currentPassword: z.string().optional(),
         }),
         handler: (input, context) =>
             guarded(async () => {
@@ -41,14 +52,42 @@ export const account = {
                     throw new ActionError({ code: 'CONFLICT', message: 'That email address is already in use.' });
 
                 const emailChanged = input.email !== current.email.toLowerCase();
-                await db.user.update({
-                    where: { id: actor.id },
-                    data: {
-                        name: input.name,
-                        email: input.email,
-                        ...(emailChanged ? { emailVerified: false, emailVerifiedAt: null } : {}),
-                    },
+                // The email is the password-reset target: changing it must not be possible with a session alone.
+                if (emailChanged) {
+                    if (!input.currentPassword) {
+                        throw new ActionError({
+                            code: 'BAD_REQUEST',
+                            message: 'Enter your current password to change your email address.',
+                        });
+                    }
+                    await assertPassword(actor.id, input.currentPassword);
+                }
+                const currentSessionId = context.locals.session ? Number(context.locals.session.id) : null;
+                await db.$transaction(async (tx) => {
+                    await tx.user.update({
+                        where: { id: actor.id },
+                        data: {
+                            name: input.name,
+                            email: input.email,
+                            ...(emailChanged ? { emailVerified: false, emailVerifiedAt: null } : {}),
+                        },
+                    });
+                    if (!emailChanged) return;
+                    // Sign out every other device; keep this one.
+                    await tx.session.deleteMany({
+                        where: {
+                            userId: actor.id,
+                            ...(currentSessionId === null ? {} : { NOT: { id: currentSessionId } }),
+                        },
+                    });
                 });
+                if (emailChanged) {
+                    await sendMail({
+                        to: current.email,
+                        subject: 'Your San Isidro College email address was changed',
+                        text: `The email address of your San Isidro College account was changed to ${input.email}.\n\nIf you did not make this change, contact the site administrator immediately.`,
+                    });
+                }
                 flash(context, 'Profile updated.');
                 return { emailChanged };
             }),
@@ -71,10 +110,7 @@ export const account = {
         handler: (input, context) =>
             guarded(async () => {
                 const actor = actorOf(context);
-                const hash = await credentialHash(actor.id);
-                if (!hash || !(await verifyPassword(hash, input.currentPassword))) {
-                    throw new ActionError({ code: 'BAD_REQUEST', message: 'The current password is incorrect.' });
-                }
+                await assertPassword(actor.id, input.currentPassword);
 
                 const next = await hashPassword(input.password);
                 const currentSessionId = context.locals.session ? Number(context.locals.session.id) : null;

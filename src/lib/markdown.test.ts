@@ -108,6 +108,18 @@ describe('parseMarkdown', () => {
         expect(html).toContain('href="#"');
     });
 
+    it('neutralises script URLs hidden behind characters browsers strip', () => {
+        for (const source of [
+            '[x](\u0001javascript:alert`1`)',
+            '[x](java\u200bscript:alert`1`)',
+            '![x](\u0001data:image/svg+xml,x)',
+        ]) {
+            const html = parseMarkdown(source);
+            expect(html).not.toMatch(/javascript:|data:/);
+            expect(html).toMatch(/(href|src)="#"/);
+        }
+    });
+
     it('opens external links in a new tab with rel=noopener only', () => {
         const external = parseMarkdown('[site](https://example.com/a?b=1&c=2)');
         expect(external).toContain('href="https://example.com/a?b=1&amp;c=2"');

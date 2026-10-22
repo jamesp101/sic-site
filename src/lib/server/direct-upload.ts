@@ -1,23 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import path from 'node:path';
+import { storedType } from './file-types';
 
 /** Directory (storage prefix) that browser-direct uploads may write to. */
 export const DIRECT_UPLOAD_PREFIX = 'downloads/';
-
-/** Content types accepted for direct uploads (documents, archives, images). */
-const CONTENT_TYPES: Record<string, true> = {
-    'application/pdf': true,
-    'application/msword': true,
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': true,
-    'application/vnd.ms-excel': true,
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': true,
-    'application/vnd.ms-powerpoint': true,
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation': true,
-    'application/zip': true,
-    'application/x-zip-compressed': true,
-    'text/plain': true,
-    'text/csv': true,
-};
 
 const KEY_PATTERN = /^downloads\/[0-9a-f]{32}(\.[a-z0-9]{1,10})?$/;
 
@@ -26,16 +11,7 @@ export function isDirectUploadKey(key: string): boolean {
     return KEY_PATTERN.test(key);
 }
 
-/** True for the listed document/archive types and any `image/*` type. */
-export function isDirectUploadContentType(type: string): boolean {
-    return CONTENT_TYPES[type] === true || /^image\/[a-z0-9.+-]+$/.test(type);
-}
-
-/** Server-generated, unguessable `downloads/<random>.<ext>` key; the browser never chooses the key. */
-export function newDirectUploadKey(fileName: string): string {
-    const ext = path
-        .extname(fileName)
-        .toLowerCase()
-        .replace(/[^a-z0-9.]/g, '');
-    return `${DIRECT_UPLOAD_PREFIX}${randomBytes(16).toString('hex')}${ext.length > 1 && ext.length <= 10 ? ext : ''}`;
+/** Server-generated, unguessable `downloads/<random>.<ext>` key with an allowlisted extension; the browser never chooses the key. */
+export function newDirectUploadKey(fileName: string, contentType: string): string {
+    return `${DIRECT_UPLOAD_PREFIX}${randomBytes(16).toString('hex')}${storedType(fileName, contentType).ext}`;
 }

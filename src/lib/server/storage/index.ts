@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
+import { storedType } from '../file-types';
 import { createLocalDriver } from './local';
 import { createS3Driver, type S3Driver } from './s3';
 import type { StorageDriver, StoredObject } from './types';
@@ -108,18 +109,11 @@ export function downloadUrl(value: string, fileName: string): string {
     return `/storage/${toKey(value)}?download=${encodeURIComponent(fileName)}`;
 }
 
-function extensionOf(name: string): string {
-    const ext = path
-        .extname(name)
-        .toLowerCase()
-        .replace(/[^a-z0-9.]/g, '');
-    return ext.length > 1 && ext.length <= 10 ? ext : '';
-}
-
-/** Stores a file under `prefix/` with a random name and returns its key. */
+/** Stores a file under `prefix/` with a random name and returns its key; type and extension come from `storedType`. */
 export async function put(prefix: StoragePrefix, file: File): Promise<string> {
-    const key = `${prefix}/${randomBytes(16).toString('hex')}${extensionOf(file.name)}`;
-    await driver.put(key, new Uint8Array(await file.arrayBuffer()), file.type || 'application/octet-stream');
+    const { ext, contentType } = storedType(file.name, file.type);
+    const key = `${prefix}/${randomBytes(16).toString('hex')}${ext}`;
+    await driver.put(key, new Uint8Array(await file.arrayBuffer()), contentType);
     return key;
 }
 

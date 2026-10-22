@@ -94,6 +94,18 @@ model RateLimit {
   @@map("auth_rate_limits")
 }
 
+/// Presigned browser upload (`/api/admin/uploads/direct`) not yet attached to a download. `downloads.create`
+/// claims the row for the user it was issued to; expired rows are swept and their objects deleted.
+model PendingUpload {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  userId    Int      @map("user_id")
+  expiresAt DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("pending_uploads")
+}
+
 model Department {
   id          Int      @id @default(autoincrement())
   name        String

@@ -4,6 +4,7 @@ import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { departmentForWrite, scopeDepartment } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
 import { isDirectUploadKey } from '@/lib/server/direct-upload';
+import { claimPendingUpload } from '@/lib/server/pending-uploads';
 import { directUploads, headUpload, LIMITS, MB, put, remove } from '@/lib/server/storage';
 
 const DEFAULT_DIRECTORY = 'General';
@@ -52,7 +53,12 @@ export const downloads = {
                 let filePath: string;
                 let fileSize: number;
                 if (input.uploadedKey) {
-                    if (!directUploads || !isDirectUploadKey(input.uploadedKey)) {
+                    // Only an unclaimed key issued to this user by /api/admin/uploads/direct may be attached.
+                    if (
+                        !directUploads ||
+                        !isDirectUploadKey(input.uploadedKey) ||
+                        !(await claimPendingUpload(input.uploadedKey, actor.id))
+                    ) {
                         throw new ActionError({ code: 'BAD_REQUEST', message: 'Invalid uploaded file.' });
                     }
                     const uploaded = await headUpload(input.uploadedKey);

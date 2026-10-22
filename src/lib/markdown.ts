@@ -11,6 +11,7 @@
 import { escapeHtml } from './escape-html';
 import { isBlockDocument } from './blocks/document';
 import { blocksToPlainText } from './blocks/plain-text';
+import { safeHref, safeImageSrc } from './blocks/urls';
 import { stripMarkdown } from './markdown-strip';
 
 const OPEN = '\uE000';
@@ -51,11 +52,6 @@ const CLASSES = {
 };
 
 export { escapeHtml };
-
-function safeUrl(url: string): string {
-    // `url` is already HTML-escaped; reject script-capable schemes.
-    return /^\s*(javascript|data|vbscript):/i.test(url) ? '#' : url;
-}
 
 /** Splits a comma separated list into escaped badge spans. */
 function badges(list: string): string {
@@ -139,13 +135,16 @@ function inline(text: string, stash: string[]): string {
     let out = text.replace(/`([^`]+)`/g, (_m, code) => keep(`<code class="${CLASSES.code}">${code}</code>`));
 
     out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt, src) =>
-        keep(`<img src="${safeUrl(src)}" alt="${alt}" loading="lazy" decoding="async" class="${CLASSES.img}">`),
+        keep(
+            `<img src="${safeImageSrc(src) ?? '#'}" alt="${alt}" loading="lazy" decoding="async" class="${CLASSES.img}">`,
+        ),
     );
 
     out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label, href) => {
         const external = /^https?:\/\//i.test(href);
         const attrs = external ? ' target="_blank" rel="noopener"' : '';
-        return keep(`<a href="${safeUrl(href)}" class="${CLASSES.a}"${attrs}>${emphasis(label)}</a>`);
+        // `href` is already HTML-escaped; anything outside the block-editor URL allowlist becomes `#`.
+        return keep(`<a href="${safeHref(href) ?? '#'}" class="${CLASSES.a}"${attrs}>${emphasis(label)}</a>`);
     });
 
     return emphasis(out);
