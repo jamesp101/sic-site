@@ -46,7 +46,7 @@ export const carousels = {
     /** Uploads a logo / image for a layer. Stored under `carousels/` so it is cleaned up with the slide. */
     uploadImage: defineAction({
         accept: 'form',
-        input: z.object({ image: imageFile(LIMITS.image) }),
+        input: z.object({ image: imageFile(LIMITS.image, 'layer') }),
         handler: ({ image }, context) =>
             guarded(async () => {
                 const actor = actorOf(context);
@@ -64,7 +64,7 @@ export const carousels = {
     create: defineAction({
         accept: 'form',
         input: z.object({
-            image: imageFile(LIMITS.image),
+            image: imageFile(LIMITS.image, 'slide'),
             overlay: overlayField.optional(),
             departmentId: z.number().int().nullable().optional(),
             showOnMain: z.boolean(),
@@ -100,7 +100,11 @@ export const carousels = {
     /** Saves the design (and optionally a replacement image) of one slide. */
     update: defineAction({
         accept: 'form',
-        input: z.object({ id: z.number().int(), overlay: overlayField, image: imageFile(LIMITS.image).optional() }),
+        input: z.object({
+            id: z.number().int(),
+            overlay: overlayField,
+            image: imageFile(LIMITS.image, 'slide').optional(),
+        }),
         handler: (input, context) =>
             guarded(async () => {
                 const actor = actorOf(context);

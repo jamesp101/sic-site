@@ -13,7 +13,7 @@ const fields = {
     role: z.string({ error: 'The role is required.' }).trim().min(1, 'The role is required.').max(255),
     parentId: z.number().int().nullable().optional(),
     order: z.number({ error: 'The order must be a number.' }).int(),
-    image: imageFile(LIMITS.memberImage).optional(),
+    image: imageFile(LIMITS.memberImage, 'portrait').optional(),
 };
 
 /** Parent must be in the same department and must not be the member itself or one of its descendants. */

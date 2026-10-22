@@ -8,4 +8,4 @@
   } = $props();
 </script>
 
-<img src="/sic-seal.png" alt="San Isidro College seal" class={className} {...rest} />
+<img src="/sic-seal-96.webp" alt="San Isidro College seal" width="96" height="96" class={className} {...rest} />

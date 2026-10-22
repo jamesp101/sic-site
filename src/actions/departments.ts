@@ -11,7 +11,7 @@ const fields = {
     name: z.string({ error: 'The name is required.' }).trim().min(1, 'The name is required.').max(255),
     description: z.string().nullable().optional(),
     heroContent: z.string().nullable().optional(),
-    logo: imageFile(LIMITS.image).optional(),
+    logo: imageFile(LIMITS.image, 'logo').optional(),
 };
 
 export const departments = {
