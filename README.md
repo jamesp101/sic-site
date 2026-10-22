@@ -14,23 +14,24 @@ Requires [devenv](https://devenv.sh) (Nix). Everything else (Node 24, pnpm, Pris
 | Run every check: format, lint, types, template types, unit tests, build, e2e                   | `devenv test`  |
 | Shell with the toolchain                                                                       | `devenv shell` |
 
-Site: <http://localhost:4321>. Seeded logins: `admin@email.com` (superadmin), `cit@sic.edu`, `cba@sic.edu` (department users); passwords come from `SEED_SUPERADMIN_PASSWORD` / `SEED_DEPARTMENT_PASSWORD` in `.env` (created from `.env.example`).
+Site: <http://localhost:4321>. Seeded logins: `admin@sic.edu.ph` (superadmin), `cit@sic.edu.ph`, `cba@sic.edu.ph` (department users); passwords come from `SEED_SUPERADMIN_PASSWORD` / `SEED_DEPARTMENT_PASSWORD` in `.env` (created from `.env.example`).
 
 ## Daily commands (inside `devenv shell`)
 
-| Task                                                    | Command                                                   |
-| ------------------------------------------------------- | --------------------------------------------------------- |
-| Dev server                                              | `vp run dev`                                              |
-| Format + lint + TS types                                | `vp check` (`--fix` to apply)                             |
-| `.astro` / `.svelte` template types                     | `vp run check:templates`                                  |
-| Unit tests                                              | `vp test`                                                 |
-| Production build / serve                                | `vp run build` / `vp run preview`                         |
-| E2E (Playwright, builds first)                          | `vp run e2e`                                              |
-| Everything CI runs                                      | `vp run ci`                                               |
-| New migration after editing `prisma/schema.base.prisma` | `vp run db:migrate`                                       |
-| Apply migrations / seed / reset                         | `vp run db:deploy` / `vp run db:seed` / `vp run db:reset` |
-| Create or reset a superadmin                            | `ADMIN_EMAIL=… ADMIN_NAME=… vp run db:create-admin`       |
-| Prisma Studio                                           | `vp run db:studio`                                        |
+| Task                                                                                                           | Command                                                   |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Dev server                                                                                                     | `vp run dev`                                              |
+| Format + lint + TS types                                                                                       | `vp check` (`--fix` to apply)                             |
+| `.astro` / `.svelte` template types                                                                            | `vp run check:templates`                                  |
+| Unit tests                                                                                                     | `vp test`                                                 |
+| Production build / serve                                                                                       | `vp run build` / `vp run preview`                         |
+| E2E (Playwright, builds first)                                                                                 | `vp run e2e`                                              |
+| Everything CI runs                                                                                             | `vp run ci`                                               |
+| New migration after editing `prisma/schema.base.prisma`                                                        | `vp run db:migrate`                                       |
+| Apply migrations / seed / reset                                                                                | `vp run db:deploy` / `vp run db:seed` / `vp run db:reset` |
+| Sample schools: 5 departments, 20 posts and 7–15 members each (recreate: `tsx prisma/seed-schools.ts --reset`) | `vp run db:seed:schools`                                  |
+| Create or reset a superadmin                                                                                   | `ADMIN_EMAIL=… ADMIN_NAME=… vp run db:create-admin`       |
+| Prisma Studio                                                                                                  | `vp run db:studio`                                        |
 
 `vp` is the project-local Vite+ CLI (`pnpm exec vp` outside devenv). Astro owns dev/build, so they run as tasks (`vp run dev`), never `vp dev`.
 

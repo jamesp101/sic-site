@@ -137,20 +137,20 @@ async function main() {
     const deptPassword = seedPassword('SEED_DEPARTMENT_PASSWORD');
     const superAdmin = await createUser({
         name: 'Dr. Maria Clara (Super Admin)',
-        email: 'admin@email.com',
+        email: 'admin@sic.edu.ph',
         role: 'superadmin',
         password: superPassword,
     });
     const citAdmin = await createUser({
         name: 'Prof. Juan Dela Cruz (CIT Admin)',
-        email: 'cit@sic.edu',
+        email: 'cit@sic.edu.ph',
         role: 'department_user',
         password: deptPassword,
         departmentId: cit.id,
     });
     const cbaAdmin = await createUser({
         name: 'Dr. Jose Rizal (CBA Admin)',
-        email: 'cba@sic.edu',
+        email: 'cba@sic.edu.ph',
         role: 'department_user',
         password: deptPassword,
         departmentId: cba.id,

@@ -5,10 +5,10 @@ import { ADMIN, CIT } from './auth-state';
 const USERS = [
     {
         file: ADMIN,
-        email: 'admin@email.com',
+        email: 'admin@sic.edu.ph',
         password: process.env.SEED_SUPERADMIN_PASSWORD ?? 'password',
     },
-    { file: CIT, email: 'cit@sic.edu', password: process.env.SEED_DEPARTMENT_PASSWORD ?? 'password' },
+    { file: CIT, email: 'cit@sic.edu.ph', password: process.env.SEED_DEPARTMENT_PASSWORD ?? 'password' },
 ];
 
 for (const user of USERS) {
