@@ -2,7 +2,7 @@
 
 Full-stack Astro port of the Laravel/Inertia site. Server-rendered for SEO, Svelte islands only where interaction is needed.
 
-Stack: Astro 7 (`output: 'server'`, Node standalone, or the Vercel adapter on Vercel) · Svelte 5 islands · Tailwind v4 · Prisma 7 (SQLite in dev; MySQL/MariaDB or PostgreSQL by URL) · Better Auth · Astro Actions · uploads on local disk, S3 or Vercel Blob · Vite+ (`vp`) for lint/format/test/tasks · devenv for the toolchain.
+Stack: Astro 7 (`output: 'server'`, Node standalone, or the Vercel adapter on Vercel) · Svelte 5 islands · Tailwind v4 · Prisma 7 (SQLite in dev; MySQL/MariaDB or PostgreSQL by URL) · Better Auth · Astro Actions · uploads on local disk or S3 · Vite+ (`vp`) for lint/format/test/tasks · devenv for the toolchain.
 
 ## Quick start
 
@@ -58,24 +58,24 @@ Posts, hero sections and the landing page setting (`welcome_hero_content`) are e
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `local` (default) | `UPLOAD_DIR` on the server disk (default `storage/uploads`)                                                                                  | `/storage/<key>`, streamed by `src/pages/storage/[...path].ts`                                                                                 |
 | `s3`              | `S3_BUCKET` on AWS S3 or any S3-compatible service (`S3_ENDPOINT`, `S3_FORCE_PATH_STYLE=true` for self-hosted ones such as Garage/SeaweedFS) | `/storage/<key>` streamed from the bucket; with `S3_PUBLIC_URL` set, `<S3_PUBLIC_URL>/<key>` directly and `/storage/<key>` 301-redirects there |
-| `vercel-blob`     | A public Vercel Blob store (`BLOB_READ_WRITE_TOKEN`, optional `BLOB_PREFIX`)                                                                 | `<BLOB_PUBLIC_BASE_URL>/<key>` directly (required); `/storage/<key>` 301-redirects there                                                       |
 
-Legacy Laravel `/storage/...` links keep working with every driver. `?download=<name>` always streams through the app (also for `vercel-blob`) so the attachment name applies. Switching drivers does not move existing files: copy `UPLOAD_DIR` into the bucket under `S3_PREFIX` with the same keys (e.g. `aws s3 sync storage/uploads s3://<bucket>/<prefix>`).
+Legacy Laravel `/storage/...` links keep working with every driver. `?download=<name>` always streams through the app so the attachment name applies. Switching drivers does not move existing files: copy `UPLOAD_DIR` into the bucket under `S3_PREFIX` with the same keys (e.g. `aws s3 sync storage/uploads s3://<bucket>/<prefix>`).
 
 ### Large uploads on Vercel
 
-Vercel functions reject request bodies over ~4.5 MB, so with `STORAGE_DRIVER=vercel-blob`:
+Vercel functions reject request bodies over ~4.5 MB, so with `STORAGE_DRIVER=s3`:
 
-- **Downloads (up to 20 MB)** are uploaded by the browser straight to Blob (`@vercel/blob/client` `upload()`). The server only hands out the right to do so: `POST /api/admin/uploads/blob` requires a signed-in user, issues a server-generated `downloads/<random>.<ext>` key with a signed, 10-minute ticket bound to the user and key (`type: 'issue-key'`), and `handleUpload` then issues a client token only for that exact pathname, limited to documents/archives/images and 20 MB. The `downloads.create` action receives `uploadedKey` instead of the file, validates the key shape and checks it exists with `head()` (size comes from Blob, not from the client). The admin form picks this path from a server flag (`directUploads`); local/s3 keep the multipart path.
-- **Images** stay multipart: they are compressed to WebP in the browser first, and `LIMITS.image` is lowered to 4 MB on `vercel-blob`, so an oversized pass-through file (GIF/SVG, or a browser without WebP encoding) gets a clear validation message instead of a platform 413.
+- **Downloads (up to 20 MB)** are uploaded by the browser straight to the bucket with a presigned PUT URL. `POST /api/admin/uploads/direct` (`{ fileName, contentType, size }`) requires a signed-in user, checks the type (documents/archives/images) and size (20 MB), and returns a server-generated `downloads/<random>.<ext>` key plus a 10-minute URL with the content type and length signed in. The `downloads.create` action receives `uploadedKey` instead of the file, validates the key shape and checks the stored size with `HeadObject`. The admin form picks this path from a server flag (`directUploads`); `local` keeps the multipart path.
+- **Bucket CORS**: the browser PUTs cross-origin, so the bucket needs a rule like `[{"AllowedOrigins":["https://<site>"],"AllowedMethods":["PUT"],"AllowedHeaders":["content-type"],"MaxAgeSeconds":3600}]` (`aws s3api put-bucket-cors`, or the provider's CORS settings).
+- **Images** stay multipart: they are compressed to WebP in the browser first, and `LIMITS.image` is lowered to 4 MB on `s3`, so an oversized pass-through file (GIF/SVG, or a browser without WebP encoding) gets a clear validation message instead of a platform 413.
 
 ## Deploying to Vercel
 
-Vercel runs the app with the Vercel adapter (selected when `VERCEL` is set during `vercel build`, or with `ASTRO_ADAPTER=vercel`; `vercel.json` sets the build command `node scripts/prisma-schema.mjs && prisma generate && astro build`). The server keeps no state on disk: toasts use a short-lived httpOnly cookie (`sic_flash`), auth rate limits live in the `auth_rate_limits` table, uploads go to Blob.
+Vercel runs the app with the Vercel adapter (selected when `VERCEL` is set during `vercel build`, or with `ASTRO_ADAPTER=vercel`; `vercel.json` sets the build command `node scripts/prisma-schema.mjs && prisma generate && astro build`). The server keeps no state on disk: toasts use a short-lived httpOnly cookie (`sic_flash`), auth rate limits live in the `auth_rate_limits` table, uploads go to S3.
 
 1. **Database (Neon)**: add the Neon integration to the Vercel project. Runtime `DATABASE_URL` is the **pooled** connection string (`postgresql://…-pooler…`). Migrations are not run by Vercel; CI runs `prisma migrate deploy` with the **direct** (non-pooled) URL before deploying, and `vercel.json` disables Vercel's Git deployments (`git.deploymentEnabled: false`) so nothing ships ahead of migrations.
-2. **Blob**: create a Blob store (public) and connect it to the project; this adds `BLOB_READ_WRITE_TOKEN`. Copy the store's public base URL into `BLOB_PUBLIC_BASE_URL` (`https://<id>.public.blob.vercel-storage.com`).
-3. **Environment variables** (Production): `DATABASE_URL`, `BETTER_AUTH_SECRET` (32+ random chars), `BETTER_AUTH_URL` and `SITE_URL` (the public origin), `STORAGE_DRIVER=vercel-blob`, `BLOB_READ_WRITE_TOKEN`, `BLOB_PUBLIC_BASE_URL`, optional `BLOB_PREFIX`, and `MAIL_MAILER=smtp` with `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `CONTACT_TO_ADDRESS`.
+2. **S3 bucket**: create a bucket (AWS S3 or an S3-compatible service such as Cloudflare R2) and an access key limited to it (`s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` on `arn:aws:s3:::<bucket>/*`). Add the CORS rule above for the production origin. Optionally make it public-read behind a CDN and set `S3_PUBLIC_URL`; otherwise files stream through `/storage/*`.
+3. **Environment variables** (Production): `DATABASE_URL`, `BETTER_AUTH_SECRET` (32+ random chars), `BETTER_AUTH_URL` and `SITE_URL` (the public origin), `STORAGE_DRIVER=s3`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, optional `S3_ENDPOINT` (non-AWS), `S3_FORCE_PATH_STYLE`, `S3_PREFIX`, `S3_PUBLIC_URL`, and `MAIL_MAILER=smtp` with `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `CONTACT_TO_ADDRESS`.
 4. **First admin**: nothing is seeded in production. Run once from a machine with the direct database URL:
 
     ```sh

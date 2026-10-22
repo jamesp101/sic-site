@@ -31,7 +31,7 @@ export default defineConfig({
             STORAGE_DRIVER: envField.enum({
                 context: 'server',
                 access: 'secret',
-                values: ['local', 's3', 'vercel-blob'],
+                values: ['local', 's3'],
                 default: 'local',
             }),
             UPLOAD_DIR: envField.string({ context: 'server', access: 'secret', default: './storage/uploads' }),
@@ -43,9 +43,6 @@ export default defineConfig({
             S3_FORCE_PATH_STYLE: envField.boolean({ context: 'server', access: 'secret', default: false }),
             S3_PREFIX: envField.string({ context: 'server', access: 'secret', optional: true }),
             S3_PUBLIC_URL: envField.string({ context: 'server', access: 'secret', optional: true }),
-            BLOB_READ_WRITE_TOKEN: envField.string({ context: 'server', access: 'secret', optional: true }),
-            BLOB_PUBLIC_BASE_URL: envField.string({ context: 'server', access: 'secret', optional: true }),
-            BLOB_PREFIX: envField.string({ context: 'server', access: 'secret', optional: true }),
             BETTER_AUTH_SECRET: envField.string({ context: 'server', access: 'secret' }),
             BETTER_AUTH_URL: envField.string({ context: 'server', access: 'secret', optional: true }),
             MAIL_MAILER: envField.enum({

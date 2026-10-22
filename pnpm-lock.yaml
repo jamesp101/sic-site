@@ -20,6 +20,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1149.0
         version: 3.1149.0
+      '@aws-sdk/s3-request-presigner':
+        specifier: ^3.1150.0
+        version: 3.1150.0
       '@codemirror/lang-markdown':
         specifier: ^6.5.2
         version: 6.5.2
@@ -53,9 +56,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
-      '@vercel/blob':
-        specifier: ^2.8.1
-        version: 2.8.1
       astro:
         specifier: ^7.3.8
         version: 7.3.8(@types/node@26.6.5)(@vercel/blob@2.8.1)(@vercel/functions@3.9.11(@aws-sdk/credential-provider-web-identity@3.972.79)(ws@8.22.0))(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
@@ -347,6 +347,10 @@ packages:
     resolution: {integrity: sha512-ViOBLuGSSyPAmkKGJ6KJXtVN7MOEp3rnI7uH+kWxnHccvo8C9cvunEAnN5/oaZH1laQfsTBw7IOnmNkWlFZl2A==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/core@3.978.3':
+    resolution: {integrity: sha512-nslpzUCTI9b2IQMWSd6mSAXldBexPc8rr0d3dXUutXYFLFaTdsHa2GD7sJdsn3PhyjK0O5K8ypd6zi+RXXPVlg==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/credential-provider-env@3.972.73':
     resolution: {integrity: sha512-PxlFZiF5IPUsPnuVSqjM9jlmRwZhL0xx40ccWfZiLQS8TRnHQpegpK1uAidatWuEqbJtbbY97A2Sezikz2AMUw==}
     engines: {node: '>=20.0.0'}
@@ -385,6 +389,10 @@ packages:
 
   '@aws-sdk/nested-clients@3.997.47':
     resolution: {integrity: sha512-bovCKvDsLocNTzaj6VrrMVJ2BGROqO0JlwcGseO67a+I9Bo+08nUJhSQfZUIx4+A4a7I4101GEJd/AYm7dQ68w==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/s3-request-presigner@3.1150.0':
+    resolution: {integrity: sha512-aL2V49wz1FFZnWDT+7eZ7emTfQ+mMW/JeMS2n9+ZeKoCBil2Lp5Jgr0PDD12N6y5/gxZIAGvBVmbrjanI2Q/jg==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/signature-v4-multi-region@3.996.48':
@@ -4862,6 +4870,17 @@ snapshots:
       bowser: 2.14.1
       tslib: 2.8.1
 
+  '@aws-sdk/core@3.978.3':
+    dependencies:
+      '@aws-sdk/types': 3.974.6
+      '@aws-sdk/xml-builder': 3.972.41
+      '@aws/lambda-invoke-store': 0.3.0
+      '@smithy/core': 3.35.2
+      '@smithy/signature-v4': 5.7.4
+      '@smithy/types': 4.19.0
+      bowser: 2.14.1
+      tslib: 2.8.1
+
   '@aws-sdk/credential-provider-env@3.972.73':
     dependencies:
       '@aws-sdk/core': 3.978.2
@@ -4963,6 +4982,15 @@ snapshots:
       '@smithy/core': 3.35.2
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
+      tslib: 2.8.1
+
+  '@aws-sdk/s3-request-presigner@3.1150.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.3
+      '@aws-sdk/signature-v4-multi-region': 3.996.48
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.2
       '@smithy/types': 4.19.0
       tslib: 2.8.1
 
@@ -6308,6 +6336,7 @@ snapshots:
       is-node-process: 1.2.0
       throttleit: 2.1.0
       undici: 6.29.0
+    optional: true
 
   '@vercel/cli-config@0.3.1':
     dependencies:
@@ -6349,6 +6378,7 @@ snapshots:
       '@vercel/cli-config': 0.3.1
       '@vercel/cli-exec': 1.0.1
       jose: 5.10.0
+    optional: true
 
   '@vercel/oidc@4.0.0':
     dependencies:
@@ -6843,6 +6873,7 @@ snapshots:
   async-retry@1.3.3:
     dependencies:
       retry: 0.13.1
+    optional: true
 
   async-sema@3.1.1: {}
 
@@ -7460,11 +7491,13 @@ snapshots:
 
   iron-webcrypto@1.2.1: {}
 
-  is-buffer@2.0.5: {}
+  is-buffer@2.0.5:
+    optional: true
 
   is-docker@4.0.0: {}
 
-  is-node-process@1.2.0: {}
+  is-node-process@1.2.0:
+    optional: true
 
   is-plain-obj@4.1.0: {}
 
@@ -8101,7 +8134,8 @@ snapshots:
 
   retry@0.12.0: {}
 
-  retry@0.13.1: {}
+  retry@0.13.1:
+    optional: true
 
   robust-predicates@3.0.3: {}
 
@@ -8431,7 +8465,8 @@ snapshots:
       minizlib: 3.1.0
       yallist: 5.0.0
 
-  throttleit@2.1.0: {}
+  throttleit@2.1.0:
+    optional: true
 
   tiny-inflate@1.0.3: {}
 
@@ -8492,7 +8527,8 @@ snapshots:
 
   undici-types@8.9.0: {}
 
-  undici@6.29.0: {}
+  undici@6.29.0:
+    optional: true
 
   undici@8.11.2: {}
 

@@ -22,7 +22,7 @@
     /** Admin scope's department, preselected (superadmins may change it). */
     defaultDepartmentId?: number | null;
     maxMb?: number;
-    /** True when the server stores files in Vercel Blob: upload from the browser, then submit only the key. */
+    /** True when the server stores files in S3: upload from the browser, then submit only the key. */
     directUpload?: boolean;
   } = $props();
 
@@ -38,24 +38,29 @@
   /** Already uploaded file, reused when the form is resubmitted after a validation error. */
   let uploaded: { file: File; key: string } | null = null;
 
-  /** Uploads straight to Vercel Blob (request bodies over ~4.5 MB never reach the server) and returns the key. */
+  /** Uploads straight to the S3 bucket (request bodies over ~4.5 MB never reach the server) and returns the key. */
   async function uploadDirect(chosen: File): Promise<string> {
-    const issued = await fetch('/api/admin/uploads/blob', {
+    const contentType = chosen.type || 'application/octet-stream';
+    const issued = await fetch('/api/admin/uploads/direct', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'issue-key', fileName: chosen.name }),
+      body: JSON.stringify({ fileName: chosen.name, contentType, size: chosen.size }),
     });
-    const ticket = (await issued.json().catch(() => null)) as { key: string; pathname: string; ticket: string; message?: string } | null;
-    if (!issued.ok || !ticket?.key) throw new Error(ticket?.message ?? 'Could not start the upload.');
-    const { upload } = await import('@vercel/blob/client');
-    await upload(ticket.pathname, chosen, {
-      access: 'public',
-      handleUploadUrl: '/api/admin/uploads/blob',
-      clientPayload: ticket.ticket,
-      contentType: chosen.type || undefined,
-      onUploadProgress: ({ percentage }) => (progress = Math.round(percentage)),
-    });
-    return ticket.key;
+    const grant = (await issued.json().catch(() => null)) as { key: string; url: string; message?: string } | null;
+    if (!issued.ok || !grant?.key) throw new Error(grant?.message ?? 'Could not start the upload.');
+    // XHR rather than fetch: only XHR reports upload progress.
+    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', grant.url);
+    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) progress = Math.round((event.loaded / event.total) * 100);
+    };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`The upload failed (HTTP ${xhr.status}).`)));
+    xhr.onerror = () => reject(new Error('The upload failed. Check your connection and try again.'));
+    xhr.send(chosen);
+    await promise;
+    return grant.key;
   }
 
   function onFile(event: Event) {
