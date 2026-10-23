@@ -41,6 +41,7 @@ export default defineConfig({
             'db:migrate': { command: 'node scripts/prisma-schema.mjs && prisma migrate dev', cache: false },
             'db:deploy': { command: 'node scripts/prisma-schema.mjs && prisma migrate deploy', cache: false },
             'db:seed': { command: 'tsx prisma/seed.ts', cache: false },
+            'db:seed:schools': { command: 'tsx prisma/seed-schools.ts', cache: false },
             'db:reset': { command: 'node scripts/prisma-schema.mjs && prisma migrate reset --force', cache: false },
             'db:create-admin': { command: 'tsx prisma/create-admin.ts', cache: false },
             'db:studio': { command: 'prisma studio', cache: false },
