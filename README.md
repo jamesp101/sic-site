@@ -74,6 +74,14 @@ Vercel functions reject request bodies over ~4.5 MB, so with `STORAGE_DRIVER=s3`
 - **Bucket CORS**: the browser PUTs cross-origin, so the bucket needs a rule like `[{"AllowedOrigins":["https://<site>"],"AllowedMethods":["PUT"],"AllowedHeaders":["content-type"],"MaxAgeSeconds":3600}]` (`aws s3api put-bucket-cors`, or the provider's CORS settings).
 - **Images** stay multipart: they are compressed to WebP in the browser first, and `LIMITS.image` is lowered to 4 MB on `s3`, so an oversized pass-through file (GIF, or a browser without WebP encoding) gets a clear validation message instead of a platform 413. The server converts every accepted image to WebP inside its size box (sharp, `src/lib/server/image-webp.ts`), keeping already-compressed WebP untouched.
 
+### Self-hosting without S3
+
+On your own server (Node adapter, `node dist/server/entry.mjs`) the `local` driver needs no S3: files are written to `UPLOAD_DIR` and served at `/storage/<key>`.
+
+- Point `UPLOAD_DIR` at a persistent directory outside the deploy folder (e.g. `/var/lib/sic/uploads`) so files survive redeploys, and back it up with the database.
+- Every upload, including Downloads up to 20 MB, is a multipart request to an action. `security.actionBodySizeLimit` in `astro.config.mjs` is 24 MB (Astro's default is 1 MB); a reverse proxy in front needs at least the same, e.g. nginx `client_max_body_size 25m;`.
+- Behind a proxy, set `ALLOWED_DOMAINS` at build time so per-IP rate limits see real clients.
+
 ## Deploying to Vercel
 
 Vercel runs the app with the Vercel adapter (selected when `VERCEL` is set during `vercel build`, or with `ASTRO_ADAPTER=vercel`; `vercel.json` sets the build command `node scripts/prisma-schema.mjs && prisma generate && astro build`). The server keeps no state on disk: toasts use a short-lived httpOnly cookie (`sic_flash`), auth rate limits live in the `auth_rate_limits` table, uploads go to S3.

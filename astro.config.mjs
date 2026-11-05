@@ -24,7 +24,10 @@ export default defineConfig({
     adapter: useVercel ? vercel() : node({ mode: 'standalone' }),
     trailingSlash: 'never',
     integrations: [svelte()],
-    security: { checkOrigin: true, allowedDomains },
+    // Actions accept multipart uploads: the largest is a Download (LIMITS.download, 20 MB) on the local
+    // driver. Astro's default is 1 MB. The headroom lets a slightly larger file reach the action's own
+    // size check and its readable message. On Vercel the platform caps bodies at ~4.5 MB anyway.
+    security: { checkOrigin: true, allowedDomains, actionBodySizeLimit: 24 * 1024 * 1024 },
     // ClientRouter would prefetch every link by default; admin pages are `no-store`, so prefetched
     // HTML could never be reused. Keep prefetch opt-in (`data-astro-prefetch`).
     prefetch: { prefetchAll: false },

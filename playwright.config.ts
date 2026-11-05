@@ -1,10 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import { DB, PORT, UPLOADS } from './e2e/env';
 
-// E2E_PORT / E2E_DIST let several runs coexist (each gets its own server, DB, uploads and build dir).
-const PORT = Number(process.env.E2E_PORT ?? 4399);
+// E2E_DIST lets several runs coexist with E2E_PORT (see e2e/env.ts): each gets its own build dir.
 const DIST = process.env.E2E_DIST ?? 'dist';
-const DB = `storage/e2e-${PORT}.db`;
-const UPLOADS = `storage/e2e-uploads-${PORT}`;
 
 export default defineConfig({
     testDir: 'e2e',
