@@ -15,16 +15,33 @@ import type {
     PostType,
 } from '@/lib/content-types';
 import { excerptOf, parseContent } from '@/lib/blocks/content';
-import { parseOverlayDocument } from '@/lib/carousel-overlay-schema';
+import { slideDocument } from '@/lib/carousel-overlay-schema';
 import { extensionOf, fileKind } from '@/lib/files';
 import { buildOrgTree, type OrgNode } from '@/lib/org-tree';
+import { DEFAULT_DIRECTORY, downloadsHref, hasDownloadFilters } from '@/lib/post-filters';
 import { departmentPageSeo, postPageSeo, postsListSeo, type PageSeo } from '@/lib/seo';
 import { slideVideoView } from './carousel-admin';
 import { db } from './db';
 import { textContains } from './search';
 import { downloadUrl, publicUrl } from './storage';
 
-const DEFAULT_DIRECTORY = 'General';
+/** What `/downloads` renders: see `getDownloadsPage`. */
+export interface DownloadsPage {
+    departments: DepartmentSummary[];
+    /** The files to list: matching the search and Department, narrowed to `selected`. */
+    downloads: DownloadView[];
+    /** `downloads` grouped by Directory, in order of first appearance. */
+    groups: { name: string; files: DownloadView[] }[];
+    /** Every Directory with the number of files matching the search and Department, and its link. */
+    folders: { name: string; count: number; href: string }[];
+    /** The selected Directory, `''` for all. */
+    selected: string;
+    /** Link that clears the Directory but keeps the search and Department. */
+    allHref: string;
+    /** Files matching the search and Department, whatever the Directory. */
+    totalCount: number;
+    seo: PageSeo;
+}
 
 const departmentRefSelect = { id: true, name: true, slug: true } as const;
 
@@ -100,15 +117,12 @@ const carouselSelect = {
 } satisfies Prisma.CarouselItemSelect;
 
 function toSlide(row: Prisma.CarouselItemGetPayload<{ select: typeof carouselSelect }>): CarouselSlide {
-    const doc = parseOverlayDocument(row.overlay);
+    const doc = slideDocument(row);
     return {
         id: row.id,
-        title: row.title,
-        subtitle: row.subtitle,
         imageUrl: publicUrl(row.imagePath) ?? row.imagePath,
-        linkUrl: row.linkUrl,
-        overlay: doc?.layers ?? null,
-        mobile: doc?.mobile ?? null,
+        layers: doc.layers,
+        mobile: doc.mobile,
         video: slideVideoView(row),
     };
 }
@@ -326,16 +340,9 @@ function parseTags(raw: string | null): string[] {
         .filter(Boolean);
 }
 
-export async function listDownloads(filters: DownloadFilters = {}): Promise<DownloadView[]> {
+async function listDownloads(filters: Pick<DownloadFilters, 'search' | 'departmentId'>): Promise<DownloadView[]> {
     const and: Prisma.DownloadWhereInput[] = [];
     if (filters.departmentId) and.push({ departmentId: filters.departmentId });
-    if (filters.directory) {
-        and.push(
-            filters.directory === DEFAULT_DIRECTORY
-                ? { OR: [{ directory: null }, { directory: DEFAULT_DIRECTORY }] }
-                : { directory: filters.directory },
-        );
-    }
     const search = filters.search?.trim();
     if (search) {
         and.push({
@@ -384,7 +391,7 @@ export async function listDownloads(filters: DownloadFilters = {}): Promise<Down
     });
 }
 
-export async function getDownloadDirectories(departmentId?: number): Promise<string[]> {
+async function getDownloadDirectories(departmentId?: number): Promise<string[]> {
     const where = departmentId ? { departmentId } : {};
     const [custom, used] = await Promise.all([
         db.downloadDirectory.findMany({ where, select: { name: true } }),
@@ -394,6 +401,51 @@ export async function getDownloadDirectories(departmentId?: number): Promise<str
     for (const row of custom) names.add(row.name);
     for (const row of used) if (row.directory) names.add(row.directory);
     return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * The public `/downloads` page: the Downloads matching the search and Department, the Directories with
+ * how many of those each holds, and the list narrowed to `filters.directory`. Not paginated: the page
+ * groups files by Directory and shows a count per group, which a page boundary would cut through.
+ */
+export async function getDownloadsPage(filters: DownloadFilters): Promise<DownloadsPage> {
+    const { search, departmentId, directory } = filters;
+    const [departments, matching, directoryNames] = await Promise.all([
+        getDepartments(),
+        listDownloads({ search, departmentId }),
+        getDownloadDirectories(departmentId),
+    ]);
+
+    const counts = new Map<string, number>(directoryNames.map((name) => [name, 0]));
+    for (const file of matching) counts.set(file.directory, (counts.get(file.directory) ?? 0) + 1);
+    const folders = [...counts].map(([name, count]) => ({
+        name,
+        count,
+        href: downloadsHref({ search, departmentId, directory: name }),
+    }));
+
+    const downloads = directory ? matching.filter((file) => file.directory === directory) : matching;
+    const groups = new Map<string, DownloadView[]>();
+    for (const file of downloads) groups.set(file.directory, [...(groups.get(file.directory) ?? []), file]);
+
+    return {
+        departments,
+        downloads,
+        groups: [...groups].map(([name, files]) => ({ name, files })),
+        folders,
+        selected: directory ?? '',
+        allHref: downloadsHref({ search, departmentId }),
+        totalCount: matching.length,
+        seo: {
+            title: 'Downloads',
+            description:
+                'Official forms, academic guides, curriculum checklists and schedules from San Isidro College, organised by folder and department.',
+            canonical: downloadsHref({}),
+            noindex: hasDownloadFilters(filters),
+            follow: true,
+            breadcrumbs: [{ label: 'Home', href: '/' }, { label: 'Downloads' }],
+        },
+    };
 }
 
 export async function getSitemapData(): Promise<{

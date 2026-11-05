@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { BLOCK_GROUPS, BLOCK_META, BLOCK_TYPES, type BlockType } from '@/lib/blocks/types';
-  import { BLOCK_ICONS } from './block-icons';
+  import { BLOCK_REGISTRY, BLOCK_TYPES } from '@/lib/blocks/registry';
+  import { BLOCK_GROUPS, type BlockType } from '@/lib/blocks/types';
+  import { EDITOR_BLOCKS } from './block-editors';
 
   let {
     onadd,
@@ -14,7 +15,7 @@
 
   const groups = BLOCK_GROUPS.map((group) => ({
     group,
-    types: BLOCK_TYPES.filter((type) => BLOCK_META[type].group === group),
+    types: BLOCK_TYPES.filter((type) => BLOCK_REGISTRY[type].meta.group === group),
   })).filter((entry) => entry.types.length > 0);
 
   let suppressClick = false;
@@ -54,18 +55,18 @@
       <h4 id={`palette-${group}`} class="mb-1.5 px-1 text-xs font-bold tracking-wide text-muted-foreground uppercase">{group}</h4>
       <ul class="grid grid-cols-2 gap-1.5">
         {#each types as type (type)}
-          {@const Icon = BLOCK_ICONS[type]}
+          {@const Icon = EDITOR_BLOCKS[type].icon}
           <li>
             <button
               type="button"
               class="flex w-full cursor-grab items-center gap-2 rounded-lg border border-border bg-surface px-2 py-2 text-left text-xs font-semibold text-foreground transition-colors hover:border-border-strong hover:bg-accent active:cursor-grabbing"
-              aria-label={`Add ${BLOCK_META[type].label}`}
-              title={BLOCK_META[type].description}
+              aria-label={`Add ${BLOCK_REGISTRY[type].meta.label}`}
+              title={BLOCK_REGISTRY[type].meta.description}
               onpointerdown={(event) => pointerdown(event, type)}
               onclick={() => click(type)}
             >
               <Icon class="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <span class="truncate">{BLOCK_META[type].label}</span>
+              <span class="truncate">{BLOCK_REGISTRY[type].meta.label}</span>
             </button>
           </li>
         {/each}

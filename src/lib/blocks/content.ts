@@ -13,7 +13,8 @@ import { parseMarkdown } from '../markdown';
 import { stripMarkdown } from '../markdown-strip';
 import { createBlock, isBlockDocument } from './document';
 import { documentToPlainText } from './plain-text';
-import { ALBUM_ATTR, renderBlocks } from './render';
+import { ALBUM_ATTR } from './block-types/album';
+import { renderBlocks } from './render';
 import { parseBlockJson } from './schema';
 import type { Block } from './types';
 

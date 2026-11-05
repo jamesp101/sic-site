@@ -8,6 +8,7 @@
  */
 import { db } from '../src/lib/server/db';
 import { hashPassword } from '../src/lib/server/password';
+import { setPasswordLogin } from '../src/lib/server/password-login';
 
 const MIN_PASSWORD_LENGTH = 12;
 
@@ -65,25 +66,12 @@ async function main() {
     const hash = await hashPassword(password);
 
     const user = await db.$transaction(async (tx) => {
-        const data = {
-            role: 'superadmin',
-            departmentId: null,
-            emailVerified: true,
-            emailVerifiedAt: new Date(),
-            password: hash,
-        };
+        const data = { role: 'superadmin', departmentId: null, emailVerified: true, emailVerifiedAt: new Date() };
         const saved = existing
             ? await tx.user.update({ where: { id: existing.id }, data: { ...data, ...(name ? { name } : {}) } })
             : await tx.user.create({ data: { ...data, name: name as string, email } });
-        const account = await tx.account.findFirst({ where: { userId: saved.id, providerId: 'credential' } });
-        if (account) await tx.account.update({ where: { id: account.id }, data: { password: hash } });
-        else {
-            await tx.account.create({
-                data: { userId: saved.id, accountId: String(saved.id), providerId: 'credential', password: hash },
-            });
-        }
         // A reset must sign out sessions opened with the old password.
-        await tx.session.deleteMany({ where: { userId: saved.id } });
+        await setPasswordLogin(tx, saved.id, hash, { endSessions: {} });
         return saved;
     });
 

@@ -1,4 +1,5 @@
 import { adminRoute, json } from '@/lib/server/api-route';
+import { RequestError } from '@/lib/server/request-error';
 import { storageRouteUrl } from '@/lib/server/storage';
 import { completeVideo } from '@/lib/server/video-intake';
 
@@ -11,7 +12,7 @@ export const prerender = false;
  */
 export const POST = adminRoute(async ({ request, user }) => {
     const body: { key?: unknown } | null = await request.json().catch(() => null);
-    if (typeof body?.key !== 'string') return json({ message: 'Expected a JSON body with a key.' }, 400);
+    if (typeof body?.key !== 'string') throw new RequestError('BAD_REQUEST', 'Expected a JSON body with a key.');
     const { key } = await completeVideo(user.id, body.key);
     return json({ url: storageRouteUrl(key) });
 });

@@ -2,6 +2,7 @@
 import Eyebrow from './Eyebrow.astro';
 import { btnGold, btnOnDark } from './classes';
 import { SITE } from '@/lib/site';
+import { DEPARTMENTS_MENU_URL } from '@/lib/site-nav';
 ---
 
 <section class="relative overflow-hidden bg-linear-to-br from-brand-950 via-brand-900 to-brand-800 text-white">
@@ -29,7 +30,7 @@ import { SITE } from '@/lib/site';
         <h1 class="mt-4 animate-fade-in text-4xl font-bold tracking-tight md:text-6xl">{SITE.name}</h1>
         <p class="mt-5 max-w-2xl text-base leading-relaxed text-white/85 md:text-lg">{SITE.tagline}</p>
         <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
-            <a href="#departments" class={btnGold}>
+            <a href={DEPARTMENTS_MENU_URL} class={btnGold}>
                 Explore programs
             </a>
             <a href="/contact" class={btnOnDark}>

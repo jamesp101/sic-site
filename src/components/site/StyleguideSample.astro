@@ -25,6 +25,7 @@ import type {
     MemberNode,
     PostSummary,
 } from '@/lib/content-types';
+import { legacyLayers } from '@/lib/carousel-overlay';
 
 interface Props {
     /** Interactive islands use fixed ids, so render them in one panel only. */
@@ -58,21 +59,15 @@ const posts: PostSummary[] = (['article', 'event', 'announcement'] as const).map
 const slides: CarouselSlide[] = [
     {
         id: 1,
-        title: 'Sample slide one',
-        subtitle: 'Subtitle text',
         imageUrl: '/sic-seal.png',
-        linkUrl: '/posts',
-        overlay: null,
+        layers: legacyLayers({ title: 'Sample slide one', subtitle: 'Subtitle text', linkUrl: '/posts' }),
         mobile: null,
         video: null,
     },
     {
         id: 2,
-        title: 'Sample slide two',
-        subtitle: null,
         imageUrl: '/sic-seal.png',
-        linkUrl: null,
-        overlay: null,
+        layers: legacyLayers({ title: 'Sample slide two' }),
         mobile: null,
         video: null,
     },
@@ -263,12 +258,16 @@ const h = 'mb-6 mt-16 border-b border-border pb-2 font-sans text-xl font-semibol
     <h3 class={h}>Downloads</h3>
     <DownloadBrowser
         {downloads}
+        groups={[...new Set(downloads.map((file) => file.directory))].map((name) => ({
+            name,
+            files: downloads.filter((file) => file.directory === name),
+        }))}
         folders={[
-            { name: 'Forms', count: 3 },
-            { name: 'Schedules', count: 3 },
+            { name: 'Forms', count: 3, href: '#forms' },
+            { name: 'Schedules', count: 3, href: '#schedules' },
         ]}
         selected=""
-        carry={{}}
+        allHref="#downloads"
         totalCount={downloads.length}
     />
 

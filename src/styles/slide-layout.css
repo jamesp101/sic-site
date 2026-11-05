@@ -1,0 +1,106 @@
+/*
+ * Slide layout (CSS half). The facts below are defined in src/lib/carousel-layout.ts; media and container
+ * queries cannot read TypeScript, so src/lib/carousel-layout.test.ts fails when this file and the constants
+ * disagree. No other stylesheet or component may repeat them.
+ *
+ * The hero is a size container named "hero". Overlay layers live on a 16:9 stage that covers it exactly like the
+ * object-cover photo, so percentages match the designer. Below `sm` (40rem) the hero is a 4:5 frame, the stage is
+ * that frame, and every layer sits at its phone box (`--mx`, `--my`, `--mw`, `--mh`, `--mfs`, resolved by
+ * resolveMobile); the photo and video are cropped around the slide's focal point (`--fx` / `--fy`).
+ */
+
+.slide-hero {
+    container: hero / inline-size;
+    height: var(--hh);
+    touch-action: pan-y;
+    --hh: 500px;
+}
+.slide-hero-short {
+    --hh: 400px;
+}
+@media (min-width: 48rem) {
+    .slide-hero {
+        --hh: 600px;
+    }
+    .slide-hero-short {
+        --hh: 450px;
+    }
+}
+.slide-stage {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100cqw, calc(var(--hh) * 16 / 9));
+    aspect-ratio: 16 / 9;
+    transform: translate(-50%, -50%);
+    container-type: inline-size;
+    --min-fs: 0.75rem;
+}
+
+/* The 16:9 player covers the slide like object-cover; the hero is --hh tall (4:5 on phones). */
+.slide-yt {
+    width: max(100cqw, calc(var(--hh, 600px) * 16 / 9));
+    height: max(var(--hh, 600px), calc(100cqw * 9 / 16));
+}
+
+@media (max-width: 39.99rem) {
+    .slide-hero {
+        height: auto;
+        aspect-ratio: 4 / 5;
+    }
+    .slide-photo,
+    .slide-vid {
+        object-position: var(--fx, 50%) var(--fy, 50%);
+    }
+    .slide-yt {
+        width: calc(125cqw * 16 / 9);
+        height: 125cqw;
+    }
+}
+
+/* Layers. */
+.sl {
+    position: absolute;
+    margin: 0;
+}
+.sl-fs {
+    font-size: max(var(--min-fs, 0px), calc(var(--fs) * 1cqw));
+}
+.sl-img {
+    display: block;
+}
+
+/*
+ * Phone frame: layers move to their phone box. Rotation is dropped; layers stacked automatically are fully
+ * opaque and turn dark text colours white (the photo is darkened by a gradient); hidden layers disappear.
+ */
+@container hero (max-width: 39.99rem) {
+    .slide-stage {
+        inset: 0;
+        transform: none;
+        width: auto;
+        aspect-ratio: auto;
+    }
+    .sl-m {
+        left: var(--mx) !important;
+        top: var(--my) !important;
+        width: var(--mw) !important;
+        height: var(--mh) !important;
+        transform: none !important;
+    }
+    .sl-mauto {
+        opacity: 1 !important;
+    }
+    .sl-mhide {
+        display: none !important;
+    }
+    .sl-m.sl-fs {
+        font-size: max(var(--min-fs, 0px), calc(var(--mfs) * 1cqw));
+    }
+    .sl-m.sl-img {
+        max-width: none;
+    }
+    .sl-onphoto {
+        color: #fff !important;
+    }
+}

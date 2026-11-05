@@ -12,6 +12,7 @@
 import { searchTextOf } from '../src/lib/blocks/content';
 import { db } from '../src/lib/server/db';
 import { hashPassword } from '../src/lib/server/password';
+import { setPasswordLogin } from '../src/lib/server/password-login';
 
 const ifEmpty = process.argv.includes('--if-empty');
 
@@ -45,21 +46,20 @@ async function createUser(data: {
     departmentId?: number;
 }) {
     const hash = await hashPassword(data.password);
-    const user = await db.user.create({
-        data: {
-            name: data.name,
-            email: data.email,
-            role: data.role,
-            departmentId: data.departmentId ?? null,
-            emailVerified: true,
-            emailVerifiedAt: new Date(),
-            password: hash,
-        },
+    return db.$transaction(async (tx) => {
+        const user = await tx.user.create({
+            data: {
+                name: data.name,
+                email: data.email,
+                role: data.role,
+                departmentId: data.departmentId ?? null,
+                emailVerified: true,
+                emailVerifiedAt: new Date(),
+            },
+        });
+        await setPasswordLogin(tx, user.id, hash);
+        return user;
     });
-    await db.account.create({
-        data: { userId: user.id, accountId: String(user.id), providerId: 'credential', password: hash },
-    });
-    return user;
 }
 
 const WELCOME_HERO = `# Welcome to San Isidro College

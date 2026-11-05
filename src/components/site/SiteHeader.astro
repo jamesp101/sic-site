@@ -1,9 +1,9 @@
 ---
 import NavMenu from './NavMenu.svelte';
 import ThemeToggle from './ThemeToggle.svelte';
-import type { NavItem } from './nav-types';
 import type { DepartmentSummary, NavLinkView } from '@/lib/content-types';
 import { SITE } from '@/lib/site';
+import { headerItems } from '@/lib/site-nav';
 
 interface Props {
     navLinks: NavLinkView[];
@@ -12,25 +12,7 @@ interface Props {
 
 const { navLinks, departments } = Astro.props;
 
-const departmentLinks = departments.map((d) => ({ label: d.name, href: `/departments/${d.slug}` }));
-
-// One normalised list drives both the desktop bar and the mobile panel.
-const items: NavItem[] =
-    navLinks.length > 0
-        ? navLinks.map((link) =>
-              link.url === '#departments'
-                  ? { label: link.label, children: departmentLinks }
-                  : link.children.length > 0
-                    ? { label: link.label, children: link.children.map((c) => ({ label: c.label, href: c.url })) }
-                    : { label: link.label, href: link.url },
-          )
-        : [
-              { label: 'Home', href: '/' },
-              ...(departmentLinks.length ? [{ label: 'Departments', children: departmentLinks }] : []),
-              { label: 'News & Events', href: '/posts' },
-              { label: 'Downloads', href: '/downloads' },
-              { label: 'Contact', href: '/contact' },
-          ];
+const items = headerItems(navLinks, departments);
 ---
 
 <header class="sticky top-0 z-50 border-b border-white/10 bg-linear-to-r from-brand-800 to-brand-700 text-white shadow-brand-md">

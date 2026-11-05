@@ -125,6 +125,20 @@ describe('document factories', () => {
         expect(createBlock('columns', { count: 3 }).children).toHaveLength(3);
         expect(new Set([...(two.children ?? [])].map((child) => child.id)).size).toBe(2);
     });
+
+    it('updateBlock keeps one stack per column and never drops content when the count shrinks', () => {
+        const columns = createBlock('columns');
+        const kept = createBlock('paragraph');
+        columns.children![1].children = [kept];
+        const grown = updateBlock([columns], columns.id, { count: 3 });
+        const children = findBlock(grown, columns.id)!.block.children!;
+        expect(children).toHaveLength(3);
+        expect(children[0].id).toBe(columns.children![0].id);
+        expect(children[2].props).toMatchObject({ direction: 'column', gap: 'sm', align: 'stretch' });
+        const shrunk = updateBlock(grown, columns.id, { count: 2 });
+        expect(findBlock(shrunk, columns.id)!.block.children).toHaveLength(3);
+        expect(findBlock(shrunk, kept.id)).not.toBeNull();
+    });
 });
 
 describe('queries', () => {

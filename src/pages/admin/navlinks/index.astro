@@ -3,21 +3,12 @@ import AppLayout from '@/layouts/AppLayout.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import NavLinksEditor from '@/components/admin/navlinks/NavLinksEditor.svelte';
 import { db } from '@/lib/server/db';
-import { requireSuperAdmin } from '@/lib/server/authz';
-import { authzResponse } from '@/lib/server/authz-response';
-import {
-    PAGE_SUGGESTIONS,
-    STATIC_PATHS,
-    DEPARTMENTS_MENU_URL,
-    type LinkSuggestion,
-    type NavNode,
-} from '@/lib/nav-tree';
+import { adminPage } from '@/lib/server/admin-page';
+import { PAGE_SUGGESTIONS, type LinkSuggestion, type NavNode } from '@/lib/nav-tree';
+import { DEPARTMENTS_MENU_URL, STATIC_PATHS, departmentHref } from '@/lib/site-nav';
 
-try {
-    requireSuperAdmin(Astro.locals.user);
-} catch (error) {
-    return authzResponse(error);
-}
+const page = await adminPage(Astro.locals.user, { superAdmin: true });
+if (page instanceof Response) return page;
 
 const all = await db.navigationLink.findMany({ orderBy: [{ order: 'asc' }, { id: 'asc' }] });
 const toNode = (link: (typeof all)[number]): NavNode => ({
@@ -44,12 +35,12 @@ const [departments, posts] = await Promise.all([
 const suggestions: LinkSuggestion[] = [
     ...PAGE_SUGGESTIONS,
     { group: 'Pages', label: 'Departments menu (auto)', url: DEPARTMENTS_MENU_URL },
-    ...departments.map((d): LinkSuggestion => ({ group: 'Departments', label: d.name, url: `/departments/${d.slug}` })),
+    ...departments.map((d): LinkSuggestion => ({ group: 'Departments', label: d.name, url: departmentHref(d.slug) })),
     ...posts.slice(0, 30).map((p): LinkSuggestion => ({ group: 'Posts', label: p.title, url: `/posts/${p.slug}` })),
 ];
 const knownPaths = [
     ...STATIC_PATHS,
-    ...departments.map((d) => `/departments/${d.slug}`),
+    ...departments.map((d) => departmentHref(d.slug)),
     ...posts.map((p) => `/posts/${p.slug}`),
 ];
 ---

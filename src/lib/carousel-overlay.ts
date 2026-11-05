@@ -184,9 +184,8 @@ export const COLOR_LABEL: Record<ColorKey, string> = {
 };
 
 /*
- * Class maps are literal strings so Tailwind can see them. Layers stacked automatically on phones
- * (TEXT_COLOR_AUTO_CLASS) turn dark text colours white below `sm`, where the photo is darkened by a gradient;
- * hand-placed layers keep their colour.
+ * Class maps are literal strings so Tailwind can see them. The rule that turns dark text colours white on phones
+ * lives in carousel-layout.ts.
  */
 export const TEXT_COLOR_CLASS: Record<ColorKey, string> = {
     white: 'text-white',
@@ -196,14 +195,6 @@ export const TEXT_COLOR_CLASS: Record<ColorKey, string> = {
     sky: 'text-brand-100',
     foreground: 'text-foreground',
     surface: 'text-surface',
-};
-
-export const TEXT_COLOR_AUTO_CLASS: Record<ColorKey, string> = {
-    ...TEXT_COLOR_CLASS,
-    navy: 'text-brand-800 @max-[39.99rem]/hero:text-white',
-    'navy-deep': 'text-brand-950 @max-[39.99rem]/hero:text-white',
-    foreground: 'text-foreground @max-[39.99rem]/hero:text-white',
-    surface: 'text-surface @max-[39.99rem]/hero:text-white',
 };
 
 export const BG_COLOR_CLASS: Record<ColorKey, string> = {
@@ -225,16 +216,6 @@ export const ON_COLOR_CLASS: Record<ColorKey, string> = {
     sky: 'text-brand-950',
     foreground: 'text-surface',
     surface: 'text-foreground',
-};
-
-export const BORDER_COLOR_CLASS: Record<ColorKey, string> = {
-    white: 'border-white',
-    gold: 'border-gold-300',
-    navy: 'border-brand-800',
-    'navy-deep': 'border-brand-950',
-    sky: 'border-brand-100',
-    foreground: 'border-foreground',
-    surface: 'border-surface',
 };
 
 export const RADIUS_CLASS: Record<Radius, string> = {
@@ -394,7 +375,10 @@ export function layerLabel(layer: Layer): string {
     }
 }
 
-/** Layers equivalent to the legacy title / subtitle / link fields, for the first edit of an old slide. */
+/**
+ * Layers equivalent to the legacy title / subtitle / link fields of a Slide that has no overlay. The Slide read
+ * model (`slideDocument`) applies it once, so everything downstream renders Layers only.
+ */
 export function legacyLayers(slide: {
     title?: string | null;
     subtitle?: string | null;
@@ -405,11 +389,19 @@ export function legacyLayers(slide: {
     const subtitle = slide.subtitle?.trim();
     const link = slide.linkUrl?.trim();
     if (title) {
-        layers.push({ ...(defaultLayer('text') as TextLayer), x: 6, y: 30, w: 60, text: title.slice(0, 500) });
+        layers.push({
+            ...(defaultLayer('text') as TextLayer),
+            id: 'legacy-title',
+            x: 6,
+            y: 30,
+            w: 60,
+            text: title.slice(0, 500),
+        });
     }
     if (subtitle) {
         layers.push({
             ...(defaultLayer('text') as TextLayer),
+            id: 'legacy-subtitle',
             x: 6,
             y: title ? 56 : 36,
             w: 55,
@@ -420,7 +412,14 @@ export function legacyLayers(slide: {
         });
     }
     if (link && safeHref(link)) {
-        layers.push({ ...(defaultLayer('button') as ButtonLayer), x: 6, y: 74, label: 'Explore more', href: link });
+        layers.push({
+            ...(defaultLayer('button') as ButtonLayer),
+            id: 'legacy-link',
+            x: 6,
+            y: 74,
+            label: 'Explore more',
+            href: link,
+        });
     }
     return layers;
 }

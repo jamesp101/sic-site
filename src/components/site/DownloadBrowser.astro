@@ -2,37 +2,13 @@
 import EmptyState from './EmptyState.astro';
 import FileKindBadge from './FileKindBadge.astro';
 import { btnPrimary } from './classes';
-import type { DownloadView } from '@/lib/content-types';
 import { formatDate, formatFileSize } from '@/lib/format';
+import { downloadsHref } from '@/lib/post-filters';
+import type { DownloadsPage } from '@/lib/server/queries';
 
-interface Props {
-    /** Files to list (already narrowed to the selected folder). */
-    downloads: DownloadView[];
-    /** Every folder with the number of files matching the current search/department. */
-    folders: { name: string; count: number }[];
-    /** Selected folder name, or '' for all. */
-    selected: string;
-    /** Search / department filters carried over to folder links. */
-    carry: { search?: string; departmentId?: number };
-    totalCount: number;
-}
+type Props = Pick<DownloadsPage, 'downloads' | 'groups' | 'folders' | 'selected' | 'allHref' | 'totalCount'>;
 
-const { downloads, folders, selected, carry, totalCount } = Astro.props;
-
-function folderHref(name: string): string {
-    const params = new URLSearchParams();
-    if (carry.search) params.set('search', carry.search);
-    if (carry.departmentId) params.set('department_id', String(carry.departmentId));
-    if (name) params.set('directory', name);
-    const query = params.toString();
-    return query ? `/downloads?${query}` : '/downloads';
-}
-
-const groups = new Map<string, DownloadView[]>();
-for (const file of downloads) {
-    const key = file.directory || 'General';
-    groups.set(key, [...(groups.get(key) ?? []), file]);
-}
+const { downloads, groups, folders, selected, allHref, totalCount } = Astro.props;
 
 const folderLink =
     'flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm transition-colors hover:border-gold-500';
@@ -47,7 +23,7 @@ const folderLink =
             <ul class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <li>
                     <a
-                        href={folderHref('')}
+                        href={allHref}
                         aria-current={selected === '' ? 'page' : undefined}
                         class:list={[
                             folderLink,
@@ -63,7 +39,7 @@ const folderLink =
                 {folders.map((folder) => (
                     <li>
                         <a
-                            href={folderHref(folder.name)}
+                            href={folder.href}
                             aria-current={selected === folder.name ? 'page' : undefined}
                             class:list={[
                                 folderLink,
@@ -89,10 +65,10 @@ const folderLink =
             actionLabel="Show all files"
         />
     ) : (
-        [...groups].map(([directory, files], index) => (
+        groups.map(({ name, files }, index) => (
             <section aria-labelledby={`folder-${index}`}>
                 <h2 id={`folder-${index}`} class="mb-4 text-2xl font-bold text-brand-800 dark:text-foreground">
-                    {directory}{' '}
+                    {name}{' '}
                     <span class="font-sans text-base font-normal text-muted-foreground">({files.length})</span>
                 </h2>
                 <ul class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -122,7 +98,7 @@ const folderLink =
                                     {file.tags.map((tag) => (
                                         <li>
                                             <a
-                                                href={`/downloads?search=${encodeURIComponent(tag)}`}
+                                                href={downloadsHref({ search: tag })}
                                                 class="rounded-md bg-surface-alt px-2 py-0.5 text-xs font-medium text-muted-foreground hover:text-link"
                                             >
                                                 {tag}

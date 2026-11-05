@@ -19,6 +19,7 @@ import {
     siblingsOf,
     subtreeIds,
     wouldCycle,
+    orgTreeOps,
     type OrgMember,
     type OrgNode,
 } from './org-tree';
@@ -321,5 +322,28 @@ describe('misc helpers', () => {
         expect(matchMembers(members, 'LOVE')).toEqual([1]);
         expect(matchMembers(members, 'role 2')).toEqual([2]);
         expect(matchMembers(members, '  ')).toEqual([]);
+    });
+});
+
+describe('orgTreeOps', () => {
+    it('applies and inverts moves and renames', () => {
+        const members = sample();
+        const moves = moveRelative(members, 6, 2, 'before')!;
+        const moved = orgTreeOps.apply(members, { kind: 'place', placements: moves });
+        expect(orgTreeOps.apply(moved, orgTreeOps.invert(members, { kind: 'place', placements: moves }))).toEqual(
+            members,
+        );
+
+        const rename = { kind: 'rename', id: 2, name: 'New' } as const;
+        const renamed = orgTreeOps.apply(members, rename);
+        expect(renamed.find((x) => x.id === 2)?.name).toBe('New');
+        expect(orgTreeOps.apply(renamed, orgTreeOps.invert(members, rename))).toEqual(members);
+    });
+
+    it('treats an empty move or an unchanged name as nothing to do', () => {
+        const members = sample();
+        expect(orgTreeOps.isNoop?.(members, { kind: 'place', placements: [] })).toBe(true);
+        expect(orgTreeOps.isNoop?.(members, { kind: 'rename', id: 2, name: 'M2' })).toBe(true);
+        expect(orgTreeOps.isNoop?.(members, { kind: 'rename', id: 2, name: 'Other' })).toBe(false);
     });
 });

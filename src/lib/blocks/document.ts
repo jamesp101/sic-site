@@ -1,9 +1,9 @@
-/** Document helpers: format detection, block factories and immutable tree operations. No zod, no DOM. */
+/** Document helpers: format detection, block factories and immutable tree operations. No DOM. */
+import { BLOCK_REGISTRY, isContainerType } from './registry';
 import {
     DOCUMENT_TYPE,
     DOCUMENT_VERSION,
     LIMITS,
-    isContainerType,
     type Block,
     type BlockDocument,
     type BlockType,
@@ -41,63 +41,28 @@ export function serializeDocument(doc: BlockDocument): string {
     return JSON.stringify(doc);
 }
 
-const DEFAULTS: { [K in BlockType]: () => PropsByType[K] } = {
-    section: () => ({ background: 'alt', padding: 'md', align: 'inherit' }),
-    row: () => ({ direction: 'responsive', gap: 'md', align: 'stretch', justify: 'start', wrap: false }),
-    grid: () => ({ columns: 3, gap: 'md' }),
-    columns: () => ({ count: 2, ratio: 'equal', gap: 'lg' }),
-    spacer: () => ({ size: 'md' }),
-    divider: () => ({ tone: 'default' }),
-    heading: () => ({ text: 'Heading', level: 2, align: 'inherit' }),
-    paragraph: () => ({ text: 'Write something here.', size: 'base', tone: 'default', align: 'inherit' }),
-    list: () => ({ ordered: false, items: ['First item', 'Second item'] }),
-    quote: () => ({ text: 'A memorable line.', cite: '' }),
-    button: () => ({ label: 'Learn more', href: '/', variant: 'primary', align: 'left' }),
-    badges: () => ({ items: ['Label one', 'Label two'] }),
-    card: () => ({
-        title: 'Card title',
-        body: 'Short description of this card.',
-        imageUrl: '',
-        imageAlt: '',
-        linkLabel: '',
-        linkHref: '',
-    }),
-    image: () => ({ src: '', alt: '', decorative: false, caption: '', width: null, height: null, link: '' }),
-    album: () => ({ images: [], columns: 3 }),
-    table: () => ({
-        header: true,
-        caption: '',
-        rows: [
-            ['Column A', 'Column B'],
-            ['Value', 'Value'],
-        ],
-    }),
-    accordion: () => ({ items: [{ title: 'Question', body: 'Answer.' }] }),
-    callout: () => ({ tone: 'info', title: 'Good to know', text: 'Important information goes here.' }),
-    stats: () => ({
-        items: [
-            { value: '100+', label: 'Label', hint: '' },
-            { value: '25', label: 'Label', hint: '' },
-        ],
-    }),
-    video: () => ({ url: '', title: '', caption: '' }),
-    event: () => ({ title: '', start: '', end: '', location: '', note: '' }),
-    markdown: () => ({ source: '' }),
-};
-
 export function defaultProps<T extends BlockType>(type: T): PropsByType[T] {
-    return DEFAULTS[type]() as PropsByType[T];
+    return BLOCK_REGISTRY[type].defaults() as PropsByType[T];
+}
+
+/** The vertical stack that holds one column's content. */
+function columnStack(): Block<'row'> {
+    return createBlock('row', { direction: 'column', gap: 'sm', align: 'stretch' });
+}
+
+/** A `columns` block with at least one stack per column; extra stacks (content) are never removed. */
+function withColumnStacks(block: Block): Block {
+    const count = (block.props as PropsByType['columns']).count;
+    const children = block.children ?? [];
+    if (children.length >= count) return block;
+    return { ...block, children: [...children, ...Array.from({ length: count - children.length }, columnStack)] };
 }
 
 /** New block with default props. Containers start empty except `columns`, which gets one stack per column. */
 export function createBlock<T extends BlockType>(type: T, props?: Partial<PropsByType[T]>): Block<T> {
     const block = { id: newId(), type, props: { ...defaultProps(type), ...props } } as unknown as Block;
-    if (type === 'columns') {
-        const count = (block.props as PropsByType['columns']).count;
-        block.children = Array.from({ length: count }, () =>
-            createBlock('row', { direction: 'column', gap: 'sm', align: 'stretch' }),
-        );
-    } else if (isContainerType(type)) block.children = [];
+    if (type === 'columns') return withColumnStacks({ ...block, children: [] }) as Block<T>;
+    if (isContainerType(type)) block.children = [];
     return block as Block<T>;
 }
 
@@ -158,7 +123,7 @@ export function subtreeDepth(block: Block): number {
 export function canContain(parentType: BlockType | null, childType: BlockType): boolean {
     if (parentType === null) return true;
     if (!isContainerType(parentType)) return false;
-    return childType !== 'section';
+    return !BLOCK_REGISTRY[childType].rootOnly;
 }
 
 /** Whether `block` may be placed inside `parentId` (null = root) given nesting rules and depth limit. */
@@ -216,9 +181,13 @@ export function shiftBlock(blocks: Block[], id: string, delta: -1 | 1): Block[] 
     return moveBlock(blocks, id, location.parentId, target);
 }
 
+/** Merges `props` into a block. Raising a `columns` count adds the missing column stacks. */
 export function updateBlock<T extends BlockType>(blocks: Block[], id: string, props: Partial<PropsByType[T]>): Block[] {
     return blocks.map((block) => {
-        if (block.id === id) return { ...block, props: { ...block.props, ...props } } as Block;
+        if (block.id === id) {
+            const updated = { ...block, props: { ...block.props, ...props } } as Block;
+            return updated.type === 'columns' && 'count' in props ? withColumnStacks(updated) : updated;
+        }
         if (block.children) {
             const next = updateBlock(block.children, id, props);
             if (next !== block.children) return { ...block, children: next } as Block;

@@ -1,35 +1,14 @@
-import { ActionError, defineAction, type ActionAPIContext } from 'astro:actions';
+import { defineAction, type ActionAPIContext } from 'astro:actions';
 import { z } from 'astro/zod';
 import { auth } from '@/lib/server/auth';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { db } from '@/lib/server/db';
 import { sendMail } from '@/lib/server/mail';
-import { hashPassword, verifyPassword } from '@/lib/server/password';
-import { consumeRateLimit, RATE_LIMITS } from '@/lib/server/rate-limit';
+import { hashPassword } from '@/lib/server/password';
+import { assertPassword, setPasswordLogin } from '@/lib/server/password-login';
+import { RequestError } from '@/lib/server/request-error';
 
 const MIN_PASSWORD = 8;
-
-/** Hash stored for the signed-in user's credential login (Better Auth account row, else the legacy users.password). */
-async function credentialHash(userId: number): Promise<string | null> {
-    const credential = await db.account.findFirst({ where: { userId, providerId: 'credential' } });
-    if (credential?.password) return credential.password;
-    const user = await db.user.findUnique({ where: { id: userId }, select: { password: true } });
-    return user?.password ?? null;
-}
-
-/** Verifies the signed-in user's current password; attempts are rate-limited per user. */
-async function assertPassword(userId: number, password: string): Promise<void> {
-    if (!(await consumeRateLimit(`password:${userId}`, RATE_LIMITS.password))) {
-        throw new ActionError({
-            code: 'TOO_MANY_REQUESTS',
-            message: 'Too many password attempts. Try again in 15 minutes.',
-        });
-    }
-    const hash = await credentialHash(userId);
-    if (!hash || !(await verifyPassword(hash, password))) {
-        throw new ActionError({ code: 'BAD_REQUEST', message: 'The provided password was incorrect.' });
-    }
-}
 
 export const account = {
     updateProfile: defineAction({
@@ -48,17 +27,16 @@ export const account = {
                     where: { email: input.email, NOT: { id: actor.id } },
                     select: { id: true },
                 });
-                if (taken)
-                    throw new ActionError({ code: 'CONFLICT', message: 'That email address is already in use.' });
+                if (taken) throw new RequestError('CONFLICT', 'That email address is already in use.');
 
                 const emailChanged = input.email !== current.email.toLowerCase();
                 // The email is the password-reset target: changing it must not be possible with a session alone.
                 if (emailChanged) {
                     if (!input.currentPassword) {
-                        throw new ActionError({
-                            code: 'BAD_REQUEST',
-                            message: 'Enter your current password to change your email address.',
-                        });
+                        throw new RequestError(
+                            'BAD_REQUEST',
+                            'Enter your current password to change your email address.',
+                        );
                     }
                     await assertPassword(actor.id, input.currentPassword);
                 }
@@ -115,30 +93,9 @@ export const account = {
                 const next = await hashPassword(input.password);
                 const currentSessionId = context.locals.session ? Number(context.locals.session.id) : null;
 
-                await db.$transaction(async (tx) => {
-                    const updated = await tx.account.updateMany({
-                        where: { userId: actor.id, providerId: 'credential' },
-                        data: { password: next },
-                    });
-                    if (updated.count === 0) {
-                        await tx.account.create({
-                            data: {
-                                userId: actor.id,
-                                providerId: 'credential',
-                                accountId: String(actor.id),
-                                password: next,
-                            },
-                        });
-                    }
-                    await tx.user.update({ where: { id: actor.id }, data: { password: next } });
-                    // Sign out every other device; keep this one.
-                    await tx.session.deleteMany({
-                        where: {
-                            userId: actor.id,
-                            ...(currentSessionId === null ? {} : { NOT: { id: currentSessionId } }),
-                        },
-                    });
-                });
+                await db.$transaction((tx) =>
+                    setPasswordLogin(tx, actor.id, next, { endSessions: { except: currentSessionId } }),
+                );
 
                 flash(context, 'Password updated.');
                 return { ok: true as const };
@@ -155,10 +112,7 @@ export const account = {
                 if (actor.role === 'superadmin') {
                     const others = await db.user.count({ where: { role: 'superadmin', NOT: { id: actor.id } } });
                     if (others === 0) {
-                        throw new ActionError({
-                            code: 'FORBIDDEN',
-                            message: 'The last superadmin account cannot be deleted.',
-                        });
+                        throw new RequestError('FORBIDDEN', 'The last superadmin account cannot be deleted.');
                     }
                 }
 

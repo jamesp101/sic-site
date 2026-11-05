@@ -1,10 +1,13 @@
 // Vite+ only: lint, fmt, test, staged and tasks. Astro owns dev/build through
 // astro.config.mjs, so this file is never used to serve or build the app.
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite-plus';
 
 const generated = ['src/generated/**', 'dist/**', '.astro/**', 'prisma/schema.prisma', 'prisma/migrations/**'];
 
 export default defineConfig({
+    // Same `@/` alias as tsconfig/Astro, so tests can import server modules that use it.
+    resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
     lint: {
         ignorePatterns: generated,
         options: { typeAware: true, typeCheck: true },

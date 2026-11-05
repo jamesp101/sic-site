@@ -6,6 +6,7 @@ import PublicLayout from '@/layouts/PublicLayout.astro';
 import { hasAlbum } from '@/lib/blocks/content';
 import { formatDate, formatDateRange } from '@/lib/format';
 import { siteUrl } from '@/lib/seo';
+import { departmentHref } from '@/lib/site-nav';
 import { getPostPage } from '@/lib/server/queries';
 
 const { slug } = Astro.params;
@@ -24,7 +25,7 @@ const hasEventDates = post.type === 'event' && post.startDate;
                     <TypePill type={post.type} />
                     {post.department && (
                         <a
-                            href={`/departments/${post.department.slug}`}
+                            href={departmentHref(post.department.slug)}
                             class="rounded font-medium text-link underline-offset-4 hover:underline"
                         >
                             {post.department.name}

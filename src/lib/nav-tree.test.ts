@@ -12,6 +12,8 @@ import {
     reorderError,
     toPayload,
     treeFromPayload,
+    navTreeOps,
+    proposeNavTree,
     type NavNode,
 } from './nav-tree';
 
@@ -181,5 +183,39 @@ describe('navWarnings', () => {
         const tree = [link(1, '/missing', { children: [link(2, '/ok-child')] }), link(3, '#departments')];
         const warnings = navWarnings(tree, known);
         expect([...warnings.keys()]).toEqual([2]);
+    });
+});
+
+describe('proposeNavTree and navTreeOps', () => {
+    const current = [n(1), n(2), n(3, [n(4)])];
+
+    it('proposes the renumbered payload of a valid tree', () => {
+        expect(proposeNavTree(current, [n(2), n(1), n(3, [n(4)])])).toEqual({
+            change: {
+                kind: 'tree',
+                items: [
+                    { id: 2, parentId: null, order: 1 },
+                    { id: 1, parentId: null, order: 2 },
+                    { id: 3, parentId: null, order: 3 },
+                    { id: 4, parentId: 3, order: 1 },
+                ],
+            },
+        });
+    });
+
+    it('refuses a third level with the same message as the reorder action', () => {
+        const serverMessage = reorderError([{ id: 3, parentId: 1, order: 1 }], toPayload(current));
+        // A parent dropped under another top-level link keeps its own sub-links: three levels.
+        const proposal = proposeNavTree(current, [n(1, [n(3, [n(4)])]), n(2)]);
+        expect(serverMessage).toMatch(/two levels/);
+        expect(proposal).toEqual({ error: serverMessage });
+    });
+
+    it('applies and inverts a label patch', () => {
+        const patch = { kind: 'patch', id: 4, patch: { label: 'New', isActive: false } } as const;
+        const next = navTreeOps.apply(current, patch);
+        expect(next[2].children[0]).toMatchObject({ label: 'New', isActive: false });
+        expect(navTreeOps.apply(next, navTreeOps.invert(current, patch))).toEqual(current);
+        expect(navTreeOps.isNoop?.(current, { kind: 'patch', id: 4, patch: { label: 'L4' } })).toBe(true);
     });
 });

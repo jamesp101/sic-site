@@ -3,37 +3,14 @@ import DownloadBrowser from '@/components/site/DownloadBrowser.astro';
 import FilterBar from '@/components/site/FilterBar.svelte';
 import PageBanner from '@/components/site/PageBanner.astro';
 import PublicLayout from '@/layouts/PublicLayout.astro';
-import { parseDepartmentId, parseSearch } from '@/lib/post-filters';
-import { getDepartments, getDownloadDirectories, listDownloads } from '@/lib/server/queries';
+import { hasDownloadFilters, parseDownloadFilters } from '@/lib/post-filters';
+import { getDownloadsPage } from '@/lib/server/queries';
 
-const params = Astro.url.searchParams;
-const search = parseSearch(params.get('search'));
-const departmentId = parseDepartmentId(params.get('department_id'));
-const directory = params.get('directory')?.trim().slice(0, 255) ?? '';
-
-const [departments, all, directoryNames] = await Promise.all([
-    getDepartments(),
-    listDownloads({ search: search || undefined, departmentId }),
-    getDownloadDirectories(departmentId),
-]);
-
-// Folder counts reflect the current search/department; folder selection narrows the list server-side.
-const counts = new Map<string, number>(directoryNames.map((name) => [name, 0]));
-for (const file of all) counts.set(file.directory, (counts.get(file.directory) ?? 0) + 1);
-const folders = [...counts].filter(([name]) => name !== '').map(([name, count]) => ({ name, count }));
-const visible = directory ? all.filter((file) => file.directory === directory) : all;
-const filtered = Boolean(search || departmentId || directory);
+const filters = parseDownloadFilters(Astro.url.searchParams);
+const { departments, seo, ...listing } = await getDownloadsPage(filters);
 ---
 
-<PublicLayout
-    {departments}
-    title="Downloads"
-    description="Official forms, academic guides, curriculum checklists and schedules from San Isidro College, organised by folder and department."
-    canonical="/downloads"
-    noindex={filtered}
-    follow
-    breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Downloads' }]}
->
+<PublicLayout {...seo} {departments}>
     <PageBanner
         eyebrow="Downloads"
         title="Documents & Files"
@@ -45,22 +22,16 @@ const filtered = Boolean(search || departmentId || directory);
             <FilterBar
                 client:idle
                 action="/downloads"
-                search={search}
+                search={filters.search ?? ''}
                 searchLabel="Search files"
                 searchPlaceholder="Document name, tag or folder…"
-                departmentId={departmentId ?? null}
+                departmentId={filters.departmentId ?? null}
                 departments={departments}
-                hidden={directory ? { directory } : {}}
-                active={filtered}
+                hidden={filters.directory ? { directory: filters.directory } : {}}
+                active={hasDownloadFilters(filters)}
                 clearHref="/downloads"
             />
-            <DownloadBrowser
-                downloads={visible}
-                {folders}
-                selected={directory}
-                carry={{ search: search || undefined, departmentId }}
-                totalCount={all.length}
-            />
+            <DownloadBrowser {...listing} />
         </div>
     </section>
 </PublicLayout>

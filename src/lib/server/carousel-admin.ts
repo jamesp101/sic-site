@@ -1,11 +1,11 @@
 import type { CarouselItem } from '@/generated/prisma/client';
-import type { Layer, SlideMobile } from '@/lib/carousel-overlay';
+import { serializeOverlay, type Layer, type SlideMobile } from '../carousel-overlay';
 import type { SlideVideoView } from '@/lib/content-types';
 import { parseVideoUrl } from '../blocks/urls';
-import { parseOverlay, parseOverlayDocument } from '../carousel-overlay-schema';
+import { parseOverlay, parseOverlayDocument, slideDocument } from '../carousel-overlay-schema';
 import { db } from './db';
-import { headUpload, keyFromPublicUrl, publicUrl, videoKeyFromUrl } from './storage';
-import { commitWithFiles, deleteWithFiles } from './stored-files';
+import { headUpload, keyFromPublicUrl, publicUrl, read, videoKeyFromUrl } from './storage';
+import { commitWithFiles, deleteWithFiles, type NewFile, type NewFiles } from './stored-files';
 
 /** Slide as the admin designer sees it. */
 export interface DesignerSlide {
@@ -17,8 +17,8 @@ export interface DesignerSlide {
     order: number;
     departmentId: number | null;
     showOnMain: boolean;
-    /** null = legacy slide (title / subtitle / link only), converted to layers on first edit. */
-    overlay: Layer[] | null;
+    /** A legacy slide (title / subtitle / link only) arrives already converted to layers. */
+    layers: Layer[];
     /** Slide-level phone settings (photo focal point); null = centred. */
     mobile: SlideMobile | null;
     /** Public URL of the uploaded background video, or the YouTube link; '' = none. */
@@ -27,7 +27,7 @@ export interface DesignerSlide {
 }
 
 export function toDesignerSlide(row: CarouselItem): DesignerSlide {
-    const doc = parseOverlayDocument(row.overlay);
+    const doc = slideDocument(row);
     return {
         id: row.id,
         imageUrl: publicUrl(row.imagePath) ?? '',
@@ -37,8 +37,8 @@ export function toDesignerSlide(row: CarouselItem): DesignerSlide {
         order: row.order,
         departmentId: row.departmentId,
         showOnMain: row.showOnMain,
-        overlay: doc?.layers ?? null,
-        mobile: doc?.mobile ?? null,
+        layers: doc.layers,
+        mobile: doc.mobile,
         video: row.videoPath ? (publicUrl(row.videoPath) ?? '') : (row.videoUrl ?? ''),
         videoKind: row.videoPath ? 'file' : row.videoUrl ? 'youtube' : null,
     };
@@ -96,11 +96,27 @@ export function slideVideoView(row: { videoPath: string | null; videoUrl: string
 }
 
 /** Error message when `key` cannot become the video of slide `slideId` (a new slide has no id), else null. */
-export async function videoClaimError(key: string, slideId?: number): Promise<string | null> {
+async function videoClaimError(key: string, slideId?: number): Promise<string | null> {
     if (!(await headUpload(key))) return 'The uploaded video was not found. Upload it again.';
     if (await videoUsedElsewhere(key, slideId))
         return 'This video is already used elsewhere. Upload it again for this slide.';
     return null;
+}
+
+/**
+ * Parses the designer's `video` field and checks the slide (`slideId`, none for a new slide) may own that file.
+ * A file the slide already owns is not a new claim.
+ */
+export async function claimSlideVideo(raw: string, slideId?: number): Promise<SlideVideoResult> {
+    const parsed = parseSlideVideo(raw);
+    if (!parsed.ok || !parsed.video.videoPath) return parsed;
+    const { videoPath } = parsed.video;
+    const current =
+        slideId === undefined
+            ? null
+            : await db.carouselItem.findUnique({ where: { id: slideId }, select: { videoPath: true } });
+    const error = current?.videoPath === videoPath ? null : await videoClaimError(videoPath, slideId);
+    return error ? { ok: false, error } : parsed;
 }
 
 /** The legacy-compatible columns derived from a designer document (see `legacyFields`). */
@@ -149,6 +165,102 @@ export function deleteSlide(row: CarouselItem): Promise<{ id: number }> {
         },
         async () => [row.imagePath, row.videoPath, ...(await unusedLayerImageKeys(overlayImageSrcs(row.overlay)))],
     );
+}
+
+/** Creates a slide at the end of the sequence; its photo is stored and an adopted video upload becomes the row's. */
+export async function createSlide(input: {
+    content: SlideContent;
+    image: File;
+    video: SlideVideo;
+    departmentId: number | null;
+    showOnMain: boolean;
+}): Promise<CarouselItem> {
+    const last = await db.carouselItem.aggregate({ _max: { order: true } });
+    return commitWithFiles({
+        files: { image: { prefix: 'carousels', file: input.image } },
+        adopted: [input.video.videoPath],
+        run: ({ image }) =>
+            db.carouselItem.create({
+                data: {
+                    ...input.content,
+                    ...input.video,
+                    order: (last._max.order ?? 0) + 1,
+                    departmentId: input.departmentId,
+                    showOnMain: input.showOnMain,
+                    imagePath: image,
+                },
+            }),
+    });
+}
+
+/** A copy of a stored object, to be stored under `prefix`; null when the source is missing. */
+async function copyOf(key: string, prefix: NewFile['prefix'] = 'carousels'): Promise<NewFile | null> {
+    const stored = await read(key);
+    if (!stored) return null;
+    const bytes = await new Response(stored.body).arrayBuffer();
+    return {
+        prefix,
+        file: new File([bytes], key.slice(key.lastIndexOf('/') + 1), {
+            type: stored.contentType ?? 'application/octet-stream',
+        }),
+    };
+}
+
+/**
+ * Copies a slide right after the original, shifting later slides down. The copy owns its own files (photo, video and
+ * layer images), so deleting either slide never breaks the other; they are removed again if the commit fails.
+ */
+export async function duplicateSlide(row: CarouselItem): Promise<CarouselItem> {
+    const files: NewFiles = {
+        image: await copyOf(row.imagePath),
+        video: row.videoPath ? await copyOf(row.videoPath, 'videos') : null,
+    };
+    const layerCopies = new Map<string, string>();
+    for (const [index, src] of overlayImageSrcs(row.overlay).entries()) {
+        const key = ownedImageKey(src);
+        if (!key) continue;
+        files[`layer${index}`] = await copyOf(key);
+        layerCopies.set(src, `layer${index}`);
+    }
+    const doc = parseOverlayDocument(row.overlay);
+
+    return commitWithFiles({
+        files,
+        run: async (keys) => {
+            const overlay = doc
+                ? serializeOverlay(
+                      doc.layers.map((layer) => {
+                          const copied = layer.type === 'image' ? keys[layerCopies.get(layer.src) ?? ''] : undefined;
+                          return layer.type === 'image' && copied
+                              ? { ...layer, src: publicUrl(copied) as string }
+                              : layer;
+                      }),
+                      doc.mobile,
+                  )
+                : row.overlay;
+            const [, copy] = await db.$transaction([
+                db.carouselItem.updateMany({
+                    where: { order: { gt: row.order } },
+                    data: { order: { increment: 1 } },
+                }),
+                db.carouselItem.create({
+                    data: {
+                        title: row.title,
+                        subtitle: row.subtitle,
+                        linkUrl: row.linkUrl,
+                        overlay,
+                        videoPath: keys.video ?? null,
+                        videoUrl: row.videoUrl,
+                        order: row.order + 1,
+                        departmentId: row.departmentId,
+                        showOnMain: row.showOnMain,
+                        imagePath: keys.image ?? row.imagePath,
+                    },
+                }),
+            ]);
+            return copy;
+        },
+    });
 }
 
 /** Image URLs referenced by the image layers of a stored overlay. */

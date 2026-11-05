@@ -364,7 +364,7 @@ test.describe('background video and phone layout', () => {
         await expect(frame).toHaveClass(/pointer-events-none/);
         await expect(frame.locator('xpath=ancestor::div[@aria-hidden="true"]')).toHaveCount(1);
         // The photo stays underneath as the poster, and other slides never load a player.
-        await expect(slide.locator('img.photo')).toHaveCount(1);
+        await expect(slide.locator('img.slide-photo')).toHaveCount(1);
         await expect(heroOf(page).locator('iframe')).toHaveCount(1);
     });
 

@@ -1,0 +1,20 @@
+---
+import { ArrowUpDown } from '@lucide/svelte';
+import { thClass } from '@/components/admin/ui';
+import type { SortLinks } from '@/lib/server/admin-list';
+
+interface Props {
+    list: SortLinks;
+    field: string;
+    /** Extra classes on the `<th>` (alignment, padding). */
+    class?: string;
+}
+
+const { list, field, class: className = '' } = Astro.props;
+---
+
+<th scope="col" class={`${thClass} ${className}`} aria-sort={list.ariaSort(field)}>
+    <a href={list.sortHref(field)} class="inline-flex items-center gap-1 hover:text-link">
+        <slot /> <ArrowUpDown class="h-3.5 w-3.5" aria-hidden="true" />
+    </a>
+</th>

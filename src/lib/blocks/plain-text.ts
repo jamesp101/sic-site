@@ -1,77 +1,13 @@
 /** Plain-text extraction from a stored block document (excerpts, meta descriptions, feeds). Tolerates malformed JSON. */
-import { stripMarkdown } from '../markdown-strip';
-import { formatEventDay, formatEventTime, parseEventDate } from './event-date';
-import { inlineToText } from './inline';
-
-type Json = Record<string, unknown>;
-
-const isObject = (value: unknown): value is Json =>
-    typeof value === 'object' && value !== null && !Array.isArray(value);
-const text = (value: unknown): string => (typeof value === 'string' ? value : '');
-const items = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
-const rich = (value: unknown): string => inlineToText(text(value));
+import { blockModule, isBlockType } from './registry';
+import { isObject, itemsOf } from './text-kit';
 
 function collect(blocks: unknown[], out: string[]): void {
     for (const raw of blocks) {
         if (!isObject(raw)) continue;
-        const props = isObject(raw.props) ? raw.props : {};
-        switch (raw.type) {
-            case 'heading':
-                out.push(text(props.text));
-                break;
-            case 'paragraph':
-                out.push(rich(props.text));
-                break;
-            case 'list':
-                for (const item of items(props.items)) out.push(rich(item));
-                break;
-            case 'quote':
-                out.push(rich(props.text));
-                break;
-            case 'badges':
-                out.push(items(props.items).map(text).join(', '));
-                break;
-            case 'card':
-                out.push(text(props.title), rich(props.body));
-                break;
-            case 'table':
-                for (const row of items(props.rows)) out.push(items(row).map(rich).join(' '));
-                break;
-            case 'album':
-                for (const image of items(props.images)) {
-                    if (isObject(image)) out.push(text(image.alt), text(image.caption));
-                }
-                break;
-            case 'accordion':
-                for (const item of items(props.items)) {
-                    if (isObject(item)) out.push(text(item.title), rich(item.body));
-                }
-                break;
-            case 'callout':
-                out.push(text(props.title), rich(props.text));
-                break;
-            case 'stats':
-                for (const item of items(props.items)) {
-                    if (isObject(item)) out.push(`${text(item.value)} ${text(item.label)}`);
-                }
-                break;
-            case 'event': {
-                const start = parseEventDate(props.start);
-                out.push(
-                    text(props.title),
-                    start ? `${formatEventDay(start)} ${formatEventTime(start)}` : '',
-                    text(props.location),
-                    rich(props.note),
-                );
-                break;
-            }
-            case 'markdown':
-                out.push(stripMarkdown(text(props.source)));
-                break;
-            default:
-                break;
-        }
-        collect(items(raw.children), out);
+        // Each Block type reads its own props; a type the registry does not know contributes nothing.
+        if (isBlockType(raw.type)) out.push(...blockModule(raw.type).text(isObject(raw.props) ? raw.props : {}));
+        collect(itemsOf(raw.children), out);
     }
 }
 
@@ -79,7 +15,7 @@ function collect(blocks: unknown[], out: string[]): void {
 export function documentToPlainText(parsed: unknown): string {
     if (!isObject(parsed)) return '';
     const parts: string[] = [];
-    collect(items(parsed.blocks), parts);
+    collect(itemsOf(parsed.blocks), parts);
     return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 

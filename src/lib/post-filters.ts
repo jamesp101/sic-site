@@ -1,10 +1,14 @@
 /**
  * Query-string rules shared by the public listings (`/posts`, `/downloads`): what a filter value may be,
- * and the `/posts` URL for a set of filters. Pure, no `astro:*`.
+ * and the listing URL for a set of filters. Pure, no `astro:*`.
  */
-import { POST_TYPES, type PostFilters, type PostType } from './content-types';
+import { POST_TYPES, type DownloadFilters, type PostFilters, type PostType } from './content-types';
 
 const SEARCH_MAX = 100;
+const DIRECTORY_MAX = 255;
+
+/** The Directory of a Download stored without one. */
+export const DEFAULT_DIRECTORY = 'General';
 
 /** A `department_id` value: a positive integer, otherwise no filter. */
 export function parseDepartmentId(value: string | null): number | undefined {
@@ -43,4 +47,28 @@ export function postsHref(filters: PostFilters, page = 1): string {
     if (page > 1) query.set('page', String(page));
     const text = query.toString();
     return text ? `/posts?${text}` : '/posts';
+}
+
+/** The filters of a `/downloads` request; malformed values are dropped. */
+export function parseDownloadFilters(params: URLSearchParams): DownloadFilters {
+    return {
+        search: parseSearch(params.get('search')) || undefined,
+        departmentId: parseDepartmentId(params.get('department_id')),
+        directory: params.get('directory')?.trim().slice(0, DIRECTORY_MAX) || undefined,
+    };
+}
+
+/** Whether `filters` narrow the default `/downloads` list. */
+export function hasDownloadFilters(filters: DownloadFilters): boolean {
+    return Boolean(filters.search || filters.departmentId || filters.directory);
+}
+
+/** `/downloads` URL for `filters`; default values stay out of the query string. */
+export function downloadsHref(filters: DownloadFilters): string {
+    const query = new URLSearchParams();
+    if (filters.search) query.set('search', filters.search);
+    if (filters.departmentId) query.set('department_id', String(filters.departmentId));
+    if (filters.directory) query.set('directory', filters.directory);
+    const text = query.toString();
+    return text ? `/downloads?${text}` : '/downloads';
 }

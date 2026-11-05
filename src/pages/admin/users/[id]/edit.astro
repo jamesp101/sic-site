@@ -3,25 +3,27 @@ import AppLayout from '@/layouts/AppLayout.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import UserForm from '@/components/admin/users/UserForm.svelte';
 import { db } from '@/lib/server/db';
-import { AuthzError, requireSuperAdmin } from '@/lib/server/authz';
-import { authzResponse, parseId } from '@/lib/server/authz-response';
+import { RequestError } from '@/lib/server/request-error';
+import { adminPage, parseId } from '@/lib/server/admin-page';
 
-let user;
-try {
-    requireSuperAdmin(Astro.locals.user);
-    const id = parseId(Astro.params.id);
-    const row = id === null ? null : await db.user.findUnique({ where: { id } });
-    if (!row) throw new AuthzError('NOT_FOUND');
-    user = {
-        id: row.id,
-        name: row.name,
-        email: row.email,
-        role: row.role === 'superadmin' ? ('superadmin' as const) : ('department_user' as const),
-        departmentId: row.departmentId,
-    };
-} catch (error) {
-    return authzResponse(error);
-}
+const page = await adminPage(Astro.locals.user, {
+    superAdmin: true,
+    load: async () => {
+        const id = parseId(Astro.params.id);
+        const found = id === null ? null : await db.user.findUnique({ where: { id } });
+        if (!found) throw new RequestError('NOT_FOUND');
+        return found;
+    },
+});
+if (page instanceof Response) return page;
+const { row } = page;
+const user = {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role === 'superadmin' ? ('superadmin' as const) : ('department_user' as const),
+    departmentId: row.departmentId,
+};
 
 const departments = await db.department.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } });
 ---

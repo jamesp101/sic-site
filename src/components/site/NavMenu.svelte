@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ChevronDown, Menu, X } from '@lucide/svelte';
-  import type { NavItem } from './nav-types';
+  import type { NavItem } from '@/lib/site-nav';
 
   let { items, currentPath }: { items: NavItem[]; currentPath: string } = $props();
 

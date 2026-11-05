@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vite-plus/test';
+import { serializeOverlay } from '../carousel-overlay';
 import type { PrismaClient } from '../../generated/prisma/client';
 import type * as CarouselAdmin from './carousel-admin';
 
@@ -111,22 +112,138 @@ describe('slide video views', () => {
     });
 });
 
-describe('videoClaimError', () => {
+describe('claimSlideVideo', () => {
+    const claim = async (raw: string, slideId?: number) => {
+        const result = await admin.claimSlideVideo(raw, slideId);
+        return result.ok ? null : result.error;
+    };
+
     test('a missing file cannot be adopted', async () => {
-        expect(await admin.videoClaimError('videos/ffffffffffffffffffffffffffffffff.mp4')).toMatch(/not found/);
+        expect(await claim('/storage/videos/ffffffffffffffffffffffffffffffff.mp4')).toMatch(/not found/);
     });
 
     test('a video another slide or some content uses cannot be adopted; the owner may keep it', async () => {
         const key = stored();
+        const url = `/storage/${key}`;
         const owner = await slide({ videoPath: key });
-        expect(await admin.videoClaimError(key)).toMatch(/already used/);
-        expect(await admin.videoClaimError(key, owner.id + 1)).toMatch(/already used/);
-        expect(await admin.videoClaimError(key, owner.id)).toBeNull();
+        expect(await claim(url)).toMatch(/already used/);
+        expect(await claim(url, owner.id + 1)).toMatch(/already used/);
+        expect(await claim(url, owner.id)).toBeNull();
 
         const free = stored();
-        expect(await admin.videoClaimError(free)).toBeNull();
+        expect(await claim(`/storage/${free}`)).toBeNull();
         await db.setting.create({ data: { key: 'welcome_hero_content', value: `{"url":"/storage/${free}"}` } });
-        expect(await admin.videoClaimError(free)).toMatch(/already used/);
+        expect(await claim(`/storage/${free}`)).toMatch(/already used/);
+    });
+
+    test('no video and a YouTube link need no file', async () => {
+        expect(await admin.claimSlideVideo('')).toEqual({ ok: true, video: none });
+        expect(await claim('https://youtu.be/dQw4w9WgXcQ')).toBeNull();
+    });
+});
+
+const photo = () => new File([new Uint8Array([1, 2, 3])], 'photo.webp', { type: 'image/webp' });
+
+describe('createSlide', () => {
+    test('stores the photo, adopts the video and goes last', async () => {
+        await db.carouselItem.create({ data: { imagePath: stored(`carousels/${++counter}.webp`), order: 5 } });
+        const key = stored();
+        const created = await admin.createSlide({
+            content,
+            image: photo(),
+            video: { videoPath: key, videoUrl: null },
+            departmentId: null,
+            showOnMain: true,
+        });
+        expect(created).toMatchObject({ videoPath: key, order: 6, showOnMain: true });
+        expect(has(created.imagePath)).toBe(true);
+        expect(has(key)).toBe(true);
+    });
+
+    test('a failed commit removes the stored photo and the adopted video', async () => {
+        const key = stored();
+        const before = readdirSync(path.join(dir, 'carousels'));
+        await expect(
+            admin.createSlide({
+                content,
+                image: photo(),
+                video: { videoPath: key, videoUrl: null },
+                departmentId: 999_999,
+                showOnMain: true,
+            }),
+        ).rejects.toThrow();
+        expect(has(key)).toBe(false);
+        expect(readdirSync(path.join(dir, 'carousels'))).toEqual(before);
+    });
+});
+
+describe('duplicateSlide', () => {
+    const layer = (src: string) => ({
+        type: 'image' as const,
+        id: 'l1',
+        x: 10,
+        y: 10,
+        w: 20,
+        h: 20,
+        rotation: 0,
+        opacity: 100,
+        src,
+        alt: 'Logo',
+        radius: 'none' as const,
+    });
+
+    test('copies the photo, layer images (src rewritten) and video, and shifts later slides', async () => {
+        const layerKey = stored(`carousels/layer-${++counter}.webp`);
+        const videoKey = stored();
+        const src = `/storage/${layerKey}`;
+        const original = await db.carouselItem.create({
+            data: {
+                imagePath: stored(`carousels/${++counter}.webp`),
+                videoPath: videoKey,
+                order: 1,
+                overlay: serializeOverlay([layer(src)]),
+            },
+        });
+        const later = await db.carouselItem.create({
+            data: { imagePath: stored(`carousels/${++counter}.webp`), order: 2 },
+        });
+
+        const copy = await admin.duplicateSlide(original);
+
+        expect(copy.order).toBe(2);
+        expect((await db.carouselItem.findUniqueOrThrow({ where: { id: later.id } })).order).toBe(3);
+        expect(copy.imagePath).not.toBe(original.imagePath);
+        expect(has(copy.imagePath)).toBe(true);
+        expect(copy.videoPath).not.toBe(videoKey);
+        expect(has(copy.videoPath as string)).toBe(true);
+        const [copied] = admin.overlayImageSrcs(copy.overlay);
+        expect(copied).not.toBe(src);
+        expect(has(admin.ownedImageKey(copied) as string)).toBe(true);
+
+        // Deleting the original leaves the copy whole.
+        await admin.deleteSlide(original);
+        expect(has(copy.imagePath) && has(copy.videoPath as string) && has(admin.ownedImageKey(copied) as string)).toBe(
+            true,
+        );
+        expect(has(layerKey)).toBe(false);
+    });
+
+    test('a failed duplicate leaves no stray files', async () => {
+        const original = await db.carouselItem.create({
+            data: { imagePath: stored(`carousels/${++counter}.webp`), videoPath: stored(), order: 1 },
+        });
+        const files = () =>
+            [...readdirSync(path.join(dir, 'carousels')), ...readdirSync(path.join(dir, 'videos'))].sort();
+        const before = files();
+
+        const spy = vi.spyOn(db.carouselItem, 'create').mockImplementationOnce(() => {
+            throw new Error('boom');
+        });
+        await expect(admin.duplicateSlide(original)).rejects.toThrow('boom');
+        spy.mockRestore();
+
+        expect(files()).toEqual(before);
+        expect(await db.carouselItem.count()).toBe(1);
     });
 });
 

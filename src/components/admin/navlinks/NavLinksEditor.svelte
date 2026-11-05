@@ -6,27 +6,26 @@
   import { dndzone, type DndEvent } from 'svelte-dnd-action';
   import { EyeOff, GripVertical, Pencil, Plus, Redo2, TriangleAlert, Undo2 } from '@lucide/svelte';
   import { reloadView } from '@/lib/navigation';
+  import { DEFAULT_NAV_LINKS } from '@/lib/site-nav';
   import {
-    DEFAULT_NAV_LINKS,
     canIndent,
     canOutdent,
     cloneTree,
     indent,
-    isTwoLevel,
     locate,
     moveDown,
     moveUp,
+    navTreeOps,
     navWarnings,
     opensDropdown,
     outdent,
-    renumber,
-    samePayload,
-    toPayload,
-    treeFromPayload,
+    proposeNavTree,
     type LinkSuggestion,
+    type NavChange,
     type NavNode,
-    type ReorderItem,
+    type NavPatch,
   } from '@/lib/nav-tree';
+  import { createTreeEditSession, type EditResult, type TreeEditPort } from '@/lib/tree-edit-session';
   import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
   import ConfirmDialog from '../ConfirmDialog.svelte';
   import { parseActionError, primaryButtonClass, secondaryButtonClass } from '../shared/form-utils';
@@ -53,12 +52,42 @@
   const smallButton =
     'inline-flex h-8 items-center gap-1.5 rounded-lg border border-border-strong bg-surface px-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-surface-alt';
 
-  // `tops` is what the user sees (may hold a drag in progress); `saved` is the last tree the server confirmed.
+  const port: TreeEditPort<NavNode[], NavChange> = {
+    async save(change, confirmed) {
+      if (change.kind === 'tree') {
+        const { error } = await actions.navlinks.reorder({ items: change.items });
+        return error ? { ok: false, message: parseActionError(error).message } : { ok: true };
+      }
+      const pos = locate(confirmed, change.id);
+      if (!pos) return { ok: false, message: 'This link no longer exists.' };
+      const parent = pos.parentIndex === null ? null : confirmed[pos.parentIndex];
+      const node = parent ? parent.children[pos.index] : confirmed[pos.index];
+      const { error } = await actions.navlinks.update({
+        id: node.id,
+        label: change.patch.label ?? node.label,
+        url: node.url,
+        order: node.order,
+        isActive: change.patch.isActive ?? node.isActive,
+        parentId: parent?.id ?? null,
+      });
+      return error ? { ok: false, message: parseActionError(error).message || 'The link could not be updated.' } : { ok: true };
+    },
+  };
+  // The session owns the confirmed and optimistic trees, the save queue, rollback and undo history.
+  // `tops` is what the user sees; it follows the session and may hold a drag in progress.
+  const session = createTreeEditSession({
+    tree: untrack(() => cloneTree(links)),
+    port,
+    ops: navTreeOps,
+    fallbackMessage: 'The order could not be saved.',
+    onChange(next) {
+      if (next.tree !== view.tree) tops = cloneTree(next.tree);
+      view = next;
+    },
+  });
+  let view = $state.raw(session.snapshot());
   let tops = $state<NavNode[]>(untrack(() => cloneTree(links)));
-  let saved = $state.raw<NavNode[]>(untrack(() => cloneTree(links)));
-  let undoStack = $state.raw<ReorderItem[][]>([]);
-  let redoStack = $state.raw<ReorderItem[][]>([]);
-  let saving = $state(false);
+  const saving = $derived(view.pending);
   let dragDisabled = $state(true);
   let selectedId = $state<number | null>(null);
   let editingId = $state<number | null>(null);
@@ -71,7 +100,6 @@
   let renamingId = $state<number | null>(null);
   let renameValue = $state('');
   let seeding = $state(false);
-  let snapshot: NavNode[] | null = null;
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
 
   const nextTopOrder = $derived(tops.reduce((max, top) => Math.max(max, top.order), 0) + 1);
@@ -93,45 +121,33 @@
     return null;
   }
 
-  function plain(tree: NavNode[]): NavNode[] {
-    return cloneTree(tree);
+  /** Reports a finished save: the failure toast and announcement, or the success note. Returns whether it was saved. */
+  async function finish(pending: Promise<EditResult>, note?: string): Promise<boolean> {
+    const result = await pending;
+    if (result.status === 'reverted') {
+      toast.error(result.message);
+      announcement = result.announcement;
+    } else if (result.status === 'saved' && note) toast.success(note);
+    return result.status === 'saved';
   }
 
-  /** Persists `next` immediately; rolls back to the last confirmed tree when the server refuses. */
-  async function commit(next: NavNode[], record = true, note = 'Order saved.') {
-    const before = saved;
-    const payload = toPayload(next);
-    if (samePayload(payload, toPayload(before))) {
-      tops = cloneTree(before);
+  /** Proposes `next` as the new tree; the session saves it, or the rule's message says why it cannot be. */
+  async function commit(next: NavNode[]) {
+    const proposal = proposeNavTree(view.tree, next);
+    if ('error' in proposal) {
+      tops = cloneTree(view.tree);
+      toast.error(proposal.error);
       return;
     }
-    tops = next;
-    saving = true;
-    const { error } = await actions.navlinks.reorder({ items: payload });
-    saving = false;
-    if (error) {
-      tops = cloneTree(before);
-      toast.error(parseActionError(error).message || 'The order could not be saved.');
-      announcement = 'The change could not be saved and was reverted.';
-      return;
-    }
-    if (record) {
-      undoStack = [...undoStack, toPayload(before)];
-      redoStack = [];
-    }
-    saved = cloneTree(next);
-    toast.success(note);
+    const pending = session.edit(proposal.change);
+    tops = cloneTree(view.tree);
+    await finish(pending, 'Order saved.');
   }
 
   // ---- drag and drop (mouse, touch) -------------------------------------------------------------
 
-  function beginDrag() {
-    snapshot ??= plain(tops);
-    dragging = true;
-  }
-
   function onTopConsider(event: CustomEvent<DndEvent<NavNode>>) {
-    beginDrag();
+    dragging = true;
     tops = event.detail.items;
   }
 
@@ -146,7 +162,7 @@
   }
 
   function onChildConsider(topId: number, event: CustomEvent<DndEvent<NavNode>>) {
-    beginDrag();
+    dragging = true;
     setChildren(topId, event.detail.items);
   }
 
@@ -161,14 +177,7 @@
     settleTimer = setTimeout(() => {
       dragDisabled = true;
       dragging = false;
-      const before = snapshot;
-      snapshot = null;
-      if (!isTwoLevel(tops)) {
-        tops = before ?? cloneTree(saved);
-        toast.error('A link that has sub-links cannot become a sub-link itself.');
-        return;
-      }
-      void commit(renumber(plain(tops)));
+      void commit(tops);
     }, 0);
   }
 
@@ -213,33 +222,9 @@
 
   // ---- undo / redo ----------------------------------------------------------------------------------
 
-  async function travel(from: 'undo' | 'redo') {
+  async function travel(direction: 'undo' | 'redo') {
     if (saving) return;
-    const stack = from === 'undo' ? undoStack : redoStack;
-    const target = stack[stack.length - 1];
-    if (!target) return;
-    const current = toPayload(saved);
-    const next = treeFromPayload(saved, target);
-    const before = saved;
-    const payload = toPayload(next);
-    tops = next;
-    saving = true;
-    const { error } = await actions.navlinks.reorder({ items: payload });
-    saving = false;
-    if (error) {
-      tops = cloneTree(before);
-      toast.error(parseActionError(error).message || 'The change could not be applied.');
-      return;
-    }
-    saved = cloneTree(next);
-    if (from === 'undo') {
-      undoStack = undoStack.slice(0, -1);
-      redoStack = [...redoStack, current];
-    } else {
-      redoStack = redoStack.slice(0, -1);
-      undoStack = [...undoStack, current];
-    }
-    toast.success(from === 'undo' ? 'Change undone.' : 'Change redone.');
+    await finish(session[direction](), direction === 'undo' ? 'Change undone.' : 'Change redone.');
   }
 
   function onWindowKeydown(event: KeyboardEvent) {
@@ -252,39 +237,10 @@
 
   // ---- active toggle, delete ---------------------------------------------------------------------
 
-  function patchNode(tree: NavNode[], id: number, patch: Partial<Pick<NavNode, 'label' | 'isActive'>>): NavNode[] {
-    return tree.map((top) => ({
-      ...top,
-      ...(top.id === id ? patch : {}),
-      children: top.children.map((child) => (child.id === id ? { ...child, ...patch } : child)),
-    }));
-  }
-
   /** Saves a label/visibility change optimistically; reverts on failure. Returns whether it was saved. */
-  async function updateNode(node: NavNode, patch: Partial<Pick<NavNode, 'label' | 'isActive'>>): Promise<boolean> {
+  async function updateNode(node: NavNode, patch: NavPatch): Promise<boolean> {
     if (saving) return false;
-    const parent = parentOf(node.id);
-    const before = tops;
-    const savedBefore = saved;
-    tops = patchNode(cloneTree(tops), node.id, patch);
-    saved = patchNode(saved, node.id, patch);
-    saving = true;
-    const { error } = await actions.navlinks.update({
-      id: node.id,
-      label: patch.label ?? node.label,
-      url: node.url,
-      order: node.order,
-      isActive: patch.isActive ?? node.isActive,
-      parentId: parent?.id ?? null,
-    });
-    saving = false;
-    if (error) {
-      tops = before;
-      saved = savedBefore;
-      toast.error(parseActionError(error).message || 'The link could not be updated.');
-      return false;
-    }
-    return true;
+    return finish(session.edit({ kind: 'patch', id: node.id, patch }, { record: false }));
   }
 
   async function toggleActive(node: NavNode) {
@@ -558,7 +514,7 @@
               class={toolbarIconButton}
               aria-label="Undo"
               aria-keyshortcuts="Control+Z Meta+Z"
-              disabled={saving || undoStack.length === 0}
+              disabled={saving || !view.canUndo}
               onclick={() => travel('undo')}
             >
               <Undo2 class="h-4 w-4" aria-hidden="true" />
@@ -571,7 +527,7 @@
               class={toolbarIconButton}
               aria-label="Redo"
               aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z"
-              disabled={saving || redoStack.length === 0}
+              disabled={saving || !view.canRedo}
               onclick={() => travel('redo')}
             >
               <Redo2 class="h-4 w-4" aria-hidden="true" />

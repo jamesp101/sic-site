@@ -1,8 +1,9 @@
-import { ActionError, defineAction } from 'astro:actions';
+import { defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
 import { db } from '@/lib/server/db';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
-import { requireSuperAdmin, AuthzError } from '@/lib/server/authz';
+import { requireSuperAdmin } from '@/lib/server/authz';
+import { RequestError } from '@/lib/server/request-error';
 import { contentField } from '@/lib/server/content-field';
 import { loadOwnDepartment } from '@/lib/server/department-access';
 import { imageFile } from '@/lib/server/image-file';
@@ -26,8 +27,7 @@ export const departments = {
                 requireSuperAdmin(actorOf(context));
 
                 const duplicate = await db.department.findFirst({ where: { name: input.name }, select: { id: true } });
-                if (duplicate)
-                    throw new ActionError({ code: 'CONFLICT', message: 'A department with this name already exists.' });
+                if (duplicate) throw new RequestError('CONFLICT', 'A department with this name already exists.');
 
                 const slug = await uniqueSlug(
                     slugify(input.name) || 'department',
@@ -95,7 +95,7 @@ export const departments = {
                         downloads: { select: { filePath: true } },
                     },
                 });
-                if (!row) throw new AuthzError('NOT_FOUND');
+                if (!row) throw new RequestError('NOT_FOUND');
 
                 await deleteWithFiles(
                     () => db.department.delete({ where: { id } }),

@@ -1,93 +1,67 @@
 ---
-import { ArrowUpDown, Calendar, FileText, Megaphone, Pencil, Search, Star } from '@lucide/svelte';
+import { Calendar, FileText, Megaphone, Pencil, Search, Star } from '@lucide/svelte';
 import Pagination from '@/components/site/Pagination.astro';
 import AddLink from '@/components/admin/shared/AddLink.astro';
+import EmptyRow from '@/components/admin/shared/EmptyRow.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DeleteRowButton from '@/components/admin/shared/DeleteRowButton.astro';
 import RowDeleteDialog from '@/components/admin/shared/RowDeleteDialog.svelte';
+import SortableTh from '@/components/admin/shared/SortableTh.astro';
 import { cardClass, formatDate, iconLinkClass, selectClass, thClass } from '@/components/admin/ui';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { POST_TYPES } from '@/lib/content-types';
-import { parsePage } from '@/lib/pagination';
-import { listWhere } from '@/lib/server/admin-scope';
-import { requireUser } from '@/lib/server/authz';
-import { authzResponse } from '@/lib/server/authz-response';
+import { adminPage } from '@/lib/server/admin-page';
+import { runList, sortBy } from '@/lib/server/admin-list';
 import { db } from '@/lib/server/db';
-import { textContains } from '@/lib/server/search';
 import { publicUrl } from '@/lib/server/storage';
 import type { Prisma } from '@/generated/prisma/client';
 
-let actor;
-try {
-    actor = requireUser(Astro.locals.user);
-} catch (error) {
-    return authzResponse(error);
-}
-
-/** Rows per page: the list renders one row per post, so it must not grow with the whole table. */
-const PER_PAGE = 25;
+const access = await adminPage(Astro.locals.user);
+if (access instanceof Response) return access;
+const { actor } = access;
 
 const params = Astro.url.searchParams;
-const q = params.get('q')?.trim() ?? '';
 const type = POST_TYPES.find((t) => t === params.get('type')) ?? '';
 const featured = params.get('featured') === 'yes' ? true : params.get('featured') === 'no' ? false : null;
-const sort = ['title', 'type', 'department', 'featured', 'created'].includes(params.get('sort') ?? '')
-    ? params.get('sort')!
-    : 'created';
-const dir: 'asc' | 'desc' =
-    params.get('dir') === 'asc' ? 'asc' : params.get('dir') === 'desc' ? 'desc' : sort === 'created' ? 'desc' : 'asc';
+
+const rowSelect = {
+    id: true,
+    title: true,
+    type: true,
+    isFeatured: true,
+    createdAt: true,
+    highlightImagePath: true,
+    department: { select: { name: true } },
+    user: { select: { name: true } },
+} satisfies Prisma.PostSelect;
 
 const scope = Astro.locals.adminScope;
-const where: Prisma.PostWhereInput = listWhere<Prisma.PostWhereInput>(actor, scope, [
-    q && { OR: [{ title: textContains(q) }, { searchText: textContains(q) }] },
-    type && { type },
-    featured !== null && { isFeatured: featured },
-]);
-const orderBy: Prisma.PostOrderByWithRelationInput =
-    sort === 'title'
-        ? { title: dir }
-        : sort === 'type'
-          ? { type: dir }
-          : sort === 'department'
-            ? { department: { name: dir } }
-            : sort === 'featured'
-              ? { isFeatured: dir }
-              : { createdAt: dir };
-
-const total = await db.post.count({ where });
-const pageCount = Math.max(1, Math.ceil(total / PER_PAGE));
-// Past the end (e.g. after deleting the last row of the last page): show the last page instead.
-const page = Math.min(parsePage(params.get('page')), pageCount);
-const posts = await db.post.findMany({
-    where,
-    orderBy: [orderBy, { id: 'desc' }],
-    skip: (page - 1) * PER_PAGE,
-    take: PER_PAGE,
-    select: {
-        id: true,
-        title: true,
-        type: true,
-        isFeatured: true,
-        createdAt: true,
-        highlightImagePath: true,
-        department: { select: { name: true } },
-        user: { select: { name: true } },
+const list = await runList<
+    Prisma.PostWhereInput,
+    Prisma.PostOrderByWithRelationInput,
+    Prisma.PostGetPayload<{ select: typeof rowSelect }>
+>({
+    url: Astro.url,
+    actor,
+    scope,
+    spec: {
+        fields: {
+            title: sortBy((dir) => ({ title: dir })),
+            type: sortBy((dir) => ({ type: dir })),
+            department: sortBy((dir) => ({ department: { name: dir } })),
+            featured: sortBy((dir) => ({ isFeatured: dir })),
+            created: sortBy((dir) => ({ createdAt: dir }), 'desc'),
+        },
+        defaultSort: 'created',
+        tiebreak: { id: 'desc' },
+        search: ['title', 'searchText'],
     },
+    filters: [type && { type }, featured !== null && { isFeatured: featured }],
+    count: (where) => db.post.count({ where }),
+    fetch: (args) => db.post.findMany({ ...args, select: rowSelect }),
 });
+const { rows: posts, q, sort, dir, page, pageCount, pageHref } = list;
 
-/** Same list with other query parameters kept; `page` 1 is left out of the URL. */
-function listHref(changes: Record<string, string | null>) {
-    const next = new URL(Astro.url);
-    for (const [key, value] of Object.entries(changes)) {
-        if (value === null) next.searchParams.delete(key);
-        else next.searchParams.set(key, value);
-    }
-    return `${next.pathname}${next.search}`;
-}
-const sortHref = (field: string) =>
-    listHref({ sort: field, dir: sort === field && dir === 'asc' ? 'desc' : 'asc', page: null });
-const pageHref = (target: number) => listHref({ page: target > 1 ? String(target) : null });
-const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascending' : 'descending') : undefined);
 const typeClass: Record<string, string> = {
     article: 'bg-status-article-bg text-status-article-fg',
     event: 'bg-status-event-bg text-status-event-fg',
@@ -177,11 +151,9 @@ const columns = [
                     <thead>
                         <tr class="border-b border-border bg-surface-alt">
                             {columns.map(([field, label]) => (
-                                <th scope="col" class={thClass} aria-sort={ariaSort(field)}>
-                                    <a href={sortHref(field)} class="inline-flex items-center gap-1 hover:text-link">
-                                        {label} <ArrowUpDown class="h-3.5 w-3.5" aria-hidden="true" />
-                                    </a>
-                                </th>
+                                <SortableTh list={list} field={field}>
+                                    {label}
+                                </SortableTh>
                             ))}
                             <th scope="col" class={thClass}>
                                 Author
@@ -263,16 +235,7 @@ const columns = [
                                 </tr>
                             );
                         })}
-                        {posts.length === 0 && (
-                            <tr>
-                                <td
-                                    colspan={columns.length + 2}
-                                    class="px-6 py-12 text-center text-muted-foreground italic"
-                                >
-                                    No posts match your filters.
-                                </td>
-                            </tr>
-                        )}
+                        {posts.length === 0 && <EmptyRow colspan={columns.length + 2}>No posts match your filters.</EmptyRow>}
                     </tbody>
                 </table>
             </div>

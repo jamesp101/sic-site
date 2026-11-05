@@ -13,6 +13,7 @@
     type Guides,
     type Handle,
   } from '@/lib/carousel-editor';
+  import { CROP, measureLayerBoxes } from '@/lib/carousel-layout';
   import { SAFE_MARGIN, type Layer, type MobileOverride } from '@/lib/carousel-overlay';
   import { setMobile, type MobileBox } from '@/lib/carousel-overlay-mobile';
   import SlideStage from './SlideStage.svelte';
@@ -44,11 +45,8 @@
     oncommit: (base: Layer[]) => void;
   } = $props();
 
-  // Share of the slide height still visible on a 1440 px wide screen (600 px hero, cover-cropped 16:9).
   // Images keep their aspect ratio, so only corner handles are offered.
   const CORNER_HANDLES: Handle[] = ['nw', 'ne', 'se', 'sw'];
-  const VISIBLE_BAND = (600 / ((1440 * 9) / 16)) * 100;
-  const CROP = (100 - VISIBLE_BAND) / 2;
   const CURSOR: Record<Handle, string> = {
     n: 'ns-resize',
     s: 'ns-resize',
@@ -89,20 +87,8 @@
 
   /** Reads each layer's real box (text height is automatic) as percentages of the stage. */
   function measure() {
-    if (!stage) return;
-    const width = stage.clientWidth;
-    const height = stage.clientHeight;
-    if (!width || !height) return;
-    const next: Record<string, Box> = {};
-    for (const element of stage.querySelectorAll<HTMLElement>('[data-layer-id]')) {
-      next[element.dataset.layerId as string] = {
-        x: (element.offsetLeft / width) * 100,
-        y: (element.offsetTop / height) * 100,
-        w: (element.offsetWidth / width) * 100,
-        h: (element.offsetHeight / height) * 100,
-      };
-    }
-    boxes = next;
+    const next = stage ? measureLayerBoxes(stage) : null;
+    if (next) boxes = next;
   }
 
   $effect(() => {

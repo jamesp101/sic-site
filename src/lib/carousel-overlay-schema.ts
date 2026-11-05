@@ -17,6 +17,7 @@ import {
     rounded,
     safeHref,
     safeImageSrc,
+    legacyLayers,
     upgradeLayer,
     type Layer,
     type SlideMobile,
@@ -161,7 +162,7 @@ export interface OverlayDocument {
 }
 
 /**
- * Tolerant read for rendering: null means "no overlay, use the legacy title/subtitle/link".
+ * Tolerant read for rendering: null means "no overlay" (see `slideDocument` for legacy Slides).
  * Invalid layers are dropped (a layer with only invalid phone overrides keeps its desktop design); a document whose
  * layers are all invalid counts as no overlay; invalid slide-level phone settings are ignored.
  */
@@ -195,7 +196,21 @@ export function parseOverlayDocument(raw: string | null | undefined): OverlayDoc
     return { layers, mobile: mobile.success ? mobile.data : null };
 }
 
-/** The layers of a stored overlay (see parseOverlayDocument); null = legacy slide. */
+/** The layers of a stored overlay (see parseOverlayDocument); null = no overlay. */
 export function parseOverlay(raw: string | null | undefined): Layer[] | null {
     return parseOverlayDocument(raw)?.layers ?? null;
+}
+
+/**
+ * The Slide read model: the Layers (and phone settings) of a stored Slide. A legacy Slide (no usable overlay,
+ * only title / subtitle / link) is converted to Layers here, once, so the public Carousel and the designer
+ * only ever see Layers.
+ */
+export function slideDocument(row: {
+    overlay: string | null;
+    title: string | null;
+    subtitle: string | null;
+    linkUrl: string | null;
+}): OverlayDocument {
+    return parseOverlayDocument(row.overlay) ?? { layers: legacyLayers(row), mobile: null };
 }

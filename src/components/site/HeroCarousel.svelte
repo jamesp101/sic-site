@@ -2,7 +2,7 @@
   import { ChevronLeft, ChevronRight, Pause, Play } from '@lucide/svelte';
   import { onMount, tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
-  import { readingOrder, safeHref } from '@/lib/carousel-overlay';
+  import { readingOrder } from '@/lib/carousel-overlay';
   import { resolveMobile, slideFocus } from '@/lib/carousel-overlay-mobile';
   import type { CarouselSlide } from '@/lib/content-types';
   import SlideLayer from './SlideLayer.svelte';
@@ -12,15 +12,12 @@
     slides,
     label = 'Featured highlights',
     pageTitle,
-    eyebrow,
     tall = true,
   }: {
     slides: CarouselSlide[];
     label?: string;
     /** Visually hidden h1 for pages whose visible h1 is not part of the carousel. */
     pageTitle?: string;
-    /** Small label above each slide title (department pages). */
-    eyebrow?: string;
     /** Home height (600px) vs department height (450px). */
     tall?: boolean;
   } = $props();
@@ -135,7 +132,7 @@
   bind:this={root}
   aria-roledescription="carousel"
   aria-label={label}
-  class="hero relative w-full overflow-hidden bg-brand-950 {tall ? '' : 'hero-short'}"
+  class="slide-hero relative w-full overflow-hidden bg-brand-950 {tall ? '' : 'slide-hero-short'}"
   onpointerenter={(event) => event.pointerType === 'mouse' && (hovering = true)}
   onpointerleave={(event) => event.pointerType === 'mouse' && (hovering = false)}
   onfocusin={(event) => (focused = (event.target as Element).matches(':focus-visible'))}
@@ -149,6 +146,7 @@
 
   <div aria-live={autoplay ? 'off' : 'polite'} class="h-full">
     {#each slides as slide, index (slide.id)}
+      {@const phone = resolveMobile(slide.layers)}
       <div
         bind:this={slideEls[index]}
         role="group"
@@ -172,7 +170,7 @@
           loading={index === 0 ? 'eager' : 'lazy'}
           fetchpriority={index === 0 ? 'high' : undefined}
           decoding="async"
-          class="photo absolute inset-0 h-full w-full object-cover"
+          class="slide-photo absolute inset-0 h-full w-full object-cover"
           class:zoom={index === current || index === previous}
           style:transform-origin={index % 2 ? '70% 60%' : '30% 40%'}
         />
@@ -181,45 +179,12 @@
           <SlideVideo video={slide.video} play={index === current && videoRunning} />
         {/if}
         <div class="absolute inset-0 bg-linear-to-t from-brand-950/90 via-brand-950/45 to-brand-950/30 md:from-brand-950/85"></div>
-        {#if slide.overlay}
-          {@const phone = resolveMobile(slide.overlay)}
-          <!-- Designer slide: real, server-rendered text, links and images positioned over the picture. -->
-          <div class="stage rise">
-            {#each readingOrder(slide.overlay) as { layer, z } (layer.id)}
-              <SlideLayer {layer} {z} box={phone.get(layer.id) ?? null} />
-            {/each}
-          </div>
-        {:else}
-          <div class="absolute inset-0 hidden bg-linear-to-r from-brand-950/70 via-brand-950/25 to-transparent md:block"></div>
-          <div class="relative mx-auto flex h-full max-w-7xl flex-col justify-end px-6 pb-20 text-white md:justify-center md:px-24 md:pb-0">
-            <div class="rise max-w-2xl space-y-4">
-              {#if eyebrow}
-                <p class="inline-flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.25em] text-gold-300 before:h-0.5 before:w-8 before:rounded-sm before:bg-gold-500 before:content-['']">
-                  {eyebrow}
-                </p>
-              {/if}
-              {#if slide.title}
-                <p class="font-serif text-4xl font-bold leading-tight tracking-tight text-balance md:text-6xl">
-                  {slide.title}
-                </p>
-              {/if}
-              {#if slide.subtitle}
-                <p class="text-lg text-white/90 md:text-xl">{slide.subtitle}</p>
-              {/if}
-              {#if slide.linkUrl && safeHref(slide.linkUrl)}
-                <p class="pt-2">
-                  <a
-                    href={safeHref(slide.linkUrl) ?? undefined}
-                    class="inline-flex min-h-12 items-center gap-2 rounded-xl bg-gold-500 px-6 py-3 text-xs font-semibold uppercase tracking-widest text-brand-950 shadow-brand-md transition hover:-translate-y-0.5 hover:bg-gold-400"
-                  >
-                    Explore more<span class="sr-only">: {slide.title ?? 'slide ' + (index + 1)}</span>
-                    <span aria-hidden="true">&rarr;</span>
-                  </a>
-                </p>
-              {/if}
-            </div>
-          </div>
-        {/if}
+        <!-- Real, server-rendered text, links and images positioned over the picture. -->
+        <div class="slide-stage rise">
+          {#each readingOrder(slide.layers) as { layer, z } (layer.id)}
+            <SlideLayer {layer} {z} box={phone.get(layer.id) ?? null} />
+          {/each}
+        </div>
       </div>
     {/each}
   </div>
@@ -291,59 +256,8 @@
 </section>
 
 <style>
-  /*
-   * The hero is a size container named "hero". Overlay layers live on a 16:9 stage that covers it
-   * exactly like the object-cover photo, so percentages match the editor. Below `sm` (40rem) the hero is a
-   * 4:5 frame, the stage is that frame, and every layer sits at its phone box (see SlideLayer, resolveMobile);
-   * the photo and video are cropped around the slide's focal point (--fx / --fy).
-   */
-  .hero {
-    container: hero / inline-size;
-    height: var(--hh);
-    touch-action: pan-y;
-    --hh: 500px;
-  }
-  .hero-short {
-    --hh: 400px;
-  }
-  @media (min-width: 48rem) {
-    .hero {
-      --hh: 600px;
-    }
-    .hero-short {
-      --hh: 450px;
-    }
-  }
-  @media (max-width: 39.99rem) {
-    .hero {
-      height: auto;
-      aspect-ratio: 4 / 5;
-    }
-    .photo {
-      object-position: var(--fx, 50%) var(--fy, 50%);
-    }
-  }
-  .stage {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: max(100cqw, calc(var(--hh) * 16 / 9));
-    aspect-ratio: 16 / 9;
-    transform: translate(-50%, -50%);
-    container-type: inline-size;
-    --min-fs: 0.75rem;
-  }
-  @container hero (max-width: 39.99rem) {
-    .stage {
-      inset: 0;
-      transform: none;
-      width: auto;
-      aspect-ratio: auto;
-    }
-  }
-
   /* Slow zoom on the visible photo; the outgoing photo keeps its zoom while it fades out. */
-  .photo.zoom {
+  .slide-photo.zoom {
     animation: ken-burns 12s ease-out both;
   }
   @keyframes ken-burns {
@@ -397,7 +311,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .photo.zoom,
+    .slide-photo.zoom,
     .is-active .rise > :global(*) {
       animation: none;
     }

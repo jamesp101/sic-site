@@ -1,0 +1,12 @@
+---
+interface Props {
+    /** Number of columns of the table. */
+    colspan: number;
+}
+
+const { colspan } = Astro.props;
+---
+
+<tr>
+    <td colspan={colspan} class="px-6 py-12 text-center text-muted-foreground italic"><slot /></td>
+</tr>

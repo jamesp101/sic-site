@@ -1,24 +1,53 @@
 ---
 import AppLayout from '@/layouts/AppLayout.astro';
+import Pagination from '@/components/site/Pagination.astro';
 import AddLink from '@/components/admin/shared/AddLink.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DeleteRowButton from '@/components/admin/shared/DeleteRowButton.astro';
 import RowDeleteDialog from '@/components/admin/shared/RowDeleteDialog.svelte';
+import { thClass } from '@/components/admin/ui';
+import SortableTh from '@/components/admin/shared/SortableTh.astro';
+import { adminPage } from '@/lib/server/admin-page';
+import { runList, sortBy } from '@/lib/server/admin-list';
 import { db } from '@/lib/server/db';
-import { requireSuperAdmin } from '@/lib/server/authz';
-import { authzResponse } from '@/lib/server/authz-response';
+import type { Prisma } from '@/generated/prisma/client';
 
-let actor;
-try {
-    actor = requireSuperAdmin(Astro.locals.user);
-} catch (error) {
-    return authzResponse(error);
-}
+const access = await adminPage(Astro.locals.user, { superAdmin: true });
+if (access instanceof Response) return access;
+const { actor } = access;
 
-const users = await db.user.findMany({
-    select: { id: true, name: true, email: true, role: true, department: { select: { name: true } } },
-    orderBy: [{ name: 'asc' }, { id: 'asc' }],
+const rowSelect = {
+    id: true,
+    name: true,
+    email: true,
+    role: true,
+    department: { select: { name: true } },
+} satisfies Prisma.UserSelect;
+
+// Superadmin only: every user is listed, so the Admin scope does not apply (`restriction: {}`).
+const list = await runList<
+    Prisma.UserWhereInput,
+    Prisma.UserOrderByWithRelationInput,
+    Prisma.UserGetPayload<{ select: typeof rowSelect }>
+>({
+    url: Astro.url,
+    actor,
+    scope: Astro.locals.adminScope,
+    restriction: {},
+    spec: {
+        fields: {
+            name: sortBy((dir) => ({ name: dir })),
+            email: sortBy((dir) => ({ email: dir })),
+            role: sortBy((dir) => ({ role: dir })),
+            department: sortBy((dir) => ({ department: { name: dir } })),
+        },
+        defaultSort: 'name',
+        tiebreak: { id: 'asc' },
+    },
+    count: (where) => db.user.count({ where }),
+    fetch: (args) => db.user.findMany({ ...args, select: rowSelect }),
 });
+const { rows: users, page, pageCount, pageHref } = list;
 ---
 
 <AppLayout title="Manage Users" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Users' }]}>
@@ -31,20 +60,12 @@ const users = await db.user.findMany({
             <div class="overflow-x-auto">
                 <table class="w-full border-collapse text-left text-sm">
                     <thead>
-                        <tr class="border-b border-border bg-surface-alt text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                            <th scope="col" class="px-6 py-4">
-                                Name
-                            </th>
-                            <th scope="col" class="px-6 py-4">
-                                Email
-                            </th>
-                            <th scope="col" class="px-6 py-4">
-                                Role
-                            </th>
-                            <th scope="col" class="px-6 py-4">
-                                Department
-                            </th>
-                            <th scope="col" class="w-28 px-6 py-4 text-right">
+                        <tr class="border-b border-border bg-surface-alt">
+                            <SortableTh list={list} field="name">Name</SortableTh>
+                            <SortableTh list={list} field="email">Email</SortableTh>
+                            <SortableTh list={list} field="role">Role</SortableTh>
+                            <SortableTh list={list} field="department">Department</SortableTh>
+                            <th scope="col" class={`${thClass} w-28 text-right`}>
                                 Actions
                             </th>
                         </tr>
@@ -106,6 +127,7 @@ const users = await db.user.findMany({
                 </table>
             </div>
         </div>
+        <Pagination page={page} pageCount={pageCount} href={pageHref} label="Users pages" />
     </div>
     <RowDeleteDialog client:load />
 </AppLayout>

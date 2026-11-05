@@ -193,7 +193,7 @@ export type Block<T extends BlockType = BlockType> = {
         id: string;
         type: K;
         props: PropsByType[K];
-        /** Only for container types (see `CONTAINER_TYPES`). */
+        /** Only for container types (see `CONTAINER_TYPES` in `registry.ts`). */
         children?: Block[];
     };
 }[T];
@@ -204,68 +204,10 @@ export interface BlockDocument {
     blocks: Block[];
 }
 
-export const BLOCK_TYPES = [
-    'section',
-    'row',
-    'grid',
-    'columns',
-    'spacer',
-    'divider',
-    'heading',
-    'paragraph',
-    'list',
-    'quote',
-    'button',
-    'badges',
-    'card',
-    'image',
-    'album',
-    'table',
-    'accordion',
-    'callout',
-    'stats',
-    'video',
-    'event',
-    'markdown',
-] as const satisfies readonly BlockType[];
-
-/** Blocks that hold child blocks. */
-export const CONTAINER_TYPES = ['section', 'row', 'grid', 'columns', 'card'] as const satisfies readonly BlockType[];
-
-export function isContainerType(type: BlockType): boolean {
-    return (CONTAINER_TYPES as readonly string[]).includes(type);
-}
-
 export interface BlockMeta {
     label: string;
     group: 'Layout' | 'Content' | 'Media' | 'Legacy';
     description: string;
 }
-
-/** Palette order and labels. */
-export const BLOCK_META: Record<BlockType, BlockMeta> = {
-    section: { label: 'Section', group: 'Layout', description: 'Background and padding around other elements.' },
-    row: { label: 'Row / Flex', group: 'Layout', description: 'Flexible row or column with gap and alignment.' },
-    grid: { label: 'Grid', group: 'Layout', description: 'Responsive grid with 1 to 6 columns.' },
-    columns: { label: 'Columns', group: 'Layout', description: 'Two or three side-by-side columns.' },
-    spacer: { label: 'Spacer', group: 'Layout', description: 'Vertical whitespace.' },
-    divider: { label: 'Divider', group: 'Layout', description: 'A horizontal rule.' },
-    heading: { label: 'Heading', group: 'Content', description: 'Section heading (h2 to h4).' },
-    paragraph: { label: 'Text', group: 'Content', description: 'Paragraph with bold, italic and links.' },
-    list: { label: 'List', group: 'Content', description: 'Bulleted or numbered list.' },
-    quote: { label: 'Quote', group: 'Content', description: 'Highlighted quotation.' },
-    button: { label: 'Button', group: 'Content', description: 'Link styled as a button.' },
-    badges: { label: 'Badges', group: 'Content', description: 'A group of short labels.' },
-    card: { label: 'Card', group: 'Content', description: 'Title, text, optional image and link.' },
-    table: { label: 'Table', group: 'Content', description: 'Editable rows and columns.' },
-    accordion: { label: 'Accordion / FAQ', group: 'Content', description: 'Expandable questions and answers.' },
-    callout: { label: 'Callout', group: 'Content', description: 'Info, success or warning notice.' },
-    stats: { label: 'Stats', group: 'Content', description: 'Key figures with labels.' },
-    event: { label: 'Event details', group: 'Content', description: 'Date, time and location.' },
-    image: { label: 'Image', group: 'Media', description: 'Uploaded or linked image with alt text, caption and link.' },
-    album: { label: 'Album', group: 'Media', description: 'Image grid that opens in a lightbox.' },
-    video: { label: 'Video', group: 'Media', description: 'YouTube, Vimeo or an uploaded video.' },
-    markdown: { label: 'Markdown (legacy)', group: 'Legacy', description: 'Markdown / MDX-lite source.' },
-};
 
 export const BLOCK_GROUPS = ['Layout', 'Content', 'Media', 'Legacy'] as const;

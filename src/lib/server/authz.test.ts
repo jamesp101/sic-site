@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
-import {
-    AuthzError,
-    departmentForWrite,
-    requireSuperAdmin,
-    requireUser,
-    scopeDepartment,
-    scopeOwnDepartment,
-} from './authz';
+import { departmentForWrite, requireSuperAdmin, requireUser, scopeDepartment, scopeOwnDepartment } from './authz';
+import { RequestError } from './request-error';
 
 const admin = { id: 1, role: 'superadmin', departmentId: null };
 const cit = { id: 2, role: 'department_user', departmentId: 10 };
@@ -16,7 +10,7 @@ function codeOf(fn: () => unknown): string | undefined {
     try {
         fn();
     } catch (error) {
-        return error instanceof AuthzError ? error.code : 'OTHER';
+        return error instanceof RequestError ? error.code : 'OTHER';
     }
     return undefined;
 }

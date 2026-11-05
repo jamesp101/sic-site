@@ -1,4 +1,5 @@
 import { adminRoute, json } from '@/lib/server/api-route';
+import { RequestError } from '@/lib/server/request-error';
 import { newDirectUploadKey, VIDEO_UPLOAD_PREFIX } from '@/lib/server/direct-upload';
 import { registerPendingUpload } from '@/lib/server/pending-uploads';
 import { assertUploadQuota } from '@/lib/server/rate-limit';
@@ -18,7 +19,7 @@ export const prerender = false;
 export const POST = adminRoute(async ({ request, user }) => {
     const upload = await readUploadRequest(request);
     const checked = validateVideoUpload(upload);
-    if (!checked.ok) return json({ message: checked.message }, 422);
+    if (!checked.ok) throw new RequestError('UNPROCESSABLE_CONTENT', checked.message);
     await assertUploadQuota(user.id);
 
     const key = newDirectUploadKey(upload.fileName, checked.contentType, VIDEO_UPLOAD_PREFIX);
@@ -35,7 +36,7 @@ export const POST = adminRoute(async ({ request, user }) => {
  * call this: a PUT with credentials always needs a CORS preflight, which this app never answers.
  */
 export const PUT = adminRoute(async ({ request, user }) => {
-    if (directUploads) return json({ message: 'Videos are uploaded straight to the bucket.' }, 404);
+    if (directUploads) throw new RequestError('NOT_FOUND', 'Videos are uploaded straight to the bucket.');
     const params = new URL(request.url).searchParams;
     await receiveVideo(user.id, params.get('key') ?? '', Number(params.get('size')), request.body);
     return new Response(null, { status: 204 });

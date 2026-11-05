@@ -23,31 +23,29 @@
   } from '@lucide/svelte';
   import { onMount, untrack } from 'svelte';
   import { setKeyboardDragTrigger } from 'svelte-dnd-action';
-  import {
-    canContain,
-    canPlace,
-    createBlock,
-    createDocument,
-    duplicateBlock,
-    findBlock,
-    flatten,
-    insertBlock,
-    insertionPoint,
-    moveBlock,
-    removeBlock,
-    serializeDocument,
-    setChildren,
-    shiftBlock,
-    updateBlock,
-  } from '@/lib/blocks/document';
+  import { createDocument, duplicateBlock, findBlock, flatten, shiftBlock } from '@/lib/blocks/document';
   import { editableBlocks } from '@/lib/blocks/content';
-  import { markdownToBlocks } from '@/lib/blocks/from-markdown';
+  import {
+    canDrop,
+    convertMarkdown,
+    deleteBlock,
+    failed,
+    indentBlock,
+    insertNew,
+    outdentBlock,
+    resolveDrop,
+    type DropSource,
+    type DropTarget,
+    type EditFailure,
+    type EditResult,
+  } from '@/lib/blocks/edit';
   import { renderBlocks } from '@/lib/blocks/render';
   import { validateDocument } from '@/lib/blocks/schema';
   import { TEMPLATES, type BlockTemplate } from '@/lib/blocks/templates';
-  import { BLOCK_META, LIMITS, type Block, type BlockType } from '@/lib/blocks/types';
-  import { buildSrcdoc, CanvasController, type CanvasHost, type CanvasSource, type DropTarget } from './canvas';
-  import { History } from './history';
+  import { BLOCK_REGISTRY } from '@/lib/blocks/registry';
+  import type { Block, BlockType } from '@/lib/blocks/types';
+  import { buildSrcdoc, CanvasController, type CanvasHost, type CanvasSource } from './canvas';
+  import { EditorSession } from './session';
   import Inspector from './Inspector.svelte';
   import LayerList from './LayerList.svelte';
   import Palette from './Palette.svelte';
@@ -69,47 +67,26 @@
   } = $props();
 
   // ---------------------------------------------------------------------------------------------
-  // Document state
+  // Document state (the editing session owns blocks, history and selection)
   // ---------------------------------------------------------------------------------------------
 
-  const initialValue = untrack(() => value);
+  const session = new EditorSession(
+    untrack(() => editableBlocks(value)),
+    untrack(() => value),
+    () => {
+      const blocksChanged = view.blocks !== session.view.blocks;
+      view = session.view;
+      if (blocksChanged) value = session.value;
+    },
+  );
+  let view = $state.raw(session.view);
 
-  const initialBlocks = editableBlocks(initialValue);
-
-  let blocks = $state.raw<Block[]>(initialBlocks);
-  let selectedId = $state<string | null>(null);
-  const history = new History<Block[]>(initialBlocks);
-  let historyTick = $state(0);
-  const canUndo = $derived(historyTick >= 0 && history.canUndo);
-  const canRedo = $derived(historyTick >= 0 && history.canRedo);
-
-  function emit() {
-    value =
-      blocks === initialBlocks ? initialValue : blocks.length ? serializeDocument(createDocument(blocks)) : '';
-  }
-
-  function apply(next: Block[], options: { select?: string | null; key?: string } = {}) {
-    if (next === blocks) return;
-    history.push(next, options.key ?? null);
-    blocks = next;
-    historyTick++;
-    if (options.select !== undefined) selectedId = options.select;
-    else if (selectedId && !findBlock(next, selectedId)) selectedId = null;
-    layersRevision++;
-    emit();
-  }
-
-  function restore(snapshot: Block[] | null) {
-    if (!snapshot) return;
-    blocks = snapshot;
-    historyTick++;
-    if (selectedId && !findBlock(snapshot, selectedId)) selectedId = null;
-    layersRevision++;
-    emit();
-  }
-
-  const undo = () => restore(history.undo());
-  const redo = () => restore(history.redo());
+  const blocks = $derived(view.blocks);
+  const selectedId = $derived(view.selectedId);
+  const canUndo = $derived(view.canUndo);
+  const canRedo = $derived(view.canRedo);
+  const undo = () => session.undo();
+  const redo = () => session.redo();
 
   const selected = $derived(selectedId ? findBlock(blocks, selectedId) : null);
   const flat = $derived(flatten(blocks));
@@ -121,7 +98,7 @@
     const trail: string[] = [];
     let current = selected;
     while (current) {
-      trail.unshift(BLOCK_META[current.block.type].label);
+      trail.unshift(BLOCK_REGISTRY[current.block.type].meta.label);
       current = current.parentId ? findBlock(blocks, current.parentId) : null;
     }
     return trail;
@@ -132,7 +109,6 @@
   // ---------------------------------------------------------------------------------------------
 
   let announcement = $state('');
-  let layersRevision = $state(0);
 
   function announce(message: string) {
     announcement = '';
@@ -140,148 +116,83 @@
   }
 
   function select(next: string | null) {
-    selectedId = next;
+    session.select(next);
     if (next) canvas?.scrollToBlock(next);
   }
 
-  function indexIn(tree: Block[], parentId: string | null, beforeId: string | null): number {
-    const siblings = parentId === null ? tree : (findBlock(tree, parentId)?.block.children ?? []);
-    if (beforeId === null) return siblings.length;
-    const index = siblings.findIndex((block) => block.id === beforeId);
-    return index === -1 ? siblings.length : index;
+  /** Applies a command's result; announces `done` on success or the message for the failure. */
+  function run(result: EditResult, messages: { done?: string } & Partial<Record<EditFailure['error'], string>>): boolean {
+    if (failed(result)) {
+      const message = messages[result.error];
+      if (message) announce(message);
+      return false;
+    }
+    session.apply(result);
+    if (messages.done) announce(messages.done);
+    return true;
   }
 
-  function insertNew(type: BlockType, target?: DropTarget) {
-    const block = createBlock(type);
-    const point = target
-      ? { parentId: target.parentId, index: indexIn(blocks, target.parentId, target.beforeId) }
-      : insertionPoint(blocks, selectedId, type);
-    if (!canPlace(blocks, block, point.parentId)) {
-      announce(`${BLOCK_META[type].label} cannot be placed there.`);
-      return;
-    }
-    apply(insertBlock(blocks, point.parentId, point.index, block), { select: block.id });
-    announce(`${BLOCK_META[type].label} added.`);
-  }
-
-  function updateProps(blockId: string, patch: Record<string, unknown>, coalesce = true) {
-    let next = updateBlock(blocks, blockId, patch);
-    const location = findBlock(next, blockId);
-    if (location?.block.type === 'columns' && 'count' in patch) {
-      // Keep one stack per column; never delete content when reducing the count.
-      const count = Number(patch.count);
-      const children = location.block.children ?? [];
-      if (children.length < count) {
-        const extra = Array.from({ length: count - children.length }, () =>
-          createBlock('row', { direction: 'column', gap: 'sm', align: 'stretch' }),
-        );
-        next = setChildren(next, blockId, [...children, ...extra]);
-      }
-    }
-    apply(next, { key: coalesce ? `props:${blockId}:${Object.keys(patch).join(',')}` : undefined });
+  function insertType(type: BlockType, target?: DropTarget) {
+    const label = BLOCK_REGISTRY[type].meta.label;
+    const result = target ? resolveDrop(blocks, { kind: 'new', type }, target) : insertNew(blocks, type, selectedId);
+    run(result, { done: `${label} added.`, blocked: `${label} cannot be placed there.` });
   }
 
   function duplicate() {
-    if (!selectedId) return;
-    const result = duplicateBlock(blocks, selectedId);
+    const result = selectedId ? duplicateBlock(blocks, selectedId) : null;
     if (!result) return;
-    apply(result.blocks, { select: result.id });
+    session.apply({ blocks: result.blocks, select: result.id });
     announce('Element duplicated.');
   }
 
   function remove() {
-    if (!selectedId) return;
-    const location = findBlock(blocks, selectedId);
-    if (!location) return;
-    const neighbour = location.siblings[location.index + 1] ?? location.siblings[location.index - 1];
-    apply(removeBlock(blocks, selectedId), { select: neighbour?.id ?? location.parentId });
-    announce('Element deleted.');
+    if (selectedId) run(deleteBlock(blocks, selectedId), { done: 'Element deleted.' });
   }
 
   function shift(delta: -1 | 1) {
     if (!selectedId) return;
     const next = shiftBlock(blocks, selectedId, delta);
     if (next === blocks) return;
-    apply(next);
+    session.apply({ blocks: next });
     announce(delta < 0 ? 'Moved up.' : 'Moved down.');
   }
 
   function outdent() {
-    const location = selected;
-    if (!location?.parentId) return;
-    const parent = findBlock(blocks, location.parentId);
-    if (!parent) return;
-    const next = moveBlock(blocks, location.block.id, parent.parentId, parent.index + 1);
-    if (next === blocks) return announce('Cannot move out of this container.');
-    apply(next);
-    announce('Moved out of the container.');
+    if (!selectedId) return;
+    run(outdentBlock(blocks, selectedId), {
+      done: 'Moved out of the container.',
+      blocked: 'Cannot move out of this container.',
+    });
   }
 
   function indent() {
-    const location = selected;
-    if (!location) return;
-    const previous = location.siblings.slice(0, location.index)
-      .reverse()
-      .find((block) => canContain(block.type, location.block.type));
-    if (!previous) return announce('There is no container before this element.');
-    const next = moveBlock(blocks, location.block.id, previous.id, previous.children?.length ?? 0);
-    if (next === blocks) return announce('Cannot move into that container.');
-    apply(next);
-    announce(`Moved into ${BLOCK_META[previous.type].label}.`);
+    if (!selectedId) return;
+    const moved = run(indentBlock(blocks, selectedId), {
+      'no-target': 'There is no container before this element.',
+      blocked: 'Cannot move into that container.',
+    });
+    const parentType = moved ? findBlock(session.view.blocks, selectedId)?.parentType : null;
+    if (parentType) announce(`Moved into ${BLOCK_REGISTRY[parentType].meta.label}.`);
   }
 
-  function layerMove(blockId: string, parentId: string | null, index: number) {
-    const location = findBlock(blocks, blockId);
-    if (!location || (location.parentId === parentId && location.index === index)) {
-      layersRevision++;
-      return;
-    }
-    const next = moveBlock(blocks, blockId, parentId, index);
-    if (next === blocks) {
-      layersRevision++;
-      announce('That element cannot be placed there.');
-      return;
-    }
-    apply(next, { select: blockId });
+  /** Canvas chip, Layers list and palette drags all end here. */
+  function drop(source: DropSource, target: DropTarget) {
+    if (source.kind === 'new') return insertType(source.type, target);
+    const moved = run(resolveDrop(blocks, source, target), {
+      done: 'Element moved.',
+      blocked: 'That element cannot be placed there.',
+    });
+    if (!moved) session.resync();
   }
 
   function applyTemplate(template: BlockTemplate) {
     const created = template.create();
-    apply(created, { select: created[0]?.id ?? null });
+    session.apply({ blocks: created, select: created[0]?.id ?? null });
     announce(`${template.label} template added.`);
   }
 
-  function convertMarkdown(blockId: string) {
-    const location = findBlock(blocks, blockId);
-    if (!location || location.block.type !== 'markdown') return;
-    const converted = markdownToBlocks(location.block.props.source);
-    if (converted.length === 0) return;
-    const siblings = [
-      ...location.siblings.slice(0, location.index),
-      ...converted,
-      ...location.siblings.slice(location.index + 1),
-    ];
-    apply(setChildren(blocks, location.parentId, siblings), { select: converted[0].id });
-    announce('Markdown converted to blocks.');
-  }
-
-  function convertAll() {
-    let next = blocks;
-    let first: string | null = null;
-    for (const { block } of flatten(blocks)) {
-      if (block.type !== 'markdown') continue;
-      const location = findBlock(next, block.id);
-      const converted = markdownToBlocks(block.props.source);
-      if (!location || converted.length === 0) continue;
-      first ??= converted[0].id;
-      next = setChildren(next, location.parentId, [
-        ...location.siblings.slice(0, location.index),
-        ...converted,
-        ...location.siblings.slice(location.index + 1),
-      ]);
-    }
-    apply(next, { select: first });
-    announce('Markdown converted to blocks.');
+  function convertMarkdownBlocks(blockId?: string) {
+    run(convertMarkdown(blocks, blockId), { done: 'Markdown converted to blocks.' });
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -388,36 +299,12 @@
 
   const html = $derived(renderSafe(blocks, !previewing));
 
-  function canDropAt(source: CanvasSource, parentId: string | null): boolean {
-    if (source.kind === 'move') {
-      const location = findBlock(blocks, source.id);
-      return location !== null && canPlace(blocks, location.block, parentId);
-    }
-    const parent = parentId === null ? null : findBlock(blocks, parentId);
-    if (parentId !== null && !parent) return false;
-    if (!canContain(parent?.block.type ?? null, source.type)) return false;
-    return (parent?.depth ?? 0) + (source.type === 'columns' ? 2 : 1) <= LIMITS.depth;
-  }
-
-  function dropAt(source: CanvasSource, target: DropTarget) {
-    if (source.kind === 'new') {
-      insertNew(source.type, target);
-      return;
-    }
-    const without = removeBlock(blocks, source.id);
-    const index = indexIn(without, target.parentId, target.beforeId);
-    const next = moveBlock(blocks, source.id, target.parentId, index);
-    if (next === blocks) return announce('That element cannot be placed there.');
-    apply(next, { select: source.id });
-    announce('Element moved.');
-  }
-
   const host: CanvasHost = {
     select: (next) => select(next),
-    commitText: (blockId, patch) => updateProps(blockId, patch, false),
+    commitText: (blockId, patch) => session.setProps(blockId, patch, false),
     key: (event, editing) => handleKey(event, editing),
-    drop: dropAt,
-    canDrop: canDropAt,
+    drop,
+    canDrop: (source: CanvasSource, parentId) => canDrop(blocks, source, parentId),
     dragging: (active) => (dragging = active),
   };
 
@@ -456,7 +343,7 @@
   });
 
   function beginPaletteDrag(type: BlockType, x: number, y: number) {
-    canvas?.beginDrag({ kind: 'new', type, label: BLOCK_META[type].label }, x, y);
+    canvas?.beginDrag({ kind: 'new', type, label: BLOCK_REGISTRY[type].meta.label }, x, y);
   }
 
   const btn =
@@ -581,7 +468,7 @@
         <p class="min-w-0 flex-1">
           This content contains <strong>Markdown (legacy)</strong> blocks. It renders as before; keep it, or convert it into editable blocks.
         </p>
-        <button type="button" class="inline-flex items-center gap-1 rounded-md border border-border-strong bg-surface px-2.5 py-1 font-semibold hover:bg-surface-alt" onclick={convertAll}>
+        <button type="button" class="inline-flex items-center gap-1 rounded-md border border-border-strong bg-surface px-2.5 py-1 font-semibold hover:bg-surface-alt" onclick={() => convertMarkdownBlocks()}>
           <Wand class="h-3.5 w-3.5" aria-hidden="true" /> Convert to blocks
         </button>
       </div>
@@ -601,7 +488,7 @@
           </div>
           <div id={`${id}-panel-left`} role="tabpanel" aria-labelledby={`${id}-tab-${leftTab}`} class="min-h-0 flex-1 overflow-y-auto p-2">
             {#if leftTab === 'elements'}
-              <Palette onadd={(type) => insertNew(type)} onbegindrag={beginPaletteDrag} />
+              <Palette onadd={(type) => insertType(type)} onbegindrag={beginPaletteDrag} />
             {:else}
               <div data-editor-layers>
                 {#if blocks.length === 0}
@@ -609,10 +496,10 @@
                 {/if}
                 <LayerList
                   {blocks}
-                  revision={layersRevision}
+                  revision={view.revision}
                   selectedId={selectedId}
                   onselect={(blockId) => select(blockId)}
-                  onmove={layerMove}
+                  onmove={(blockId, target) => drop({ kind: 'move', id: blockId }, target)}
                   onhover={(blockId) => canvas?.setHover(blockId)}
                 />
                 <p class="mt-2 px-1 text-xs text-muted-foreground">Drag to reorder or nest. With the keyboard, focus a row, press Space to lift, arrow keys to move, Space to drop.</p>
@@ -659,7 +546,7 @@
                   </li>
                 {/each}
               </ul>
-              <button type="button" class="mt-3 w-full rounded-lg bg-brand-800 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700 dark:bg-gold-500 dark:text-brand-950 dark:hover:bg-gold-400" onclick={() => insertNew('paragraph')}>
+              <button type="button" class="mt-3 w-full rounded-lg bg-brand-800 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700 dark:bg-gold-500 dark:text-brand-950 dark:hover:bg-gold-400" onclick={() => insertType('paragraph')}>
                 Start with a text block
               </button>
             </div>
@@ -670,7 +557,7 @@
       <!-- Right: inspector -->
       {#if rightOpen && !previewing}
         <div role="group" bind:this={inspectorEl} class="max-h-80 shrink-0 overflow-y-auto border-t border-border bg-surface p-3 lg:max-h-none lg:w-72 lg:border-t-0 lg:border-l" aria-label="Inspector">
-          <Inspector block={selected?.block ?? null} onupdate={(blockId, patch) => updateProps(blockId, patch)} onconvert={convertMarkdown} idPrefix={id} />
+          <Inspector block={selected?.block ?? null} onupdate={(blockId, patch) => session.setProps(blockId, patch)} onconvert={convertMarkdownBlocks} idPrefix={id} />
         </div>
       {/if}
     </div>

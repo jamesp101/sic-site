@@ -1,3 +1,5 @@
+import type { TreeEditOps } from './tree-edit-session';
+
 /**
  * Pure helpers for the department org chart (shared by the admin editor and the `members` actions).
  * Siblings are ordered by (`order`, `id`) exactly like the public chart; every move renumbers the
@@ -124,6 +126,26 @@ export function invertPlacements(members: OrgLinked[], placements: OrgPlacement[
         return m ? [{ id: m.id, parentId: m.parentId, order: m.order }] : [];
     });
 }
+
+/** One edit of the org chart: a set of moves, or a rename of one member. */
+export type OrgChange = { kind: 'place'; placements: OrgPlacement[] } | { kind: 'rename'; id: number; name: string };
+
+/** How the tree-edit session applies and inverts an `OrgChange`. */
+export const orgTreeOps: TreeEditOps<OrgMember[], OrgChange> = {
+    apply(members, change) {
+        if (change.kind === 'place') return applyPlacements(members, change.placements);
+        return members.map((m) => (m.id === change.id ? { ...m, name: change.name } : m));
+    },
+    invert(members, change) {
+        if (change.kind === 'place') return { kind: 'place', placements: invertPlacements(members, change.placements) };
+        return { kind: 'rename', id: change.id, name: members.find((m) => m.id === change.id)?.name ?? change.name };
+    },
+    isNoop(members, change) {
+        if (change.kind === 'place') return change.placements.length === 0;
+        const member = members.find((m) => m.id === change.id);
+        return !member || member.name === change.name;
+    },
+};
 
 /** Order for a new last child of `parentId`. */
 export function nextOrder(members: OrgLinked[], parentId: number | null): number {

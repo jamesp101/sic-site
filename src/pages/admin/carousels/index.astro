@@ -4,16 +4,13 @@ import CarouselDesigner from '@/components/admin/carousels/CarouselDesigner.svel
 import { db } from '@/lib/server/db';
 import { toDesignerSlide } from '@/lib/server/carousel-admin';
 import { departmentWhere, scopeDefaultDepartment, scopeLabel } from '@/lib/server/admin-scope';
-import { isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { isSuperAdmin } from '@/lib/server/authz';
+import { adminPage } from '@/lib/server/admin-page';
 import { departmentOptions } from '@/lib/server/department-access';
-import { authzResponse } from '@/lib/server/authz-response';
 
-let actor;
-try {
-    actor = requireUser(Astro.locals.user);
-} catch (error) {
-    return authzResponse(error);
-}
+const access = await adminPage(Astro.locals.user);
+if (access instanceof Response) return access;
+const { actor } = access;
 
 const superadmin = isSuperAdmin(actor);
 // Slides follow the admin scope: `main` = slides without a department, a department = that department's slides.

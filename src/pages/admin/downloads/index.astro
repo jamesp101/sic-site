@@ -1,22 +1,26 @@
 ---
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DownloadsManager from '@/components/admin/downloads/DownloadsManager.svelte';
+import Pagination from '@/components/site/Pagination.astro';
 import AppLayout from '@/layouts/AppLayout.astro';
+import { adminPage } from '@/lib/server/admin-page';
+import { runList, sortBy } from '@/lib/server/admin-list';
 import { departmentWhere } from '@/lib/server/admin-scope';
-import { isSuperAdmin, requireUser } from '@/lib/server/authz';
-import { authzResponse } from '@/lib/server/authz-response';
+import { isSuperAdmin } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
 import { departmentOptions } from '@/lib/server/department-access';
 import { extensionOf, fileKind } from '@/lib/files';
 import { publicUrl } from '@/lib/server/storage';
+import type { Prisma } from '@/generated/prisma/client';
 
-let actor;
-try {
-    actor = requireUser(Astro.locals.user);
-} catch (error) {
-    return authzResponse(error);
-}
+const access = await adminPage(Astro.locals.user);
+if (access instanceof Response) return access;
+const { actor } = access;
 const superadmin = isSuperAdmin(actor);
+const scope = Astro.locals.adminScope;
+
+/** Folder filter value for files without a folder. */
+const UNCATEGORIZED = 'Uncategorized';
 
 function parseTags(raw: string | null): string[] {
     if (!raw) return [];
@@ -32,21 +36,49 @@ function parseTags(raw: string | null): string[] {
         .filter(Boolean);
 }
 
-const [rows, departments, directories] = await Promise.all([
-    db.download.findMany({
-        where: departmentWhere(actor, Astro.locals.adminScope),
-        orderBy: { createdAt: 'desc' },
-        include: { department: { select: { name: true } } },
+const folder = Astro.url.searchParams.get('folder') ?? '';
+
+const list = await runList<
+    Prisma.DownloadWhereInput,
+    Prisma.DownloadOrderByWithRelationInput,
+    Prisma.DownloadGetPayload<{ include: { department: { select: { name: true } } } }>
+>({
+    url: Astro.url,
+    actor,
+    scope,
+    spec: {
+        fields: {
+            fileName: sortBy((dir) => ({ fileName: dir })),
+            createdAt: sortBy((dir) => ({ createdAt: dir }), 'desc'),
+            size: sortBy((dir) => ({ fileSize: dir }), 'desc'),
+        },
+        defaultSort: 'createdAt',
+        tiebreak: { id: 'desc' },
+        search: ['fileName', 'directory', 'tags'],
+        perPage: 24,
+    },
+    filters: [folder && { directory: folder === UNCATEGORIZED ? null : folder }],
+    count: (where) => db.download.count({ where }),
+    fetch: (args) => db.download.findMany({ ...args, include: { department: { select: { name: true } } } }),
+});
+
+const [groups, departments, directories] = await Promise.all([
+    // Folder counts and the stored total cover the whole scope, not just the page or the search.
+    db.download.groupBy({
+        by: ['directory'],
+        where: departmentWhere(actor, scope),
+        _count: { _all: true },
+        _sum: { fileSize: true },
     }),
     departmentOptions(actor),
     // General folders (no department) are shared, so a department scope still lists them.
     db.downloadDirectory.findMany({
-        where: departmentWhere(actor, Astro.locals.adminScope, { includeGeneral: true }),
+        where: departmentWhere(actor, scope, { includeGeneral: true }),
         orderBy: { name: 'asc' },
     }),
 ]);
 
-const downloads = rows.map((row) => {
+const downloads = list.rows.map((row) => {
     const extension = extensionOf(row.filePath);
     return {
         id: row.id,
@@ -62,11 +94,40 @@ const downloads = rows.map((row) => {
         createdAt: row.createdAt.toISOString(),
     };
 });
-const folderRows = directories.map((d) => ({
-    id: d.id,
-    name: d.name,
-    canDelete: superadmin || d.departmentId === actor.departmentId,
-}));
+
+const folderMap = new Map<string, { name: string; count: number; id: number | null; canDelete: boolean }>();
+for (const d of directories) {
+    folderMap.set(d.name, {
+        name: d.name,
+        count: 0,
+        id: d.id,
+        canDelete: superadmin || d.departmentId === actor.departmentId,
+    });
+}
+for (const group of groups) {
+    const name = group.directory || UNCATEGORIZED;
+    const existing = folderMap.get(name) ?? { name, count: 0, id: null, canDelete: false };
+    folderMap.set(name, { ...existing, count: existing.count + group._count._all });
+}
+const folders = [...folderMap.values()].map((f) => ({ ...f, href: list.href({ folder: f.name }) }));
+
+const manager = {
+    totalFiles: groups.reduce((sum, g) => sum + g._count._all, 0),
+    totalBytes: groups.reduce((sum, g) => sum + (g._sum.fileSize ?? 0), 0),
+    matching: list.total,
+    q: list.q,
+    folder,
+    sort: list.sort,
+    dir: list.dir,
+    sorts: [
+        { label: 'Name', field: 'fileName' },
+        { label: 'Date', field: 'createdAt' },
+        { label: 'Size', field: 'size' },
+    ].map((s) => ({ ...s, href: list.sortHref(s.field), active: list.sort === s.field })),
+    allFoldersHref: list.href({ folder: null }),
+    resetHref: list.href({ q: null, folder: null, sort: null, dir: null }),
+    folders,
+};
 ---
 
 <AppLayout title="Downloads" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Downloads' }]}>
@@ -76,12 +137,7 @@ const folderRows = directories.map((d) => ({
             title="Downloads"
             description="Upload and organise forms, manuals and resources for the public downloads page."
         />
-        <DownloadsManager
-            client:load
-            downloads={downloads}
-            {departments}
-            directories={folderRows}
-            isSuperAdmin={superadmin}
-        />
+        <DownloadsManager client:load downloads={downloads} {departments} {manager} isSuperAdmin={superadmin} />
+        <Pagination page={list.page} pageCount={list.pageCount} href={list.pageHref} label="Downloads pages" />
     </div>
 </AppLayout>

@@ -32,12 +32,9 @@ export interface DepartmentDetail extends DepartmentSummary {
 
 export interface CarouselSlide {
     id: number;
-    title: string | null;
-    subtitle: string | null;
     imageUrl: string;
-    linkUrl: string | null;
-    /** Designer layers; null = legacy slide rendered from title / subtitle / linkUrl. */
-    overlay: OverlayLayer[] | null;
+    /** Designer layers; a legacy slide (title / subtitle / link only) arrives already converted to layers. */
+    layers: OverlayLayer[];
     /** Phone settings of the slide (photo focal point); null = centred. */
     mobile: SlideMobile | null;
     /** Background video behind the layers; the photo stays the poster. */

@@ -1,85 +1,77 @@
 ---
-import { ArrowUpDown, Network, Pencil, Search } from '@lucide/svelte';
+import { Network, Pencil, Search } from '@lucide/svelte';
+import Pagination from '@/components/site/Pagination.astro';
 import AddLink from '@/components/admin/shared/AddLink.astro';
+import EmptyRow from '@/components/admin/shared/EmptyRow.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DeleteRowButton from '@/components/admin/shared/DeleteRowButton.astro';
 import RowDeleteDialog from '@/components/admin/shared/RowDeleteDialog.svelte';
+import SortableTh from '@/components/admin/shared/SortableTh.astro';
 import { cardClass, formatDate, iconLinkClass, selectClass, thClass } from '@/components/admin/ui';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { getInitials } from '@/lib/initials';
-import { isSuperAdmin, requireUser } from '@/lib/server/authz';
-import { authzResponse } from '@/lib/server/authz-response';
+import { adminPage } from '@/lib/server/admin-page';
+import { runList, sortBy } from '@/lib/server/admin-list';
+import { isSuperAdmin } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
-import { textContains } from '@/lib/server/search';
 import { publicUrl } from '@/lib/server/storage';
 import type { Prisma } from '@/generated/prisma/client';
 
-let actor;
-try {
-    actor = requireUser(Astro.locals.user);
-} catch (error) {
-    return authzResponse(error);
-}
+const access = await adminPage(Astro.locals.user);
+if (access instanceof Response) return access;
+const { actor } = access;
 
 const superadmin = isSuperAdmin(actor);
 const params = Astro.url.searchParams;
-const q = params.get('q')?.trim() ?? '';
 const yesNo = (value: string | null) => (value === 'yes' ? true : value === 'no' ? false : null);
 const hasLogo = yesNo(params.get('logo'));
 const hasMembers = yesNo(params.get('members'));
 const hasPosts = yesNo(params.get('posts'));
 
-const SORTS = ['name', 'members', 'posts', 'downloads', 'updated'] as const;
-type SortField = (typeof SORTS)[number];
-const sort: SortField = SORTS.find((s) => s === params.get('sort')) ?? 'name';
-const dir: 'asc' | 'desc' =
-    params.get('dir') === 'asc' ? 'asc' : params.get('dir') === 'desc' ? 'desc' : sort === 'name' ? 'asc' : 'desc';
+const rowSelect = {
+    id: true,
+    name: true,
+    slug: true,
+    description: true,
+    logoPath: true,
+    updatedAt: true,
+    _count: { select: { members: true, posts: true, downloads: true } },
+} satisfies Prisma.DepartmentSelect;
 
-const where: Prisma.DepartmentWhereInput = {
-    // Department users only ever see their own department.
-    ...(superadmin ? {} : { id: actor.departmentId ?? -1 }),
-    ...(q ? { OR: [{ name: textContains(q) }, { slug: textContains(q) }, { description: textContains(q) }] } : {}),
-    ...(hasLogo === true ? { logoPath: { not: null } } : hasLogo === false ? { logoPath: null } : {}),
-    ...(hasMembers === true ? { members: { some: {} } } : hasMembers === false ? { members: { none: {} } } : {}),
-    ...(hasPosts === true ? { posts: { some: {} } } : hasPosts === false ? { posts: { none: {} } } : {}),
-};
-const orderBy: Prisma.DepartmentOrderByWithRelationInput[] = [
-    sort === 'members'
-        ? { members: { _count: dir } }
-        : sort === 'posts'
-          ? { posts: { _count: dir } }
-          : sort === 'downloads'
-            ? { downloads: { _count: dir } }
-            : sort === 'updated'
-              ? { updatedAt: dir }
-              : { name: dir },
-    // Stable secondary order for ties on counts/dates.
-    { name: 'asc' },
-];
-
-const rows = await db.department.findMany({
-    where,
-    orderBy,
-    select: {
-        id: true,
-        name: true,
-        slug: true,
-        description: true,
-        logoPath: true,
-        updatedAt: true,
-        _count: { select: { members: true, posts: true, downloads: true } },
+// Department rows are not owned by a department: a department user's restriction is their own row (`id`).
+const list = await runList<
+    Prisma.DepartmentWhereInput,
+    Prisma.DepartmentOrderByWithRelationInput,
+    Prisma.DepartmentGetPayload<{ select: typeof rowSelect }>
+>({
+    url: Astro.url,
+    actor,
+    scope: Astro.locals.adminScope,
+    restriction: superadmin ? {} : { id: actor.departmentId ?? -1 },
+    spec: {
+        fields: {
+            name: sortBy((dir) => ({ name: dir })),
+            members: sortBy((dir) => ({ members: { _count: dir } }), 'desc'),
+            posts: sortBy((dir) => ({ posts: { _count: dir } }), 'desc'),
+            downloads: sortBy((dir) => ({ downloads: { _count: dir } }), 'desc'),
+            updated: sortBy((dir) => ({ updatedAt: dir }), 'desc'),
+        },
+        defaultSort: 'name',
+        tiebreak: { name: 'asc' },
+        search: ['name', 'slug', 'description'],
     },
+    filters: [
+        hasLogo === true ? { logoPath: { not: null } } : hasLogo === false && { logoPath: null },
+        hasMembers === true ? { members: { some: {} } } : hasMembers === false && { members: { none: {} } },
+        hasPosts === true ? { posts: { some: {} } } : hasPosts === false && { posts: { none: {} } },
+    ],
+    count: (where) => db.department.count({ where }),
+    fetch: (args) => db.department.findMany({ ...args, select: rowSelect }),
 });
+const { rows, q, sort, dir, page, pageCount, pageHref } = list;
 
-function sortHref(field: SortField) {
-    const next = new URL(Astro.url);
-    next.searchParams.set('sort', field);
-    next.searchParams.set('dir', sort === field && dir === 'asc' ? 'desc' : 'asc');
-    return `${next.pathname}${next.search}`;
-}
-const ariaSort = (field: SortField) => (sort === field ? (dir === 'asc' ? 'ascending' : 'descending') : undefined);
 const filtered = Boolean(q || hasLogo !== null || hasMembers !== null || hasPosts !== null);
-const columns: [SortField, string, string][] = [
+const columns = [
     ['name', 'Department', ''],
     ['members', 'Members', 'text-right'],
     ['posts', 'Posts', 'text-right'],
@@ -159,21 +151,18 @@ const filters = [
             <div class="overflow-x-auto">
                 <table class="w-full border-collapse text-left">
                     <caption class="sr-only">
-                        Departments, sorted by{sort}
-                        {dir === 'asc' ? 'ascending' : 'descending'}
+                        {`Departments, sorted by ${sort} ${dir === 'asc' ? 'ascending' : 'descending'}`}
                     </caption>
                     <thead>
                         <tr class="border-b border-border bg-surface-alt">
                             {columns.map(([field, label, align]) => (
-                                <th
-                                    scope="col"
-                                    class={`${thClass} ${align} ${field === 'name' ? '' : 'px-4! whitespace-nowrap'}`}
-                                    aria-sort={ariaSort(field)}
+                                <SortableTh
+                                    list={list}
+                                    field={field}
+                                    class={`${align} ${field === 'name' ? '' : 'px-4! whitespace-nowrap'}`}
                                 >
-                                    <a href={sortHref(field)} class="inline-flex items-center gap-1 hover:text-link">
-                                        {label} <ArrowUpDown class="h-3.5 w-3.5" aria-hidden="true" />
-                                    </a>
-                                </th>
+                                    {label}
+                                </SortableTh>
                             ))}
                             <th scope="col" class={`${thClass} px-4! text-right`}>
                                 Actions
@@ -255,16 +244,15 @@ const filters = [
                             );
                         })}
                         {rows.length === 0 && (
-                            <tr>
-                                <td colspan="6" class="px-6 py-12 text-center text-muted-foreground italic">
-                                    {filtered ? 'No departments match your filters.' : 'No departments yet.'}
-                                </td>
-                            </tr>
+                            <EmptyRow colspan={columns.length + 1}>
+                                {filtered ? 'No departments match your filters.' : 'No departments yet.'}
+                            </EmptyRow>
                         )}
                     </tbody>
                 </table>
             </div>
         </div>
+        <Pagination page={page} pageCount={pageCount} href={pageHref} label="Departments pages" />
     </div>
     {superadmin && <RowDeleteDialog client:load />}
 </AppLayout>

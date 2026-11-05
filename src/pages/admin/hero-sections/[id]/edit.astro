@@ -2,19 +2,15 @@
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import HeroSectionForm from '@/components/admin/hero-sections/HeroSectionForm.svelte';
 import AppLayout from '@/layouts/AppLayout.astro';
-import { isSuperAdmin, requireUser } from '@/lib/server/authz';
-import { authzResponse, parseId } from '@/lib/server/authz-response';
+import { isSuperAdmin } from '@/lib/server/authz';
+import { adminPage, parseId } from '@/lib/server/admin-page';
 import { departmentOptions, loadScoped } from '@/lib/server/department-access';
 
-let actor;
-let section;
-try {
-    actor = requireUser(Astro.locals.user);
-    const id = parseId(Astro.params.id);
-    section = await loadScoped(actor, 'heroSection', id);
-} catch (error) {
-    return authzResponse(error);
-}
+const page = await adminPage(Astro.locals.user, {
+    load: (actor) => loadScoped(actor, 'heroSection', parseId(Astro.params.id)),
+});
+if (page instanceof Response) return page;
+const { actor, row: section } = page;
 
 const departments = await departmentOptions(actor);
 const values = {

@@ -24,6 +24,10 @@ _Avoid_: department site, microsite
 A person who signs in to the admin.
 _Avoid_: account, admin, administrator
 
+**Password login**:
+The email-and-password way a User signs in, kept as one stored password hash. Changing or resetting it ends the User's other sessions.
+_Avoid_: credentials, credential account, login
+
 **Superadmin**:
 A User who can work on the Main site and on every Department.
 _Avoid_: admin, owner
@@ -82,6 +86,14 @@ _Avoid_: JSON content, page builder content
 One typed piece of a Block document, such as a heading, a paragraph or an image.
 _Avoid_: element, widget, section
 
+**Block type**:
+The kind of a Block (heading, image, album, video…). Everything about one Block type is defined in one place.
+_Avoid_: widget type, element kind
+
+**Editing session**:
+One editor's working state on a Block document: its Blocks, undo history, selection and the content to save.
+_Avoid_: editor state, draft
+
 **Legacy Markdown**:
 Rich content written in Markdown before Block documents existed.
 _Avoid_: old content, plain content
@@ -122,6 +134,10 @@ _Avoid_: element, object
 How a Slide looks on a phone: a taller 4:5 frame in which each Layer is stacked automatically, or placed, resized or hidden by hand. The designer edits it with its Desktop/Mobile switch.
 _Avoid_: responsive version, small-screen mode
 
+**Legacy Slide**:
+A Slide saved before the designer existed: it has only a title, subtitle and link, no Overlay. It is shown as Layers converted from those fields; saving it in the designer stores them as an Overlay.
+_Avoid_: old slide, classic slide
+
 **Background video**:
 A muted, looping video, either uploaded or from YouTube, that plays behind the Layers of a Slide. The Slide's picture stays as its poster while the video loads and for visitors who prefer reduced motion or save data.
 _Avoid_: hero video, movie
@@ -130,6 +146,10 @@ _Avoid_: hero video, movie
 An entry in the site header menu. It may hold one level of nested Navigation links.
 _Avoid_: menu item, nav item
 
+**Default menu**:
+The header menu of Home, Departments, News & Events, Downloads and Contact. Visitors see it while no Navigation links are stored, and a Superadmin can create it as Navigation links.
+_Avoid_: fallback menu, standard nav
+
 ### Downloads
 
 **Download**:
@@ -137,7 +157,7 @@ A public file offered on the site, such as a form, a handbook or a report, uploa
 _Avoid_: attachment, document, upload
 
 **Directory**:
-A named group of Downloads that belongs to the Main site or to one Department.
+A named group of Downloads that belongs to the Main site or to one Department. A Download stored without one is in the Directory General.
 _Avoid_: folder, category
 
 **Tag**:

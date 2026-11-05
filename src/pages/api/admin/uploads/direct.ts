@@ -1,4 +1,5 @@
 import { adminRoute, json } from '@/lib/server/api-route';
+import { RequestError } from '@/lib/server/request-error';
 import { newDirectUploadKey } from '@/lib/server/direct-upload';
 import { DOWNLOAD_TOO_LARGE } from '@/lib/server/download-intake';
 import { isAllowedContentType, isVideoUpload } from '@/lib/server/file-types';
@@ -17,14 +18,14 @@ export const prerender = false;
  * `downloads.create` (which re-checks the stored size); an abandoned object is reclaimed by the orphan cleanup.
  */
 export const POST = adminRoute(async ({ request, user }) => {
-    if (!directUploads) return json({ message: 'Direct uploads are not enabled.' }, 404);
+    if (!directUploads) throw new RequestError('NOT_FOUND', 'Direct uploads are not enabled.');
 
     const { fileName, contentType, size } = await readUploadRequest(request);
     // Downloads keep their own allowlist: every `FILE_TYPES` entry except videos, which only the video upload accepts.
     if (!isAllowedContentType(contentType) || isVideoUpload(fileName, contentType)) {
-        return json({ message: 'This file type is not allowed.' }, 422);
+        throw new RequestError('UNPROCESSABLE_CONTENT', 'This file type is not allowed.');
     }
-    if (size > LIMITS.download) return json({ message: DOWNLOAD_TOO_LARGE }, 422);
+    if (size > LIMITS.download) throw new RequestError('UNPROCESSABLE_CONTENT', DOWNLOAD_TOO_LARGE);
     await assertUploadQuota(user.id);
 
     const key = newDirectUploadKey(fileName, contentType);

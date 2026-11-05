@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { parsePage } from './pagination';
-import { hasPostFilters, parseDepartmentId, parsePostFilters, parseSearch, postsHref } from './post-filters';
+import {
+    downloadsHref,
+    hasDownloadFilters,
+    hasPostFilters,
+    parseDepartmentId,
+    parseDownloadFilters,
+    parsePostFilters,
+    parseSearch,
+    postsHref,
+} from './post-filters';
 
 const parse = (query: string) => parsePostFilters(new URLSearchParams(query));
 
@@ -58,5 +67,23 @@ describe('postsHref', () => {
         expect(postsHref(parsePostFilters(url.searchParams), parsePage(url.searchParams.get('page')))).toBe(
             `${url.pathname}${url.search}`,
         );
+    });
+});
+
+describe('download filters', () => {
+    const parseDownloads = (query: string) => parseDownloadFilters(new URLSearchParams(query));
+
+    it('defaults to no filters and drops malformed values', () => {
+        expect(parseDownloads('')).toEqual({ search: undefined, departmentId: undefined, directory: undefined });
+        expect(hasDownloadFilters(parseDownloads('department_id=0&search=%20&directory=%20'))).toBe(false);
+    });
+
+    it('round-trips search, Department and Directory through downloadsHref', () => {
+        const filters = { search: 'enrol & more', departmentId: 7, directory: 'Forms / 2026' };
+        const url = new URL(downloadsHref(filters), 'https://example.test');
+        expect(url.pathname).toBe('/downloads');
+        expect(parseDownloads(url.search)).toEqual(filters);
+        expect(hasDownloadFilters(filters)).toBe(true);
+        expect(downloadsHref({})).toBe('/downloads');
     });
 });

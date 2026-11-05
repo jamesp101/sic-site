@@ -3,10 +3,9 @@ import { z } from 'astro/zod';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { db } from '@/lib/server/db';
 import { departmentIdField, loadScoped, resolveWriteDepartment } from '@/lib/server/department-access';
+import { DEFAULT_DIRECTORY } from '@/lib/post-filters';
 import { acceptDownloadFile, downloadFile } from '@/lib/server/download-intake';
 import { commitWithFiles, deleteWithFiles } from '@/lib/server/stored-files';
-
-const DEFAULT_DIRECTORY = 'General';
 
 export const downloads = {
     create: defineAction({

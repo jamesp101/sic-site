@@ -33,13 +33,13 @@
     type History,
     type ZMove,
   } from '@/lib/carousel-editor';
+  import { measureLayerBox } from '@/lib/carousel-layout';
   import {
     IMAGE_PRESETS,
     MAX_LAYERS,
     TYPE_LABEL,
     defaultLayer,
     layerLabel,
-    legacyLayers,
     newLayerId,
     serializeOverlay,
     type Layer,
@@ -77,12 +77,10 @@
     video: string;
     /** `video` as last saved. */
     savedVideo: string;
-    /** Serialized layers as last saved; LEGACY marks a slide converted from title/subtitle/link. */
+    /** Serialized layers as last saved. */
     baseline: string;
     imageError: string;
   }
-
-  const LEGACY = '__legacy__';
 
   let {
     slides,
@@ -105,8 +103,6 @@
   } = $props();
 
   function fromSlide(slide: DesignerSlide): Draft {
-    const legacy = slide.overlay === null;
-    const layers = slide.overlay ?? legacyLayers(slide);
     return {
       key: String(slide.id),
       id: slide.id,
@@ -116,11 +112,11 @@
       departmentId: slide.departmentId,
       showOnMain: slide.showOnMain,
       title: slide.title ?? '',
-      history: createHistory(layers),
+      history: createHistory(slide.layers),
       mobile: slide.mobile,
       video: slide.video,
       savedVideo: slide.video,
-      baseline: legacy && layers.length > 0 ? LEGACY : serializeOverlay(layers, slide.mobile),
+      baseline: serializeOverlay(slide.layers, slide.mobile),
       imageError: '',
     };
   }
@@ -156,7 +152,6 @@
     draft.id === null || draft.file !== null || draft.video !== draft.savedVideo || draft.baseline !== serializeOverlay(draft.history.present, draft.mobile);
   const activeDirty = $derived(active ? isDirty(active) : false);
   const anyDirty = $derived(drafts.some((draft) => draft.id !== null && isDirty(draft)) || drafts.some((draft) => draft.id === null && (draft.file || draft.history.present.length > 0)));
-  const legacyPending = $derived(active?.baseline === LEGACY);
 
   const strip = $derived<StripSlide[]>(
     drafts.map((draft) => ({
@@ -366,14 +361,7 @@
   /** Rendered box of the selected layer in percent of the slide, read from the canvas DOM. */
   function measureSelected(): Box | null {
     const el = document.querySelector<HTMLElement>(`[data-designer-area] [data-layer-id="${selectedId}"]`);
-    const stage = el?.parentElement;
-    if (!el || !stage?.clientWidth || !stage.clientHeight) return null;
-    return {
-      x: (el.offsetLeft / stage.clientWidth) * 100,
-      y: (el.offsetTop / stage.clientHeight) * 100,
-      w: (el.offsetWidth / stage.clientWidth) * 100,
-      h: (el.offsetHeight / stage.clientHeight) * 100,
-    };
+    return el ? measureLayerBox(el) : null;
   }
 
   function nudge(dx: number, dy: number) {
@@ -748,11 +736,6 @@
           </button>
         </div>
 
-        {#if legacyPending}
-          <p class="rounded-lg border border-border-strong bg-surface-alt px-3 py-2 text-xs text-muted-foreground" role="note">
-            This slide used the old title / subtitle / link fields. They were converted into layers you can move and style. Save to publish the new design.
-          </p>
-        {/if}
         {#if errorMessage}
           <p class="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive" role="alert">{errorMessage}</p>
         {/if}

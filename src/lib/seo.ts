@@ -1,6 +1,7 @@
 import type { DepartmentDetail, MemberNode, PostDetail, PostFilters, PostSummary } from './content-types';
 import { hasPostFilters, postsHref } from './post-filters';
 import { SITE } from './site';
+import { departmentHref } from './site-nav';
 
 type JsonLd = Record<string, unknown>;
 type Site = URL | string;
@@ -223,7 +224,7 @@ export function departmentPageSeo(
     fallbackImage: string | null | undefined,
     site: Site,
 ): PageSeo {
-    const canonical = `/departments/${department.slug}`;
+    const canonical = departmentHref(department.slug);
     return {
         title: department.name,
         description: department.description?.trim() || `${department.name} at ${SITE.name}, Malaybalay City, Bukidnon.`,

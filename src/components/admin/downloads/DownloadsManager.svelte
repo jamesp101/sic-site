@@ -25,21 +25,37 @@
     departmentName: string | null;
     createdAt: string;
   }
-  interface DirectoryRow {
-    id: number;
+  interface FolderRow {
     name: string;
+    count: number;
+    id: number | null;
     canDelete: boolean;
+    href: string;
+  }
+  /** The list state computed by the page (`runList`): this island only renders it, links do the navigating. */
+  interface ListView {
+    totalFiles: number;
+    totalBytes: number;
+    matching: number;
+    q: string;
+    folder: string;
+    sort: string;
+    dir: string;
+    sorts: { label: string; field: string; href: string; active: boolean }[];
+    allFoldersHref: string;
+    resetHref: string;
+    folders: FolderRow[];
   }
 
   let {
     downloads,
     departments,
-    directories,
+    manager,
     isSuperAdmin,
   }: {
     downloads: DownloadRow[];
     departments: { id: number; name: string }[];
-    directories: DirectoryRow[];
+    manager: ListView;
     isSuperAdmin: boolean;
   } = $props();
 
@@ -53,13 +69,7 @@
   };
   const kindIcon = { pdf: FileText, doc: FileText, sheet: FileSpreadsheet, image: FileImage, archive: FileArchive, other: File } as const;
 
-  type SortField = 'fileName' | 'createdAt' | 'size';
-
   let viewMode = $state<'grid' | 'list'>('grid');
-  let search = $state('');
-  let filterDir = $state('');
-  let sortField = $state<SortField>('createdAt');
-  let sortDesc = $state(true);
   let selected = $state<DownloadRow | null>(null);
   let copied = $state(false);
 
@@ -73,49 +83,7 @@
   let confirmBusy = $state(false);
   let pending = $state<{ kind: 'file' | 'folder'; id: number; name: string } | null>(null);
 
-  const totalBytes = $derived(downloads.reduce((sum, d) => sum + d.size, 0));
-
-  const folders = $derived.by(() => {
-    const map = new Map<string, { count: number; id?: number; canDelete: boolean }>();
-    for (const dir of directories) map.set(dir.name, { count: 0, id: dir.id, canDelete: dir.canDelete });
-    for (const d of downloads) {
-      const name = d.directory || 'Uncategorized';
-      const existing = map.get(name) ?? { count: 0, canDelete: false };
-      map.set(name, { ...existing, count: existing.count + 1 });
-    }
-    return [...map.entries()].map(([name, info]) => ({ name, ...info }));
-  });
-
-  const visible = $derived.by(() => {
-    const q = search.trim().toLowerCase();
-    const rows = downloads.filter((d) => {
-      if (q && !(d.fileName.toLowerCase().includes(q) || d.directory?.toLowerCase().includes(q) || d.tags.some((t) => t.toLowerCase().includes(q)))) return false;
-      if (filterDir === 'Uncategorized') return !d.directory;
-      if (filterDir && d.directory !== filterDir) return false;
-      return true;
-    });
-    const dir = sortDesc ? -1 : 1;
-    return rows.sort((a, b) => {
-      if (sortField === 'fileName') return dir * a.fileName.localeCompare(b.fileName);
-      if (sortField === 'size') return dir * (a.size - b.size);
-      return dir * (Date.parse(a.createdAt) - Date.parse(b.createdAt));
-    });
-  });
-
-  function toggleSort(field: SortField) {
-    if (sortField === field) sortDesc = !sortDesc;
-    else {
-      sortField = field;
-      sortDesc = true;
-    }
-  }
-
-  function resetFilters() {
-    search = '';
-    filterDir = '';
-    sortField = 'createdAt';
-    sortDesc = true;
-  }
+  const filtered = $derived(Boolean(manager.q || manager.folder));
 
   async function copyLink(url: string) {
     await navigator.clipboard.writeText(window.location.origin + url);
@@ -165,8 +133,7 @@
   }
 
   const chip = 'inline-flex items-center gap-1 rounded-md bg-surface-alt px-2 py-0.5 text-xs font-semibold text-muted-foreground';
-  const sortBtn = (field: SortField) =>
-    `font-medium hover:text-link ${sortField === field ? 'font-bold text-link' : ''}`;
+  const sortLink = (active: boolean) => `font-medium hover:text-link ${active ? 'font-bold text-link' : ''}`;
   const iconBtn = 'rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground';
 </script>
 
@@ -176,7 +143,7 @@
   <!-- Header actions -->
   <div class="flex flex-col justify-between gap-4 border-b border-border pb-4 md:flex-row md:items-center">
     <p class="text-sm text-muted-foreground">
-      <span class="font-semibold text-foreground">{downloads.length} files</span> · {formatFileSize(totalBytes)} stored
+      <span class="font-semibold text-foreground">{manager.totalFiles} files</span> · {formatFileSize(manager.totalBytes)} stored
     </p>
     <div class="flex flex-wrap items-center gap-3">
       <div class="flex items-center rounded-lg border border-border-strong bg-surface-alt p-1" role="group" aria-label="View mode">
@@ -195,34 +162,36 @@
   </div>
 
   <!-- Filters -->
-  <div class="flex flex-col items-center justify-between gap-3 md:flex-row">
+  <form method="get" action="/admin/downloads" class="flex flex-col items-center justify-between gap-3 md:flex-row">
     <div class="relative w-full md:max-w-md">
       <Search class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-      <input type="search" placeholder="Search filename, category, tags…" aria-label="Search files" bind:value={search} class="w-full rounded-lg border border-border-strong bg-surface py-2 pr-4 pl-10 text-sm shadow-brand-sm outline-none focus:border-brand-600" />
+      <input type="search" name="q" value={manager.q} placeholder="Search filename, category, tags…" aria-label="Search files" class="w-full rounded-lg border border-border-strong bg-surface py-2 pr-4 pl-10 text-sm shadow-brand-sm outline-none focus:border-brand-600" />
     </div>
+    <input type="hidden" name="folder" value={manager.folder} disabled={!manager.folder} />
+    <input type="hidden" name="sort" value={manager.sort} />
+    <input type="hidden" name="dir" value={manager.dir} />
     <div class="flex w-full flex-wrap items-center justify-end gap-2.5 md:w-auto">
-      <select bind:value={filterDir} aria-label="Filter by category" class={selectClass}>
-        <option value="">All categories</option>
-        {#each folders as dir (dir.name)}<option value={dir.name}>{dir.name} ({dir.count})</option>{/each}
-      </select>
-      <button type="button" onclick={resetFilters} class={secondaryButtonClass}><RefreshCw class="h-3 w-3" aria-hidden="true" /> Reset</button>
+      <button type="submit" class={primaryButtonClass}>Search</button>
+      {#if filtered}
+        <a href={manager.resetHref} class={secondaryButtonClass}><RefreshCw class="h-3 w-3" aria-hidden="true" /> Reset</a>
+      {/if}
     </div>
-  </div>
+  </form>
 
   <!-- Folders -->
   <section class="space-y-2" aria-label="Folders">
     <h2 class="font-sans text-xs font-bold tracking-wider text-muted-foreground uppercase">Folders</h2>
     <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-      <button type="button" onclick={() => (filterDir = '')} aria-pressed={filterDir === ''} class="flex items-center gap-3 rounded-xl border p-3 text-left transition-colors {filterDir === '' ? 'border-gold-500 bg-gold-500/10' : 'border-border bg-surface hover:border-gold-400'}">
+      <a href={manager.allFoldersHref} aria-current={manager.folder === '' ? 'true' : undefined} class="flex items-center gap-3 rounded-xl border p-3 text-left transition-colors {manager.folder === '' ? 'border-gold-500 bg-gold-500/10' : 'border-border bg-surface hover:border-gold-400'}">
         <Folder class="h-5 w-5 shrink-0 text-gold-500" aria-hidden="true" />
-        <span class="min-w-0"><span class="block truncate text-xs font-semibold">All files</span><span class="block text-xs text-muted-foreground">{downloads.length} items</span></span>
-      </button>
-      {#each folders as dir (dir.name)}
-        <div class="group relative flex items-center justify-between rounded-xl border p-3 transition-colors {filterDir === dir.name ? 'border-gold-500 bg-gold-500/10' : 'border-border bg-surface hover:border-gold-400'}">
-          <button type="button" onclick={() => (filterDir = dir.name)} aria-pressed={filterDir === dir.name} class="flex min-w-0 flex-1 items-center gap-3 text-left">
+        <span class="min-w-0"><span class="block truncate text-xs font-semibold">All files</span><span class="block text-xs text-muted-foreground">{manager.totalFiles} items</span></span>
+      </a>
+      {#each manager.folders as dir (dir.name)}
+        <div class="group relative flex items-center justify-between rounded-xl border p-3 transition-colors {manager.folder === dir.name ? 'border-gold-500 bg-gold-500/10' : 'border-border bg-surface hover:border-gold-400'}">
+          <a href={dir.href} aria-current={manager.folder === dir.name ? 'true' : undefined} class="flex min-w-0 flex-1 items-center gap-3 text-left">
             <Folder class="h-5 w-5 shrink-0 text-gold-500" aria-hidden="true" />
             <span class="min-w-0"><span class="block truncate text-xs font-semibold">{dir.name}</span><span class="block text-xs text-muted-foreground">{dir.count} items</span></span>
-          </button>
+          </a>
           {#if dir.id && dir.canDelete}
             <button type="button" onclick={() => askDelete('folder', dir.id!, dir.name)} class="ml-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete folder ${dir.name}`}>
               <Trash class="h-3.5 w-3.5" aria-hidden="true" />
@@ -236,27 +205,28 @@
   <!-- Files -->
   <section class="space-y-3" aria-label="Files">
     <div class="flex items-center justify-between">
-      <h2 class="font-sans text-xs font-bold tracking-wider text-muted-foreground uppercase">Files ({visible.length})</h2>
-      {#if visible.length > 0}
+      <h2 class="font-sans text-xs font-bold tracking-wider text-muted-foreground uppercase">Files ({manager.matching})</h2>
+      {#if downloads.length > 0}
         <div class="flex items-center gap-2 text-xs text-muted-foreground">
           <span>Sort:</span>
-          <button type="button" onclick={() => toggleSort('fileName')} class={sortBtn('fileName')}>Name</button>·
-          <button type="button" onclick={() => toggleSort('createdAt')} class={sortBtn('createdAt')}>Date</button>·
-          <button type="button" onclick={() => toggleSort('size')} class={sortBtn('size')}>Size</button>
+          {#each manager.sorts as s, i (s.field)}
+            {#if i > 0}·{/if}
+            <a href={s.href} class={sortLink(s.active)} aria-current={s.active ? 'true' : undefined}>{s.label}</a>
+          {/each}
         </div>
       {/if}
     </div>
 
-    {#if visible.length === 0}
+    {#if downloads.length === 0}
       <div class="{cardClass} flex flex-col items-center justify-center border-2 border-dashed p-12 text-center">
         <HardDrive class="mb-3 h-12 w-12 text-muted-foreground" aria-hidden="true" />
         <h3 class="text-base font-semibold">No documents found</h3>
         <p class="mt-1 max-w-sm text-xs text-muted-foreground">No files match your filters. Clear them or upload a new file.</p>
-        <button type="button" onclick={resetFilters} class="{secondaryButtonClass} mt-4">Clear filters</button>
+        <a href={manager.resetHref} class="{secondaryButtonClass} mt-4">Clear filters</a>
       </div>
     {:else if viewMode === 'grid'}
       <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {#each visible as d (d.id)}
+        {#each downloads as d (d.id)}
           {@const Icon = kindIcon[d.kind]}
           <li class="{cardClass} flex flex-col justify-between p-4 transition-shadow hover:shadow-brand-md">
             <div class="flex items-center gap-3 overflow-hidden">
@@ -300,7 +270,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-border text-sm">
-            {#each visible as d (d.id)}
+            {#each downloads as d (d.id)}
               {@const Icon = kindIcon[d.kind]}
               <tr class="hover:bg-surface-alt">
                 <td class="px-6 py-3.5">

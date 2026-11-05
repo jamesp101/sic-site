@@ -2,9 +2,11 @@
   import { untrack } from 'svelte';
   import { flip } from 'svelte/animate';
   import { dndzone, type DndEvent } from 'svelte-dnd-action';
-  import { isContainerType, BLOCK_META, type Block } from '@/lib/blocks/types';
+  import { BLOCK_REGISTRY, isContainerType } from '@/lib/blocks/registry';
+  import type { Block } from '@/lib/blocks/types';
+  import type { DropTarget } from '@/lib/blocks/edit';
   import { inlineToText } from '@/lib/blocks/inline';
-  import { BLOCK_ICONS } from './block-icons';
+  import { EDITOR_BLOCKS } from './block-editors';
   import LayerList from './LayerList.svelte';
 
   let {
@@ -24,8 +26,8 @@
     revision?: number;
     selectedId: string | null;
     onselect: (id: string) => void;
-    /** A block was dropped at `index` among the other children of `parentId`. */
-    onmove: (id: string, parentId: string | null, index: number) => void;
+    /** A block was dropped: before `beforeId` inside `parentId` (`null` before = at the end). */
+    onmove: (id: string, target: DropTarget) => void;
     onhover: (id: string | null) => void;
   } = $props();
 
@@ -47,7 +49,9 @@
     const id = event.detail.info.id;
     const index = event.detail.items.findIndex((item) => item.id === id);
     // Only the zone that now contains the block reports the move (the source zone of a cross-zone move does not).
-    if (index !== -1) onmove(id, parentId, index);
+    if (index === -1) return;
+    const beforeId = event.detail.items[index + 1]?.id ?? null;
+    onmove(id, { parentId, beforeId });
   }
 
   function preview(block: Block): string {
@@ -77,13 +81,13 @@
   aria-label={level === 0 ? 'Elements in this document' : 'Nested elements'}
 >
   {#each list as block (block.id)}
-    {@const Icon = BLOCK_ICONS[block.type]}
+    {@const Icon = EDITOR_BLOCKS[block.type].icon}
     {@const selected = block.id === selectedId}
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <li
       animate:flip={{ duration: FLIP_MS }}
       class="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label={`${BLOCK_META[block.type].label} ${preview(block)}${selected ? ', selected' : ''}`.trim()}
+      aria-label={`${BLOCK_REGISTRY[block.type].meta.label} ${preview(block)}${selected ? ', selected' : ''}`.trim()}
       onkeydown={(event) => keydown(event, block.id)}
       data-layer-id={block.id}
     >
@@ -100,7 +104,7 @@
         onmouseleave={() => onhover(null)}
       >
         <Icon class="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span class="shrink-0">{BLOCK_META[block.type].label}</span>
+        <span class="shrink-0">{BLOCK_REGISTRY[block.type].meta.label}</span>
         {#if preview(block)}<span class="truncate font-normal text-muted-foreground">{preview(block)}</span>{/if}
       </button>
       {#if isContainerType(block.type)}

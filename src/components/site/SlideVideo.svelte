@@ -76,7 +76,7 @@
       disablepictureinpicture
       disableremoteplayback
       tabindex="-1"
-      class="vid absolute inset-0 h-full w-full object-cover"
+      class="slide-vid absolute inset-0 h-full w-full object-cover"
       onplaying={() => (ready = true)}
     >
       <source src={video.src} type={video.mime} />
@@ -90,29 +90,8 @@
       allow="autoplay; encrypted-media"
       referrerpolicy="strict-origin-when-cross-origin"
       sandbox="allow-scripts allow-same-origin"
-      class="yt pointer-events-none absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 border-0"
+      class="slide-yt pointer-events-none absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 border-0"
       onload={onFrameLoad}
     ></iframe>
   {/if}
 </div>
-
-<style>
-  /* Phones crop the video around the slide's focal point, like the photo. */
-  @media (max-width: 39.99rem) {
-    .vid {
-      object-position: var(--fx, 50%) var(--fy, 50%);
-    }
-  }
-
-  /* The 16:9 player covers the slide like object-cover; the hero is --hh tall (4:5 on phones). */
-  .yt {
-    width: max(100cqw, calc(var(--hh, 600px) * 16 / 9));
-    height: max(var(--hh, 600px), calc(100cqw * 9 / 16));
-  }
-  @media (max-width: 39.99rem) {
-    .yt {
-      width: calc(125cqw * 16 / 9);
-      height: 125cqw;
-    }
-  }
-</style>

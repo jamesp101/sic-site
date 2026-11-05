@@ -1,6 +1,7 @@
 ---
 import type { DepartmentSummary } from '@/lib/content-types';
 import { getInitials } from '@/lib/initials';
+import { departmentHref } from '@/lib/site-nav';
 
 interface Props {
     department: DepartmentSummary;
@@ -29,7 +30,7 @@ const { department } = Astro.props;
         </span>
     )}
     <h3 class="mt-5 font-sans text-xl font-semibold text-foreground">
-        <a href={`/departments/${department.slug}`} class="rounded after:absolute after:inset-0 after:content-['']">
+        <a href={departmentHref(department.slug)} class="rounded after:absolute after:inset-0 after:content-['']">
             {department.name}
         </a>
     </h3>

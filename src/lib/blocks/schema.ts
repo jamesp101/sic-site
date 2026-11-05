@@ -4,169 +4,9 @@
  * props are dropped and defaults are filled, so only sanitised JSON is ever stored.
  */
 import { z } from 'zod';
-import { eventDateKey, parseEventDate } from './event-date';
-import { DOCUMENT_TYPE, DOCUMENT_VERSION, BLOCK_META, BLOCK_TYPES, LIMITS, isContainerType } from './types';
+import { BLOCK_REGISTRY, BLOCK_TYPES, blockModule, isContainerType } from './registry';
+import { DOCUMENT_TYPE, DOCUMENT_VERSION, LIMITS } from './types';
 import type { Block, BlockDocument, BlockType, PropsByType } from './types';
-import { parseVideoUrl, safeHref, safeImageSrc } from './urls';
-
-const str = (max: number) => z.string().max(max, `Keep this under ${max} characters.`).default('');
-const label = str(LIMITS.label);
-const body = str(LIMITS.text);
-const url = str(LIMITS.url);
-const gap = z.enum(['none', 'sm', 'md', 'lg']).default('md');
-const textAlign = z.enum(['inherit', 'left', 'center', 'right']).default('inherit');
-const list = (max: number, item: z.ZodType<string> = z.string().max(LIMITS.cell)) => z.array(item).max(max).default([]);
-
-const PROPS = {
-    section: z.object({
-        background: z.enum(['none', 'surface', 'alt', 'accent', 'gold']).default('alt'),
-        padding: z.enum(['none', 'sm', 'md', 'lg']).default('md'),
-        align: textAlign,
-    }),
-    row: z.object({
-        direction: z.enum(['row', 'column', 'responsive']).default('responsive'),
-        gap,
-        align: z.enum(['start', 'center', 'end', 'stretch']).default('stretch'),
-        justify: z.enum(['start', 'center', 'end', 'between']).default('start'),
-        wrap: z.boolean().default(false),
-    }),
-    grid: z.object({ columns: z.number().int().min(1).max(6).default(3), gap }),
-    columns: z.object({
-        count: z.union([z.literal(2), z.literal(3)]).default(2),
-        ratio: z.enum(['equal', 'wide-left', 'wide-right']).default('equal'),
-        gap: gap.default('lg'),
-    }),
-    spacer: z.object({ size: z.enum(['sm', 'md', 'lg', 'xl']).default('md') }),
-    divider: z.object({ tone: z.enum(['default', 'strong', 'gold']).default('default') }),
-    heading: z.object({
-        text: label,
-        level: z
-            .union([z.literal(2), z.literal(3), z.literal(4)], { error: 'Headings can be level 2, 3 or 4.' })
-            .default(2),
-        align: textAlign,
-    }),
-    paragraph: z.object({
-        text: body,
-        size: z.enum(['sm', 'base', 'lg']).default('base'),
-        tone: z.enum(['default', 'muted']).default('default'),
-        align: textAlign,
-    }),
-    list: z.object({
-        ordered: z.boolean().default(false),
-        items: list(LIMITS.listItems, z.string().max(LIMITS.label)),
-    }),
-    quote: z.object({ text: body, cite: label }),
-    button: z.object({
-        label,
-        href: url,
-        variant: z.enum(['primary', 'secondary', 'ghost']).default('primary'),
-        align: textAlign,
-    }),
-    badges: z.object({ items: list(LIMITS.badgeItems, z.string().max(80)) }),
-    card: z.object({ title: label, body, imageUrl: url, imageAlt: label, linkLabel: label, linkHref: url }),
-    image: z.object({
-        src: url,
-        alt: label,
-        decorative: z.boolean().default(false),
-        caption: label,
-        width: z.number().int().min(1).max(20_000).nullable().default(null),
-        height: z.number().int().min(1).max(20_000).nullable().default(null),
-        link: url,
-    }),
-    album: z.object({
-        images: z
-            .array(z.object({ src: url, alt: label, caption: label }))
-            .max(LIMITS.albumImages, `An album holds at most ${LIMITS.albumImages} images.`)
-            .default([]),
-        columns: z
-            .union([z.literal(2), z.literal(3), z.literal(4)], { error: 'Albums have 2, 3 or 4 columns.' })
-            .default(3),
-    }),
-    table: z.object({
-        header: z.boolean().default(true),
-        caption: label,
-        rows: z
-            .array(z.array(z.string().max(LIMITS.cell)).min(1).max(LIMITS.tableColumns))
-            .max(LIMITS.tableRows)
-            .default([]),
-    }),
-    accordion: z.object({
-        items: z
-            .array(z.object({ title: label, body }))
-            .max(LIMITS.accordionItems)
-            .default([]),
-    }),
-    callout: z.object({ tone: z.enum(['info', 'success', 'warning']).default('info'), title: label, text: body }),
-    stats: z.object({
-        items: z
-            .array(z.object({ value: str(80), label: str(120), hint: str(200) }))
-            .max(LIMITS.statItems)
-            .default([]),
-    }),
-    video: z.object({ url, title: label, caption: label }),
-    event: z.object({ title: label, start: str(16), end: str(16), location: label, note: body }),
-    markdown: z.object({ source: str(LIMITS.markdown) }),
-} satisfies Record<BlockType, z.ZodType>;
-
-type Report = (message: string, path?: (string | number)[]) => void;
-
-/** Cross-field rules that need more than a shape check. */
-const RULES: { [K in BlockType]?: (props: PropsByType[K], report: Report) => void } = {
-    image(props, report) {
-        if (!props.src) report('Choose an image.', ['src']);
-        else if (!safeImageSrc(props.src)) report('This image address is not allowed.', ['src']);
-        if (!props.decorative && !props.alt.trim()) {
-            report('Describe the image in the alt text, or mark it as decorative.', ['alt']);
-        }
-        if (props.link) {
-            if (!safeHref(props.link)) report('Enter a valid link (https://, /path, mailto: or tel:).', ['link']);
-            else if (props.decorative) report('A linked image needs alt text that names the link target.', ['link']);
-        }
-    },
-    album(props, report) {
-        if (props.images.length === 0) report('Add at least one image.', ['images']);
-        props.images.forEach((image, index) => {
-            const at = ['images', index];
-            if (!image.src) report(`Image ${index + 1}: choose an image.`, [...at, 'src']);
-            else if (!safeImageSrc(image.src))
-                report(`Image ${index + 1}: this image address is not allowed.`, [...at, 'src']);
-            if (!image.alt.trim()) report(`Image ${index + 1}: describe the image in the alt text.`, [...at, 'alt']);
-        });
-    },
-    button(props, report) {
-        if (!props.label.trim()) report('Give the button a label.', ['label']);
-        if (!safeHref(props.href)) report('Enter a valid link (https://, /path, mailto: or tel:).', ['href']);
-    },
-    card(props, report) {
-        if (props.imageUrl && !safeImageSrc(props.imageUrl)) report('This image address is not allowed.', ['imageUrl']);
-        if (props.linkHref && !safeHref(props.linkHref)) report('Enter a valid link.', ['linkHref']);
-        if (props.linkHref && !props.linkLabel.trim()) report('Give the card link a label.', ['linkLabel']);
-    },
-    video(props, report) {
-        if (!parseVideoUrl(props.url)) report('Use a YouTube or Vimeo link, or an uploaded video.', ['url']);
-        if (!props.title.trim()) report('Add a video title for screen readers.', ['title']);
-    },
-    event(props, report) {
-        const start = parseEventDate(props.start);
-        if (!start) report('Choose a valid start date.', ['start']);
-        if (props.end) {
-            const end = parseEventDate(props.end);
-            if (!end) report('Choose a valid end date.', ['end']);
-            else if (start && eventDateKey(end) < eventDateKey(start))
-                report('The end must be after the start.', ['end']);
-        }
-    },
-    table(props, report) {
-        if (props.rows.length === 0) report('Add at least one row.', ['rows']);
-        const width = props.rows[0]?.length ?? 0;
-        if (props.rows.some((row) => row.length !== width))
-            report('Every row needs the same number of columns.', ['rows']);
-    },
-    accordion(props, report) {
-        if (props.items.length === 0) report('Add at least one item.', ['items']);
-        if (props.items.some((item) => !item.title.trim())) report('Every item needs a title.', ['items']);
-    },
-};
 
 export interface ValidationIssue {
     /** Block the issue belongs to (absent for document-level issues). */
@@ -184,7 +24,7 @@ const shell = z.object({
 });
 
 function describe(type: BlockType, index: number): string {
-    return `${BLOCK_META[type].label} ${index}`;
+    return `${BLOCK_REGISTRY[type].meta.label} ${index}`;
 }
 
 /**
@@ -211,6 +51,7 @@ export function validateDocument(input: unknown): ValidationResult {
                 continue;
             }
             const { id, type, props, children } = parsed.data;
+            const kind = blockModule(type);
             const name = describe(type, ++ordinal);
             const fail = (message: string, blockId = id) => issues.push({ blockId, message: `${name}: ${message}` });
 
@@ -221,9 +62,9 @@ export function validateDocument(input: unknown): ValidationResult {
             if (seen[id]) fail('Duplicate element id.');
             seen[id] = true;
             if (depth > LIMITS.depth) fail(`Elements can be nested at most ${LIMITS.depth} levels deep.`);
-            if (type === 'section' && !rootLevel) fail('Sections can only be placed at the top level.');
+            if (kind.rootOnly && !rootLevel) fail('Sections can only be placed at the top level.');
 
-            const result = PROPS[type].safeParse(props);
+            const result = kind.schema.safeParse(props);
             if (!result.success) {
                 for (const issue of result.error.issues) {
                     const field = issue.path.length ? `${issue.path.join(' › ')}: ` : '';
@@ -233,7 +74,7 @@ export function validateDocument(input: unknown): ValidationResult {
             }
             // `result.data` is the zod output for exactly this block type.
             const parsedProps = result.data as never;
-            RULES[type]?.(parsedProps, (message) => fail(message));
+            kind.rules?.(parsedProps, (message) => fail(message));
 
             const block = { id, type, props: parsedProps } as Block;
             if (children !== undefined) {
@@ -269,4 +110,25 @@ export function parseBlockJson(json: string): { raw: unknown; result: Validation
 /** Parses a stored JSON string and validates it. */
 export function parseBlockDocument(json: string): ValidationResult {
     return parseBlockJson(json).result;
+}
+
+/**
+ * Problems with one block's props as a map from the prop (first path segment) to its first message: the
+ * shape errors of the Block type's schema, then its cross-field rules. The Inspector shows these inline,
+ * so editors see the same wording and rules as the save-time validation.
+ */
+export function blockFieldErrors<T extends BlockType>(type: T, props: PropsByType[T]): Record<string, string> {
+    const kind = blockModule(type);
+    const errors: Record<string, string> = {};
+    const add = (message: string, path: (string | number)[] = []) => {
+        const field = String(path[0] ?? '');
+        if (!(field in errors)) errors[field] = message;
+    };
+    const result = kind.schema.safeParse(props);
+    if (!result.success) {
+        for (const issue of result.error.issues) add(issue.message, issue.path as (string | number)[]);
+        return errors;
+    }
+    kind.rules?.(result.data as never, add);
+    return errors;
 }

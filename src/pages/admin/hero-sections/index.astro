@@ -1,50 +1,48 @@
 ---
-import { ArrowUpDown, Eye, EyeOff, Pencil, Search, Sparkles } from '@lucide/svelte';
+import { Eye, EyeOff, Pencil, Search, Sparkles } from '@lucide/svelte';
+import Pagination from '@/components/site/Pagination.astro';
 import AddLink from '@/components/admin/shared/AddLink.astro';
+import EmptyRow from '@/components/admin/shared/EmptyRow.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DeleteRowButton from '@/components/admin/shared/DeleteRowButton.astro';
 import RowDeleteDialog from '@/components/admin/shared/RowDeleteDialog.svelte';
+import SortableTh from '@/components/admin/shared/SortableTh.astro';
 import { cardClass, iconLinkClass, thClass } from '@/components/admin/ui';
 import AppLayout from '@/layouts/AppLayout.astro';
-import { listWhere } from '@/lib/server/admin-scope';
-import { requireUser } from '@/lib/server/authz';
-import { authzResponse } from '@/lib/server/authz-response';
+import { adminPage } from '@/lib/server/admin-page';
+import { runList, sortBy } from '@/lib/server/admin-list';
 import { db } from '@/lib/server/db';
-import { textContains } from '@/lib/server/search';
 import type { Prisma } from '@/generated/prisma/client';
 
-let actor;
-try {
-    actor = requireUser(Astro.locals.user);
-} catch (error) {
-    return authzResponse(error);
-}
+const access = await adminPage(Astro.locals.user);
+if (access instanceof Response) return access;
+const { actor } = access;
 
-const params = Astro.url.searchParams;
-const q = params.get('q')?.trim() ?? '';
-const sort = ['title', 'department', 'order', 'active'].includes(params.get('sort') ?? '')
-    ? params.get('sort')!
-    : 'order';
-const dir: 'asc' | 'desc' = params.get('dir') === 'desc' ? 'desc' : 'asc';
-
+const include = { department: { select: { name: true } } } satisfies Prisma.HeroSectionInclude;
 const scope = Astro.locals.adminScope;
-const where: Prisma.HeroSectionWhereInput = listWhere<Prisma.HeroSectionWhereInput>(actor, scope, [
-    q && { OR: [{ title: textContains(q) }, { searchText: textContains(q) }] },
-]);
-const orderBy: Prisma.HeroSectionOrderByWithRelationInput =
-    sort === 'title'
-        ? { title: dir }
-        : sort === 'department'
-          ? { department: { name: dir } }
-          : sort === 'active'
-            ? { isActive: dir }
-            : { order: dir };
-
-const sections = await db.heroSection.findMany({
-    where,
-    orderBy,
-    include: { department: { select: { name: true } } },
+const list = await runList<
+    Prisma.HeroSectionWhereInput,
+    Prisma.HeroSectionOrderByWithRelationInput,
+    Prisma.HeroSectionGetPayload<{ include: typeof include }>
+>({
+    url: Astro.url,
+    actor,
+    scope,
+    spec: {
+        fields: {
+            title: sortBy((dir) => ({ title: dir })),
+            department: sortBy((dir) => ({ department: { name: dir } })),
+            order: sortBy((dir) => ({ order: dir })),
+            active: sortBy((dir) => ({ isActive: dir })),
+        },
+        defaultSort: 'order',
+        tiebreak: { id: 'asc' },
+        search: ['title', 'searchText'],
+    },
+    count: (where) => db.heroSection.count({ where }),
+    fetch: (args) => db.heroSection.findMany({ ...args, include }),
 });
+const { rows: sections, q, sort, dir, page, pageCount, pageHref } = list;
 const showLocation = scope.kind === 'all';
 const columns = [
     ['title', 'Section'],
@@ -52,14 +50,6 @@ const columns = [
     ['order', 'Order'],
     ['active', 'Status'],
 ];
-
-function sortHref(field: string) {
-    const next = new URL(Astro.url);
-    next.searchParams.set('sort', field);
-    next.searchParams.set('dir', sort === field && dir === 'asc' ? 'desc' : 'asc');
-    return `${next.pathname}${next.search}`;
-}
-const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascending' : 'descending') : undefined);
 ---
 
 <AppLayout title="Hero Sections" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Hero Sections' }]}>
@@ -117,11 +107,9 @@ const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascendin
                     <thead>
                         <tr class="border-b border-border bg-surface-alt">
                             {columns.map(([field, label]) => (
-                                <th scope="col" class={thClass} aria-sort={ariaSort(field)}>
-                                    <a href={sortHref(field)} class="inline-flex items-center gap-1 hover:text-link">
-                                        {label} <ArrowUpDown class="h-3.5 w-3.5" aria-hidden="true" />
-                                    </a>
-                                </th>
+                                <SortableTh list={list} field={field}>
+                                    {label}
+                                </SortableTh>
                             ))}
                             <th scope="col" class={`${thClass} text-right`}>
                                 Actions
@@ -187,20 +175,12 @@ const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascendin
                                 </td>
                             </tr>
                         ))}
-                        {sections.length === 0 && (
-                            <tr>
-                                <td
-                                    colspan={columns.length + 1}
-                                    class="px-6 py-12 text-center text-muted-foreground italic"
-                                >
-                                    No hero sections found.
-                                </td>
-                            </tr>
-                        )}
+                        {sections.length === 0 && <EmptyRow colspan={columns.length + 1}>No hero sections found.</EmptyRow>}
                     </tbody>
                 </table>
             </div>
         </div>
+        <Pagination page={page} pageCount={pageCount} href={pageHref} label="Hero sections pages" />
     </div>
     <RowDeleteDialog client:load />
 </AppLayout>

@@ -14,7 +14,7 @@ import {
     DEFAULT_SIZE,
     type Layer,
 } from './carousel-overlay';
-import { parseOverlay, parseOverlayDocument, parseOverlayStrict } from './carousel-overlay-schema';
+import { parseOverlay, parseOverlayDocument, parseOverlayStrict, slideDocument } from './carousel-overlay-schema';
 
 const text = (over: Partial<Layer> = {}): Layer => ({ ...defaultLayer('text'), ...over }) as Layer;
 
@@ -157,6 +157,37 @@ describe('legacy conversion', () => {
     test('skips empty fields and unsafe links', () => {
         expect(legacyLayers({ title: ' ', subtitle: null, linkUrl: 'javascript:alert(1)' })).toEqual([]);
         expect(legacyFields([])).toEqual({ title: null, subtitle: null, linkUrl: null });
+    });
+});
+
+describe('slideDocument (Slide read model)', () => {
+    const legacy = { overlay: null, title: 'Welcome', subtitle: 'To SIC', linkUrl: '/posts' };
+
+    test('converts a legacy row to heading, subtitle and button layers', () => {
+        const doc = slideDocument(legacy);
+        expect(doc.mobile).toBeNull();
+        expect(doc.layers).toMatchObject([
+            { type: 'text', role: 'heading', text: 'Welcome', x: 6, y: 30, w: 60 },
+            { type: 'text', role: 'subtitle', text: 'To SIC', x: 6, y: 56, w: 55, size: 'md', font: 'sans' },
+            { type: 'button', label: 'Explore more', href: '/posts', x: 6, y: 74 },
+        ]);
+        expect(parseOverlayStrict(serializeOverlay(doc.layers)).ok).toBe(true);
+    });
+
+    test('converts an unusable overlay the same way', () => {
+        expect(slideDocument({ ...legacy, overlay: '{"v":1,"layers":[{"type":"nope"}]}' }).layers).toHaveLength(3);
+    });
+
+    test('a stored overlay wins over the legacy columns, even when it has no layers', () => {
+        const stored = serializeOverlay([], { focus: { x: 20, y: 30 } });
+        expect(slideDocument({ ...legacy, overlay: stored })).toEqual({
+            layers: [],
+            mobile: { focus: { x: 20, y: 30 } },
+        });
+    });
+
+    test('a row without text or link has no layers', () => {
+        expect(slideDocument({ overlay: null, title: null, subtitle: null, linkUrl: null }).layers).toEqual([]);
     });
 });
 

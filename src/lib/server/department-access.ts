@@ -6,7 +6,7 @@
 import { z } from 'astro/zod';
 import type { CarouselItem, Download, DownloadDirectory, HeroSection, Member, Post } from '@/generated/prisma/client';
 import { db } from './db';
-import { AuthzError, departmentForWrite, isSuperAdmin, scopeDepartment, scopeOwnDepartment, type Actor } from './authz';
+import { departmentForWrite, isSuperAdmin, scopeDepartment, scopeOwnDepartment, type Actor } from './authz';
 import { RequestError } from './request-error';
 
 /** Department id input of create/update actions: null/absent = main page or General. Declared once for all action schemas. */
@@ -83,7 +83,7 @@ export async function loadScoped<K extends keyof ScopedRows>(
     model: K,
     id: number | null,
 ): Promise<ScopedRows[K]> {
-    if (id === null) throw new AuthzError('NOT_FOUND');
+    if (id === null) throw new RequestError('NOT_FOUND');
     return scopeDepartment(actor, await finders[model].one(id));
 }
 
@@ -103,7 +103,7 @@ export async function loadScopedMany<K extends keyof ScopedRows>(
 
 /** Loads a department the actor may manage (their own; any for superadmins): NOT_FOUND / FORBIDDEN otherwise. */
 export async function loadOwnDepartment(actor: Actor, id: number | null) {
-    if (id === null) throw new AuthzError('NOT_FOUND');
+    if (id === null) throw new RequestError('NOT_FOUND');
     return scopeOwnDepartment(actor, await db.department.findUnique({ where: { id } }));
 }
 
@@ -111,6 +111,6 @@ export async function loadOwnDepartment(actor: Actor, id: number | null) {
 export async function loadMember(actor: Actor, departmentId: number, id: number): Promise<Member> {
     await loadOwnDepartment(actor, departmentId);
     const member = await db.member.findUnique({ where: { id } });
-    if (!member || member.departmentId !== departmentId) throw new AuthzError('NOT_FOUND');
+    if (!member || member.departmentId !== departmentId) throw new RequestError('NOT_FOUND');
     return member;
 }

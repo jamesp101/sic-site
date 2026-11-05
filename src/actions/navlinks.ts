@@ -1,8 +1,10 @@
-import { ActionError, defineAction } from 'astro:actions';
+import { defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
 import { db } from '@/lib/server/db';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
-import { AuthzError, requireSuperAdmin } from '@/lib/server/authz';
+import { requireSuperAdmin } from '@/lib/server/authz';
+import { assertValidParent } from '@/lib/server/nav-link-rules';
+import { RequestError } from '@/lib/server/request-error';
 import { navUrlError, reorderError } from '@/lib/nav-tree';
 
 const fields = {
@@ -19,24 +21,6 @@ const fields = {
     isActive: z.boolean(),
     parentId: z.number().int().nullable().optional(),
 };
-
-/** Navigation is two levels deep: a parent must be an existing top-level link other than the link itself. */
-async function assertValidParent(parentId: number | null | undefined, selfId?: number) {
-    if (parentId == null) return;
-    if (parentId === selfId)
-        throw new ActionError({ code: 'BAD_REQUEST', message: 'A link cannot be its own parent.' });
-    const parent = await db.navigationLink.findUnique({ where: { id: parentId }, select: { parentId: true } });
-    if (!parent) throw new ActionError({ code: 'BAD_REQUEST', message: 'The selected parent link does not exist.' });
-    if (parent.parentId !== null) {
-        throw new ActionError({ code: 'BAD_REQUEST', message: 'Only top-level links can be used as a parent.' });
-    }
-    if (selfId !== undefined && (await db.navigationLink.count({ where: { parentId: selfId } })) > 0) {
-        throw new ActionError({
-            code: 'BAD_REQUEST',
-            message: 'A link that has sub-links cannot become a sub-link itself.',
-        });
-    }
-}
 
 export const navlinks = {
     create: defineAction({
@@ -65,7 +49,7 @@ export const navlinks = {
             guarded(async () => {
                 requireSuperAdmin(actorOf(context));
                 const link = await db.navigationLink.findUnique({ where: { id: input.id }, select: { id: true } });
-                if (!link) throw new AuthzError('NOT_FOUND');
+                if (!link) throw new RequestError('NOT_FOUND');
                 await assertValidParent(input.parentId, link.id);
                 await db.navigationLink.update({
                     where: { id: link.id },
@@ -102,7 +86,7 @@ export const navlinks = {
                 await db.$transaction(async (tx) => {
                     const existing = await tx.navigationLink.findMany({ select: { id: true, parentId: true } });
                     const problem = reorderError(items, existing);
-                    if (problem) throw new ActionError({ code: 'BAD_REQUEST', message: problem });
+                    if (problem) throw new RequestError('BAD_REQUEST', problem);
                     for (const item of items) {
                         await tx.navigationLink.update({
                             where: { id: item.id },
@@ -120,7 +104,7 @@ export const navlinks = {
             guarded(async () => {
                 requireSuperAdmin(actorOf(context));
                 const link = await db.navigationLink.findUnique({ where: { id }, select: { id: true } });
-                if (!link) throw new AuthzError('NOT_FOUND');
+                if (!link) throw new RequestError('NOT_FOUND');
                 await db.navigationLink.delete({ where: { id } });
                 flash(context, 'Navigation link deleted.');
                 return { id };

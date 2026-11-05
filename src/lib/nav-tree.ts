@@ -3,6 +3,9 @@
  * Rule: top-level links may have children; a link that has children can never become a child itself.
  */
 
+import type { TreeEditOps } from './tree-edit-session';
+import { DEPARTMENTS_MENU_URL } from './site-nav';
+
 export interface NavNode {
     id: number;
     label: string;
@@ -55,10 +58,7 @@ export function samePayload(a: ReorderItem[], b: ReorderItem[]): boolean {
     return a.every((item, i) => item.id === b[i].id && item.parentId === b[i].parentId && item.order === b[i].order);
 }
 
-/** True when no child holds children of its own (the two-level rule). */
-export function isTwoLevel(tree: NavNode[]): boolean {
-    return tree.every((node) => node.children.every((child) => child.children.length === 0));
-}
+const TWO_LEVEL_ERROR = 'Navigation is two levels deep: only top-level links can have sub-links.';
 
 export interface Position {
     parentIndex: number | null;
@@ -153,13 +153,67 @@ export function reorderError(items: ReorderItem[], existing: { id: number; paren
         if (parentId === null) continue;
         if (!known.has(parentId)) return 'The selected parent link does not exist.';
         if (finalParent.get(parentId) !== null) {
-            return id === parentId
-                ? 'A link cannot be its own parent.'
-                : 'Navigation is two levels deep: only top-level links can have sub-links.';
+            return id === parentId ? 'A link cannot be its own parent.' : TWO_LEVEL_ERROR;
         }
     }
     return null;
 }
+
+/**
+ * The one place that decides whether a nav tree may be saved, for the editor (`proposeNavTree`) and the
+ * reorder action (`reorderError`): both answer with the same message.
+ * `next` may be a dragged tree with a link dropped under a sub-link; the payload alone cannot show that.
+ */
+export function proposeNavTree(current: NavNode[], next: NavNode[]): { change: NavChange } | { error: string } {
+    if (next.some((top) => top.children.some((child) => child.children.length > 0))) return { error: TWO_LEVEL_ERROR };
+    const items = toPayload(renumber(next));
+    const error = reorderError(items, toPayload(current));
+    return error ? { error } : { change: { kind: 'tree', items } };
+}
+
+export type NavPatch = Partial<Pick<NavNode, 'label' | 'isActive'>>;
+
+/** One edit of the nav tree: a whole new order/nesting, or a label/visibility change of one link. */
+export type NavChange = { kind: 'tree'; items: ReorderItem[] } | { kind: 'patch'; id: number; patch: NavPatch };
+
+function findNode(tree: NavNode[], id: number): NavNode | null {
+    const pos = locate(tree, id);
+    if (!pos) return null;
+    return pos.parentIndex === null ? tree[pos.index] : tree[pos.parentIndex].children[pos.index];
+}
+
+/** How the tree-edit session applies and inverts a `NavChange`. */
+export const navTreeOps: TreeEditOps<NavNode[], NavChange> = {
+    apply(tree, change) {
+        if (change.kind === 'tree') return treeFromPayload(tree, change.items);
+        const { id, patch } = change;
+        return tree.map((top) => ({
+            ...(top.id === id ? { ...top, ...patch } : top),
+            children: top.children.map((child) => (child.id === id ? { ...child, ...patch } : child)),
+        }));
+    },
+    invert(tree, change) {
+        if (change.kind === 'tree') return { kind: 'tree', items: toPayload(tree) };
+        const node = findNode(tree, change.id);
+        return {
+            kind: 'patch',
+            id: change.id,
+            patch: {
+                ...(node && change.patch.label !== undefined && { label: node.label }),
+                ...(node && change.patch.isActive !== undefined && { isActive: node.isActive }),
+            },
+        };
+    },
+    isNoop(tree, change) {
+        if (change.kind === 'tree') return samePayload(change.items, toPayload(tree));
+        const node = findNode(tree, change.id);
+        return (
+            !node ||
+            ((change.patch.label ?? node.label) === node.label &&
+                (change.patch.isActive ?? node.isActive) === node.isActive)
+        );
+    },
+};
 
 // ---- link kinds, suggestions, warnings ---------------------------------------------------------
 
@@ -183,9 +237,6 @@ export const NAV_KIND_LABEL: Record<NavLinkKind, string> = {
     email: 'Email',
     phone: 'Phone',
 };
-
-/** URL that the public header turns into a dropdown of every department. */
-export const DEPARTMENTS_MENU_URL = '#departments';
 
 /** Detects what a navigation URL points at. Returns null for an empty URL. */
 export function classifyUrl(raw: string): NavLinkKind | null {
@@ -220,18 +271,6 @@ export const PAGE_SUGGESTIONS: LinkSuggestion[] = [
     { group: 'Pages', label: 'Announcements', url: '/posts?type=announcement' },
     { group: 'Pages', label: 'Downloads', url: '/downloads' },
     { group: 'Pages', label: 'Contact', url: '/contact' },
-];
-
-/** Static internal paths that exist besides departments and posts. */
-export const STATIC_PATHS = ['/', '/posts', '/downloads', '/contact', '/login', '/rss.xml', '/sitemap.xml'];
-
-/** Links created by “Use the default menu”; mirrors the public header fallback. */
-export const DEFAULT_NAV_LINKS: { label: string; url: string }[] = [
-    { label: 'Home', url: '/' },
-    { label: 'Departments', url: DEPARTMENTS_MENU_URL },
-    { label: 'News & Events', url: '/posts' },
-    { label: 'Downloads', url: '/downloads' },
-    { label: 'Contact', url: '/contact' },
 ];
 
 /** Path of an internal URL without query or hash and without a trailing slash (except the root). */

@@ -18,15 +18,14 @@
   } from '@lucide/svelte';
   import { getInitials } from '@/lib/initials';
   import {
-    applyPlacements,
     buildOrgTree,
     canDrop,
-    invertPlacements,
     keyboardMove,
     matchMembers,
     moveRelative,
     moveToRoot,
     nextOrder,
+    orgTreeOps,
     positionOf,
     removeMember,
     siblingsOf,
@@ -34,8 +33,10 @@
     type KeyboardMove,
     type OrgMember,
     type OrgNode,
+    type OrgChange,
     type OrgPlacement,
   } from '@/lib/org-tree';
+  import { createTreeEditSession, type EditResult, type TreeEditPort } from '@/lib/tree-edit-session';
   import ConfirmDialog from '../ConfirmDialog.svelte';
   import { append, parseActionError, primaryButtonClass, secondaryButtonClass, type FormErrors } from '../shared/form-utils';
   import MemberInspector, { type MemberValues } from './MemberInspector.svelte';
@@ -52,10 +53,6 @@
     members: OrgMember[];
   } = $props();
 
-  interface HistoryEntry {
-    forward: OrgPlacement[];
-    back: OrgPlacement[];
-  }
   interface DropState {
     id: number | null;
     position: DropPosition | 'root';
@@ -66,9 +63,29 @@
   const MAX_SCALE = 2;
   const DESKTOP = '(min-width: 768px)';
 
-  // `members` is what is drawn (optimistic); `confirmed` mirrors what the server has accepted.
-  let members = $state.raw<OrgMember[]>(untrack(() => initialMembers.map((m) => ({ ...m }))));
-  let confirmed: OrgMember[] = members;
+  const port: TreeEditPort<OrgMember[], OrgChange> = {
+    async save(change, confirmed) {
+      if (change.kind === 'place') {
+        const { error } = await actions.members.reorder({ departmentId, placements: change.placements });
+        return error ? { ok: false, message: parseActionError(error).message } : { ok: true };
+      }
+      const current = confirmed.find((m) => m.id === change.id);
+      if (!current) return { ok: false, message: 'This member no longer exists.' };
+      const { error } = await actions.members.update(formFor({ ...current, name: change.name }));
+      if (!error) return { ok: true };
+      const failure = parseActionError(error);
+      return { ok: false, message: failure.fields.name || failure.message };
+    },
+  };
+  // The session owns the confirmed and drawn (optimistic) member lists, the save queue, rollback and undo history.
+  const session = createTreeEditSession({
+    tree: untrack(() => initialMembers.map((m) => ({ ...m }))),
+    port,
+    ops: orgTreeOps,
+    onChange: (next) => (view = next),
+  });
+  let view = $state.raw(session.snapshot());
+  const members = $derived(view.tree);
 
   let selectedId = $state<number | null>(null);
   let focusId = $state<number | null>(null);
@@ -79,8 +96,6 @@
   let renameValue = $state('');
   let query = $state('');
   let announcement = $state('');
-  let undoStack = $state.raw<HistoryEntry[]>([]);
-  let redoStack = $state.raw<HistoryEntry[]>([]);
 
   let scale = $state(1);
   let tx = $state(0);
@@ -249,30 +264,14 @@
 
   // ------------------------------------------------------------ persistence
 
-  let generation = 0;
-  let inflight: Promise<void> = Promise.resolve();
-
-  function enqueue(placements: OrgPlacement[]) {
-    const mine = generation;
-    inflight = inflight.then(async () => {
-      if (mine !== generation) return;
-      const { error } = await actions.members.reorder({ departmentId, placements });
-      if (error) {
-        generation += 1;
-        members = confirmed;
-        undoStack = [];
-        redoStack = [];
-        toast.error(parseActionError(error).message || 'The change could not be saved and was reverted.');
-        announce('The change could not be saved and was reverted.');
-        return;
-      }
-      confirmed = applyPlacements(confirmed, placements);
-    });
-  }
-
-  function sync(change: (list: OrgMember[]) => OrgMember[]) {
-    members = change(members);
-    confirmed = change(confirmed);
+  /** Toasts and announces a save that failed and was rolled back; returns the result. */
+  async function report(pending: Promise<EditResult>): Promise<EditResult> {
+    const result = await pending;
+    if (result.status === 'reverted') {
+      toast.error(result.message);
+      announce(result.announcement);
+    }
+    return result;
   }
 
   function describe(id: number): string {
@@ -282,13 +281,10 @@
     return `${name} moved to position ${index} of ${count} ${parent ? `under ${parent.name}` : 'at the top level'}, level ${level}.`;
   }
 
-  /** Optimistically applies a structure change, records it for undo and queues it for saving. */
+  /** Applies a structure change at once and queues its save; false when there is nothing to move. */
   function restructure(placements: OrgPlacement[] | null, id: number): boolean {
-    if (!placements || placements.length === 0) return false;
-    undoStack = [...undoStack, { forward: placements, back: invertPlacements(members, placements) }];
-    redoStack = [];
-    members = applyPlacements(members, placements);
-    enqueue(placements);
+    if (!placements?.length) return false;
+    void report(session.edit({ kind: 'place', placements }));
     announce(describe(id));
     return true;
   }
@@ -304,25 +300,17 @@
   }
 
   function undo() {
-    const entry = undoStack.at(-1);
-    if (!entry) return;
+    if (!view.canUndo) return;
     void keepFocus(() => {
-      undoStack = undoStack.slice(0, -1);
-      redoStack = [...redoStack, entry];
-      members = applyPlacements(members, entry.back);
-      enqueue(entry.back);
+      void report(session.undo());
       announce('Undid the last structure change.');
     });
   }
 
   function redo() {
-    const entry = redoStack.at(-1);
-    if (!entry) return;
+    if (!view.canRedo) return;
     void keepFocus(() => {
-      redoStack = redoStack.slice(0, -1);
-      undoStack = [...undoStack, entry];
-      members = applyPlacements(members, entry.forward);
-      enqueue(entry.forward);
+      void report(session.redo());
       announce('Redid the structure change.');
     });
   }
@@ -340,18 +328,16 @@
   }
 
   async function saveInspector(values: MemberValues): Promise<FormErrors | null> {
-    await inflight;
+    await session.settled();
     if (creating) return createMember(values);
-    const current = confirmed.find((m) => m.id === selectedId);
+    const current = view.confirmed.find((m) => m.id === selectedId);
     if (!current) return { fields: {}, message: 'This member no longer exists.' };
     const { data, error } = await actions.members.update(formFor({ id: current.id, ...values }));
     if (error) return parseActionError(error);
     const patch = { name: values.name, role: values.role, parentId: values.parentId, order: values.order, imageUrl: data.imageUrl };
-    if (patch.parentId !== current.parentId || patch.order !== current.order) {
-      undoStack = [];
-      redoStack = [];
-    }
-    sync((list) => list.map((m) => (m.id === current.id ? { ...m, ...patch } : m)));
+    session.adopt((list) => list.map((m) => (m.id === current.id ? { ...m, ...patch } : m)), {
+      resetHistory: patch.parentId !== current.parentId || patch.order !== current.order,
+    });
     toast.success('Member updated.');
     announce(`${values.name} updated.`);
     return null;
@@ -369,7 +355,7 @@
       order: data.order,
       imageUrl: data.imageUrl,
     };
-    sync((list) => [...list, created]);
+    session.adopt((list) => [...list, created]);
     creating = null;
     selectedId = created.id;
     toast.success(`${created.name} added.`);
@@ -387,20 +373,8 @@
     renamingId = null;
     const member = byId.get(id);
     if (member && name && name !== member.name) {
-      const previous = member.name;
-      members = members.map((m) => (m.id === id ? { ...m, name } : m));
-      await inflight;
-      const current = confirmed.find((m) => m.id === id);
-      const { error } = current
-        ? await actions.members.update(formFor({ ...current, name }))
-        : { error: { message: 'This member no longer exists.' } };
-      if (error) {
-        members = members.map((m) => (m.id === id ? { ...m, name: previous } : m));
-        toast.error(parseActionError(error).fields.name || parseActionError(error).message);
-      } else {
-        sync((list) => list.map((m) => (m.id === id ? { ...m, name } : m)));
-        announce(`Renamed to ${name}.`);
-      }
+      const result = await report(session.edit({ kind: 'rename', id, name }, { record: false }));
+      if (result.status === 'saved') announce(`Renamed to ${name}.`);
     }
     void focusMember(id);
   }
@@ -421,7 +395,7 @@
     const target = deleteTarget;
     if (!target) return;
     deleting = true;
-    await inflight;
+    await session.settled();
     const { error } = await actions.members.delete({ departmentId, id: target.id });
     deleting = false;
     deleteOpen = false;
@@ -430,9 +404,7 @@
       return;
     }
     const manager = target.parentId;
-    sync((list) => removeMember(list, target.id));
-    undoStack = [];
-    redoStack = [];
+    session.adopt((list) => removeMember(list, target.id), { resetHistory: true });
     if (selectedId === target.id) selectedId = manager !== null && byId.has(manager) ? manager : null;
     toast.success(`${target.name} removed.`);
     announce(`${target.name} removed. Direct reports moved up.`);
@@ -850,10 +822,10 @@
     </span>
 
     <div class="ml-auto flex flex-wrap items-center gap-2">
-      <button type="button" class={toolButton} onclick={undo} disabled={undoStack.length === 0} aria-label="Undo" title="Undo (Ctrl+Z)">
+      <button type="button" class={toolButton} onclick={undo} disabled={!view.canUndo} aria-label="Undo" title="Undo (Ctrl+Z)">
         <Undo2 class="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" class={toolButton} onclick={redo} disabled={redoStack.length === 0} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+      <button type="button" class={toolButton} onclick={redo} disabled={!view.canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
         <Redo2 class="h-4 w-4" aria-hidden="true" />
       </button>
       <div class="hidden items-center gap-2 md:flex" role="group" aria-label="Zoom">

@@ -4,18 +4,12 @@
  * page). It owns selection/hover outlines, the drag handle, drop indicators, inline text editing and
  * pointer drag & drop. All document changes go back to the host through callbacks.
  */
-import { CONTAINER_TYPES, type BlockType } from '@/lib/blocks/types';
+import { CONTAINER_TYPES, BLOCK_REGISTRY, isBlockType } from '@/lib/blocks/registry';
+import type { DropSource, DropTarget } from '@/lib/blocks/edit';
 import { domToInline, domToPlain } from './inline-dom';
 
-export type CanvasSource =
-    | { kind: 'new'; type: BlockType; label: string }
-    | { kind: 'move'; id: string; label: string };
-
-/** Insert before `beforeId` inside `parentId` (`null` parent = document root, `null` before = at the end). */
-export interface DropTarget {
-    parentId: string | null;
-    beforeId: string | null;
-}
+/** What a canvas drag carries: the drop rule's source plus the ghost's label. */
+export type CanvasSource = DropSource & { label: string };
 
 export interface CanvasHost {
     select(id: string | null): void;
@@ -46,8 +40,6 @@ details>summary{cursor:pointer}
 `;
 
 const CONTAINERS: Record<string, true> = Object.fromEntries(CONTAINER_TYPES.map((type) => [type, true]));
-/** Block types whose text can be edited directly on the canvas. */
-const INLINE_EDITABLE: Record<string, 'plain' | 'rich'> = { heading: 'plain', paragraph: 'rich', button: 'plain' };
 const EDGE = 10;
 const DRAG_THRESHOLD = 5;
 
@@ -191,12 +183,12 @@ export class CanvasController {
         const el = this.#find(id);
         if (!el || this.#editing) return false;
         const type = el.dataset.blockType ?? '';
-        const kind = INLINE_EDITABLE[type];
-        if (!kind) return false;
-        const target = type === 'button' ? el.querySelector<HTMLElement>('a') : el;
+        const inline = isBlockType(type) ? BLOCK_REGISTRY[type].inline : undefined;
+        if (!inline) return false;
+        const { kind, field } = inline;
+        const target = inline.target ? el.querySelector<HTMLElement>(inline.target) : el;
         if (!target) return false;
 
-        const field = type === 'button' ? 'label' : 'text';
         const before = kind === 'rich' ? domToInline(target) : domToPlain(target);
         this.#editing = { id, el: target, kind, field, before };
         target.setAttribute('contenteditable', kind === 'plain' ? 'plaintext-only' : 'true');

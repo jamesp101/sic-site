@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ChevronDown } from '@lucide/svelte';
-  import { DEFAULT_NAV_LINKS, DEPARTMENTS_MENU_URL, type NavNode } from '@/lib/nav-tree';
+  import type { NavNode } from '@/lib/nav-tree';
+  import { DEFAULT_NAV_LINKS, DEPARTMENTS_MENU_URL } from '@/lib/site-nav';
   import { SITE } from '@/lib/site';
 
   interface Sub {

@@ -1,10 +1,12 @@
-import { ActionError, defineAction } from 'astro:actions';
+import { defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
 import { db } from '@/lib/server/db';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
-import { AuthzError, requireSuperAdmin } from '@/lib/server/authz';
+import { requireSuperAdmin } from '@/lib/server/authz';
 import { assertDepartmentExists, departmentIdField } from '@/lib/server/department-access';
 import { hashPassword } from '@/lib/server/password';
+import { setPasswordLogin } from '@/lib/server/password-login';
+import { RequestError } from '@/lib/server/request-error';
 import { deleteWithFiles } from '@/lib/server/stored-files';
 
 const base = {
@@ -36,9 +38,7 @@ async function departmentFor(value: Draft): Promise<number | null> {
 
 async function assertEmailFree(email: string, exceptId?: number) {
     const taken = await db.user.findUnique({ where: { email }, select: { id: true } });
-    if (taken && taken.id !== exceptId) {
-        throw new ActionError({ code: 'CONFLICT', message: 'This email address is already in use.' });
-    }
+    if (taken && taken.id !== exceptId) throw new RequestError('CONFLICT', 'This email address is already in use.');
 }
 
 const password = z.string({ error: 'The password is required.' }).min(8, 'The password must be at least 8 characters.');
@@ -55,16 +55,9 @@ export const users = {
 
                 const user = await db.$transaction(async (tx) => {
                     const created = await tx.user.create({
-                        data: { name: input.name, email: input.email, role: input.role, departmentId, password: hash },
+                        data: { name: input.name, email: input.email, role: input.role, departmentId },
                     });
-                    await tx.account.create({
-                        data: {
-                            userId: created.id,
-                            accountId: String(created.id),
-                            providerId: 'credential',
-                            password: hash,
-                        },
-                    });
+                    await setPasswordLogin(tx, created.id, hash);
                     return created;
                 });
 
@@ -81,7 +74,7 @@ export const users = {
             guarded(async () => {
                 requireSuperAdmin(actorOf(context));
                 const existing = await db.user.findUnique({ where: { id: input.id }, select: { id: true } });
-                if (!existing) throw new AuthzError('NOT_FOUND');
+                if (!existing) throw new RequestError('NOT_FOUND');
                 await assertEmailFree(input.email, existing.id);
                 const departmentId = await departmentFor(input);
                 const hash = input.password ? await hashPassword(input.password) : null;
@@ -89,40 +82,13 @@ export const users = {
                 await db.$transaction(async (tx) => {
                     await tx.user.update({
                         where: { id: existing.id },
-                        data: {
-                            name: input.name,
-                            email: input.email,
-                            role: input.role,
-                            departmentId,
-                            ...(hash ? { password: hash } : {}),
-                        },
+                        data: { name: input.name, email: input.email, role: input.role, departmentId },
                     });
                     if (!hash) return;
                     // A reset password must also end every session that may belong to whoever knew the old
                     // one; an admin resetting their own password keeps the session they are using.
                     const currentSessionId = context.locals.session ? Number(context.locals.session.id) : null;
-                    await tx.session.deleteMany({
-                        where: {
-                            userId: existing.id,
-                            ...(currentSessionId === null ? {} : { NOT: { id: currentSessionId } }),
-                        },
-                    });
-                    const credential = await tx.account.findFirst({
-                        where: { userId: existing.id, providerId: 'credential' },
-                        select: { id: true },
-                    });
-                    if (credential) {
-                        await tx.account.update({ where: { id: credential.id }, data: { password: hash } });
-                    } else {
-                        await tx.account.create({
-                            data: {
-                                userId: existing.id,
-                                accountId: String(existing.id),
-                                providerId: 'credential',
-                                password: hash,
-                            },
-                        });
-                    }
+                    await setPasswordLogin(tx, existing.id, hash, { endSessions: { except: currentSessionId } });
                 });
 
                 flash(context, 'User updated successfully.');
@@ -136,10 +102,7 @@ export const users = {
             guarded(async () => {
                 const actor = requireSuperAdmin(actorOf(context));
                 if (id === actor.id) {
-                    throw new ActionError({
-                        code: 'BAD_REQUEST',
-                        message: 'Cannot delete the currently signed-in user.',
-                    });
+                    throw new RequestError('BAD_REQUEST', 'Cannot delete the currently signed-in user.');
                 }
                 const existing = await db.user.findUnique({
                     where: { id },
@@ -149,7 +112,7 @@ export const users = {
                         downloads: { select: { filePath: true } },
                     },
                 });
-                if (!existing) throw new AuthzError('NOT_FOUND');
+                if (!existing) throw new RequestError('NOT_FOUND');
                 // Sessions and accounts are removed by the ON DELETE CASCADE relations.
                 await deleteWithFiles(
                     () => db.user.delete({ where: { id } }),

@@ -1,6 +1,7 @@
 ---
 import type { DepartmentSummary } from '@/lib/content-types';
 import { SITE } from '@/lib/site';
+import { footerItems } from '@/lib/site-nav';
 
 interface Props {
     departments: DepartmentSummary[];
@@ -8,6 +9,7 @@ interface Props {
 
 const { departments } = Astro.props;
 const { address } = SITE;
+const footer = footerItems(departments);
 const year = new Date().getFullYear();
 
 const socials = SITE.sameAs.map((url) => {
@@ -46,20 +48,13 @@ const heading = 'mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-gold
                     Departments
                 </h2>
                 <ul class="space-y-2 text-sm">
-                    {departments.map((d) => (
+                    {footer.departments.map((link) => (
                         <li>
-                            <a href={`/departments/${d.slug}`} class={linkClass}>
-                                {d.name}
+                            <a href={link.href} class={linkClass}>
+                                {link.label}
                             </a>
                         </li>
                     ))}
-                    {departments.length === 0 && (
-                        <li>
-                            <a href="/#departments" class={linkClass}>
-                                Academic programs
-                            </a>
-                        </li>
-                    )}
                 </ul>
             </nav>
 
@@ -68,26 +63,13 @@ const heading = 'mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-gold
                     Quick links
                 </h2>
                 <ul class="space-y-2 text-sm">
-                    <li>
-                        <a href="/posts" class={linkClass}>
-                            News &amp; Events
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/downloads" class={linkClass}>
-                            Downloads
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/contact" class={linkClass}>
-                            Contact &amp; Admissions
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/rss.xml" class={linkClass}>
-                            RSS feed
-                        </a>
-                    </li>
+                    {footer.quickLinks.map((link) => (
+                        <li>
+                            <a href={link.href} class={linkClass}>
+                                {link.label}
+                            </a>
+                        </li>
+                    ))}
                 </ul>
             </nav>
 
