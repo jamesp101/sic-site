@@ -10,16 +10,19 @@ export function slugify(input: string): string {
         .replace(/^-+|-+$/g, '');
 }
 
+/** Longest slug root: leaves room for a `-<n>` suffix inside the 255-character slug columns. */
+const MAX_ROOT = 240;
+
 /**
- * Slugifies `base` (empty result becomes `fallback`) and appends `-1`, `-2`, … until
- * `exists` reports the candidate as free.
+ * Slugifies `base` (empty result becomes `fallback`), cut to `MAX_ROOT` characters, and appends `-1`,
+ * `-2`, … until `exists` reports the candidate as free.
  */
 export async function uniqueSlug(
     base: string,
     exists: (slug: string) => Promise<boolean>,
     fallback = 'post',
 ): Promise<string> {
-    const root = slugify(base) || fallback;
+    const root = slugify(base).slice(0, MAX_ROOT).replace(/-+$/, '') || fallback;
     let slug = root;
     let count = 1;
     while (await exists(slug)) slug = `${root}-${count++}`;

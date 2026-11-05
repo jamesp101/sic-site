@@ -1,6 +1,8 @@
 // Edit this file, then `vp run db:migrate`. prisma/schema.prisma is generated
 // from it (scripts/prisma-schema.mjs) with the provider taken from DATABASE_URL.
 // Table and column names match the Laravel schema so an existing database can be adopted.
+// Column-type placeholders: `{{longtext}}` = long content (MySQL LONGTEXT, PostgreSQL TEXT), `{{text}}` = free text
+// that can exceed 255 characters (MySQL TEXT). On MySQL every other String is VARCHAR(255).
 
 generator client {
   provider = "prisma-client"
@@ -17,7 +19,7 @@ model User {
   email           String    @unique
   emailVerified   Boolean   @default(false) @map("email_verified")
   emailVerifiedAt DateTime? @map("email_verified_at")
-  image           String?
+  image           String?   {{text}}
   /// Laravel bcrypt hash; Better Auth reads credentials from Account.password.
   password        String?
   rememberToken   String?   @map("remember_token")
@@ -40,7 +42,7 @@ model Session {
   token     String   @unique
   expiresAt DateTime @map("expires_at")
   ipAddress String?  @map("ip_address")
-  userAgent String?  @map("user_agent")
+  userAgent String?  @map("user_agent") {{text}}
   userId    Int      @map("user_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -56,12 +58,12 @@ model Account {
   accountId             String    @map("account_id")
   providerId            String    @map("provider_id")
   userId                Int       @map("user_id")
-  accessToken           String?   @map("access_token")
-  refreshToken          String?   @map("refresh_token")
-  idToken               String?   @map("id_token")
+  accessToken           String?   @map("access_token") {{text}}
+  refreshToken          String?   @map("refresh_token") {{text}}
+  idToken               String?   @map("id_token") {{text}}
   accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
   refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
-  scope                 String?
+  scope                 String?   {{text}}
   password              String?
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
@@ -75,7 +77,7 @@ model Account {
 model Verification {
   id         Int      @id @default(autoincrement())
   identifier String
-  value      String
+  value      String   {{text}}
   expiresAt  DateTime @map("expires_at")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -132,10 +134,10 @@ model CarouselItem {
   title        String?
   subtitle     String?
   imagePath    String   @map("image_path")
-  linkUrl      String?  @map("link_url")
+  linkUrl      String?  @map("link_url") {{text}}
   overlay      String?  {{longtext}}
   videoPath    String?  @map("video_path")
-  videoUrl     String?  @map("video_url")
+  videoUrl     String?  @map("video_url") {{text}}
   order        Int      @default(0)
   departmentId Int?     @map("department_id")
   showOnMain   Boolean  @default(true) @map("show_on_main")
@@ -168,7 +170,7 @@ model Member {
 model NavigationLink {
   id        Int      @id @default(autoincrement())
   label     String
-  url       String
+  url       String   {{text}}
   order     Int      @default(0)
   isActive  Boolean  @default(true) @map("is_active")
   parentId  Int?     @map("parent_id")

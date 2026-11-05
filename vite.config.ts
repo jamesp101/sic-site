@@ -18,6 +18,8 @@ export default defineConfig({
     test: {
         include: ['src/**/*.test.ts'],
         env: { DATABASE_URL: 'file:./storage/test.db' },
+        // DB-backed tests use their own SQLite client (src/generated/prisma-sqlite), whatever DATABASE_URL dev uses.
+        globalSetup: ['src/lib/server/sqlite-client.mjs'],
     },
     staged: {
         '*.{ts,js,mjs,svelte,css,json,md}': 'vp check --fix',
@@ -25,11 +27,12 @@ export default defineConfig({
     },
     run: {
         tasks: {
-            // First-run bootstrap used by `devenv up` / `devenv test`: schema, client, migrations, seed (only when empty).
+            // First-run bootstrap used by `devenv up` / `devenv test`: schema, clients, migrations, seed (only when empty).
             setup: {
-                // astro sync generates .astro/ types (astro:env, actions) that type checks need on a fresh clone.
+                // astro sync generates .astro/ types (astro:env, actions) that type checks need on a fresh clone;
+                // so does the SQLite test client (src/generated/prisma-sqlite).
                 command:
-                    'node scripts/prisma-schema.mjs && prisma generate && prisma migrate deploy && tsx prisma/seed.ts --if-empty && astro sync',
+                    'node scripts/prisma-schema.mjs && prisma generate && node src/lib/server/sqlite-client.mjs && prisma migrate deploy && tsx prisma/seed.ts --if-empty && astro sync',
                 cache: false,
             },
             dev: { command: 'astro dev', cache: false },
@@ -43,6 +46,7 @@ export default defineConfig({
             'db:seed': { command: 'tsx prisma/seed.ts', cache: false },
             'db:seed:schools': { command: 'tsx prisma/seed-schools.ts', cache: false },
             'db:backfill-search': { command: 'tsx prisma/backfill-search-text.ts', cache: false },
+            'db:copy': { command: 'tsx scripts/db-copy.ts', cache: false },
             'db:reset': { command: 'node scripts/prisma-schema.mjs && prisma migrate reset --force', cache: false },
             'db:create-admin': { command: 'tsx prisma/create-admin.ts', cache: false },
             'storage:cleanup': { command: 'tsx scripts/storage-cleanup.ts', cache: false },

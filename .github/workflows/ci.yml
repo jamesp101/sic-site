@@ -81,3 +81,48 @@ jobs:
           name: playwright-postgres
           path: test-results/
           retention-days: 7
+
+  mariadb:
+    name: Build + e2e (MariaDB)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_USER: sic
+          MARIADB_PASSWORD: sic
+          MARIADB_DATABASE: sic_e2e
+          MARIADB_ROOT_PASSWORD: ci-root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Selects the MySQL provider for schema rendering, client generation, build and e2e.
+      DATABASE_URL: mysql://sic:sic@127.0.0.1:3306/sic_e2e
+      E2E_DATABASE_URL: mysql://sic:sic@127.0.0.1:3306/sic_e2e
+      BETTER_AUTH_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install (renders the MySQL schema and generates the client)
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build
+        run: pnpm exec astro build
+      - name: e2e against MariaDB
+        run: pnpm exec playwright test
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-mariadb
+          path: test-results/
+          retention-days: 7

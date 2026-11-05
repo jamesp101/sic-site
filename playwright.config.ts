@@ -1,8 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
-import { DB, PORT, UPLOADS } from './e2e/env';
+import { DATABASE_URL, PORT, UPLOADS } from './e2e/env';
 
 // E2E_DIST lets several runs coexist with E2E_PORT (see e2e/env.ts): each gets its own build dir.
 const DIST = process.env.E2E_DIST ?? 'dist';
+
+// Every run starts from an empty, migrated, seeded database and upload dir, so tests never write into dev data.
+const prepare = `node -e "require('node:fs').rmSync('${UPLOADS}',{recursive:true,force:true})" && tsx e2e/reset-db.ts && node scripts/prisma-schema.mjs && prisma migrate deploy && tsx prisma/seed.ts`;
 
 export default defineConfig({
     testDir: 'e2e',
@@ -20,10 +23,8 @@ export default defineConfig({
         { name: 'chromium', use: { ...devices['Desktop Chrome'] }, dependencies: ['setup'] },
     ],
     webServer: {
-        // Fresh, seeded SQLite DB and upload dir per run so tests never write into the dev database.
-        // E2E_DATABASE_URL (e.g. a CI PostgreSQL service) replaces the SQLite file; it must point at an
-        // empty database, and the build must have been made for the same provider.
-        command: `node -e "const fs=require('node:fs');fs.rmSync('${DB}',{force:true});fs.rmSync('${UPLOADS}',{recursive:true,force:true})" && node scripts/prisma-schema.mjs && prisma migrate deploy && tsx prisma/seed.ts && node ${DIST}/server/entry.mjs`,
+        // The build must have been made for the same provider as the database (see e2e/env.ts).
+        command: `${prepare} && node ${DIST}/server/entry.mjs`,
         port: PORT,
         reuseExistingServer: false,
         timeout: 120_000,
@@ -32,7 +33,7 @@ export default defineConfig({
             HOST: '127.0.0.1',
             SITE_URL: `http://localhost:${PORT}`,
             BETTER_AUTH_URL: `http://localhost:${PORT}`,
-            DATABASE_URL: process.env.E2E_DATABASE_URL ?? `file:./${DB}`,
+            DATABASE_URL,
             STORAGE_DRIVER: 'local',
             UPLOAD_DIR: `./${UPLOADS}`,
         },

@@ -2,17 +2,17 @@
 
 Full-stack Astro port of the Laravel/Inertia site. Server-rendered for SEO, Svelte islands only where interaction is needed.
 
-Stack: Astro 7 (`output: 'server'`, Node standalone, or the Vercel adapter on Vercel) · Svelte 5 islands · Tailwind v4 · Prisma 7 (SQLite in dev; MySQL/MariaDB or PostgreSQL by URL) · Better Auth · Astro Actions · uploads on local disk or S3 · Vite+ (`vp`) for lint/format/test/tasks · devenv for the toolchain.
+Stack: Astro 7 (`output: 'server'`, Node standalone, or the Vercel adapter on Vercel) · Svelte 5 islands · Tailwind v4 · Prisma 7 (MariaDB in dev via devenv; MySQL/MariaDB, PostgreSQL or SQLite by URL) · Better Auth · Astro Actions · uploads on local disk or S3 · Vite+ (`vp`) for lint/format/test/tasks · devenv for the toolchain.
 
 ## Quick start
 
-Requires [devenv](https://devenv.sh) (Nix). Everything else (Node 24, pnpm, Prisma engines, Playwright browsers) comes from `devenv.nix`.
+Requires [devenv](https://devenv.sh) (Nix). Everything else (Node 24, pnpm, MariaDB 11.4, Prisma engines, Playwright browsers) comes from `devenv.nix`.
 
-| Goal                                                                                           | Command        |
-| ---------------------------------------------------------------------------------------------- | -------------- |
-| Run the site (installs deps, renders schema, migrates, seeds on first run, starts `astro dev`) | `devenv up`    |
-| Run every check: format, lint, types, template types, unit tests, build, e2e                   | `devenv test`  |
-| Shell with the toolchain                                                                       | `devenv shell` |
+| Goal                                                                                                           | Command        |
+| -------------------------------------------------------------------------------------------------------------- | -------------- |
+| Run the site (starts MariaDB, installs deps, renders schema, migrates, seeds on first run, starts `astro dev`) | `devenv up`    |
+| Run every check: format, lint, types, template types, unit tests, build, e2e (on a throwaway SQLite file)      | `devenv test`  |
+| Shell with the toolchain                                                                                       | `devenv shell` |
 
 Site: <http://localhost:4321>. Seeded logins: `admin@sic.edu.ph` (superadmin), `cit@sic.edu.ph`, `cba@sic.edu.ph` (department users); passwords come from `SEED_SUPERADMIN_PASSWORD` / `SEED_DEPARTMENT_PASSWORD` in `.env` (created from `.env.example`).
 
@@ -31,6 +31,7 @@ Site: <http://localhost:4321>. Seeded logins: `admin@sic.edu.ph` (superadmin), `
 | Apply migrations / seed / reset                                                                                | `vp run db:deploy` / `vp run db:seed` / `vp run db:reset` |
 | Sample schools: 5 departments, 20 posts and 7–15 members each (recreate: `tsx prisma/seed-schools.ts --reset`) | `vp run db:seed:schools`                                  |
 | Recompute post / hero-section search text (once after `db:deploy` added `search_text`)                         | `vp run db:backfill-search`                               |
+| Copy an SQLite database into the empty, migrated `DATABASE_URL` database (default source `storage/dev.db`)     | `vp run db:copy` (`-- --from file:./other.db`)            |
 | Create or reset a superadmin                                                                                   | `ADMIN_EMAIL=… ADMIN_NAME=… vp run db:create-admin`       |
 | Prisma Studio                                                                                                  | `vp run db:studio`                                        |
 
@@ -40,7 +41,10 @@ Site: <http://localhost:4321>. Seeded logins: `admin@sic.edu.ph` (superadmin), `
 
 - Edit `prisma/schema.base.prisma` only. `scripts/prisma-schema.mjs` renders the gitignored `prisma/schema.prisma` with the provider taken from `DATABASE_URL` (`file:` → sqlite, `mysql://`/`mariadb://` → mysql, `postgres(ql)://` → postgresql) and runs on install and every `db:*` task.
 - Runtime picks the matching driver adapter (`src/lib/server/db.ts`): better-sqlite3, mariadb or pg.
-- Migrations are provider-specific: `prisma/migrations/<provider>/`. Switching provider = set `DATABASE_URL`, then `vp run db:migrate` to create that provider's baseline.
+- Migrations are provider-specific: `prisma/migrations/<provider>/` (sqlite, mysql, postgresql); a schema change gets a migration in each.
+- MySQL column types: `{{longtext}}` columns are LONGTEXT, `{{text}}` columns (URLs, user agents, tokens) TEXT, every other String VARCHAR(255). The `search_text` columns use a literal `DEFAULT ''` on LONGTEXT, which MariaDB (10.2+, devenv runs 11.4) accepts and Oracle MySQL 8 rejects: use MariaDB.
+- Dev runs on the MariaDB from `devenv up` (`mysql://sic:sic@127.0.0.1:3306/sic`, data in `.devenv/state/mysql`). To bring an existing SQLite dev database across: `devenv up` (or `devenv up mysql`), `vp run db:deploy`, then `vp run db:copy` (refuses a target that already has rows; uploads stay where they are). Back to SQLite: set `DATABASE_URL="file:./storage/dev.db"` and run `vp run db:schema`.
+- Tests never touch the dev database: unit tests use a temporary SQLite file with their own client (`src/generated/prisma-sqlite`, generated by `src/lib/server/sqlite-client.mjs`); e2e uses `storage/e2e-<port>.db` or, on MariaDB, a `<db>_e2e_<port>` database that `e2e/reset-db.ts` recreates each run. `devenv test` and the first CI job run on SQLite; CI also runs build + e2e on PostgreSQL and MariaDB. `devenv test` leaves the app client generated for SQLite: `devenv up` regenerates it, otherwise run `vp run db:schema` before `vp run dev`.
 - `posts.search_text` and `hero_sections.search_text` hold the plain text of `content` for search and are filled on save. Deploy note: after `prisma migrate deploy` applies `search_text`, run `vp run db:backfill-search` once so existing rows become searchable.
 - Table and column names match the Laravel schema; Better Auth uses its own `auth_sessions`, `auth_accounts`, `auth_verifications` and `auth_rate_limits` (shared rate-limit counters) tables.
 

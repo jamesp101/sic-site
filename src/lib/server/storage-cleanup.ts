@@ -9,6 +9,7 @@
  * than the grace period are never touched, so an upload whose row is not committed yet is safe.
  */
 import type { PrismaClient } from '../../generated/prisma/client';
+import { modelDelegate, prismaModels } from './prisma-models';
 import type { StorageDriver } from './storage/types';
 
 export const GRACE_MS = 24 * 60 * 60 * 1000;
@@ -75,45 +76,11 @@ interface StringTable {
     columns: string[];
 }
 
-/** The only parts of Prisma's internal runtime data model that this module reads. */
-interface RuntimeDataModel {
-    models: Record<string, { fields: { name: string; kind: string; type: string }[] }>;
-}
-
-function isRuntimeDataModel(value: unknown): value is RuntimeDataModel {
-    return (
-        typeof value === 'object' &&
-        value !== null &&
-        'models' in value &&
-        typeof value.models === 'object' &&
-        value.models !== null
-    );
-}
-
-/**
- * Prisma 7 exposes no public DMMF on the client, so this reads the client's internal
- * `_runtimeDataModel`. It is the single place that touches that private field.
- */
-function readRuntimeDataModel(db: PrismaClient): RuntimeDataModel | undefined {
-    const model: unknown = Reflect.get(db, '_runtimeDataModel');
-    return isRuntimeDataModel(model) ? model : undefined;
-}
-
-function findDelegate(db: PrismaClient, name: string): Delegate | undefined {
-    const delegate: unknown = Reflect.get(db, name);
-    return typeof delegate === 'object' &&
-        delegate !== null &&
-        'findMany' in delegate &&
-        typeof delegate.findMany === 'function'
-        ? (delegate as Delegate)
-        : undefined;
-}
-
 /** Every model with its String columns, from the Prisma client's own data model. Every model has an `id` primary key. */
 export function stringTables(db: PrismaClient): StringTable[] {
-    return Object.entries(readRuntimeDataModel(db)?.models ?? {})
-        .map(([name, model]) => ({
-            delegate: name.charAt(0).toLowerCase() + name.slice(1),
+    return prismaModels(db)
+        .map((model) => ({
+            delegate: model.delegate,
             columns: model.fields
                 .filter((field) => field.kind === 'scalar' && field.type === 'String')
                 .map((field) => field.name),
@@ -163,7 +130,7 @@ async function scanReferences(
     if (tables.length === 0) throw new Error('Prisma data model not available: refusing to clean up.');
     const matcher = new KeyMatcher(unreferenced.keys());
     for (const table of tables) {
-        const delegate = findDelegate(db, table.delegate);
+        const delegate = modelDelegate<Delegate>(db, table.delegate);
         if (!delegate) throw new Error(`No Prisma delegate for ${table.delegate}: refusing to clean up.`);
         const select = Object.fromEntries([['id', true as const], ...table.columns.map((c) => [c, true as const])]);
         let afterId = 0;

@@ -3,7 +3,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "postinstall": "node scripts/prisma-schema.mjs && prisma generate"
+        "postinstall": "node scripts/prisma-schema.mjs && prisma generate && node src/lib/server/sqlite-client.mjs"
     },
     "dependencies": {
         "@astrojs/node": "^11.1.7",

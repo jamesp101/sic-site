@@ -36,4 +36,14 @@ describe('uniqueSlug', () => {
         expect(await uniqueSlug('???', existsIn(['post']))).toBe('post-1');
         expect(await uniqueSlug('???', existsIn([]), 'department')).toBe('department');
     });
+
+    it('keeps a numbered slug within the 255-character column', async () => {
+        const long = `${'word '.repeat(60)}end`;
+        const free = await uniqueSlug(long, existsIn([]));
+        expect(free.length).toBeLessThanOrEqual(240);
+        expect(free).not.toMatch(/-$/);
+        const numbered = await uniqueSlug(long, existsIn([free]));
+        expect(numbered).toBe(`${free}-1`);
+        expect(numbered.length).toBeLessThanOrEqual(255);
+    });
 });
