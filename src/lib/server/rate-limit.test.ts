@@ -8,8 +8,8 @@ const {
     RATE_LIMITS,
     assertUploadQuota,
     consumeRateLimit,
-    isSignInBlocked,
-    recordSignInFailure,
+    claimSignInAttempt,
+    refundSignInAttempt,
     sweepExpiredRateLimits,
 } = await import('./rate-limit');
 const { db } = await import('./db');
@@ -52,34 +52,56 @@ describe('rate limit window', () => {
     });
 });
 
-describe('sign-in failures', () => {
+describe('sign-in attempts', () => {
     const MINUTE = 60_000;
 
-    it('blocks one address after 10 failures for an email, whatever the spelling, and no other address or email', async () => {
+    it('allows 10 attempts per email and address, whatever the spelling, and no other address or email', async () => {
         for (let i = 0; i < 10; i++) {
-            expect(await isSignInBlocked('a@sic.edu.ph', '198.51.100.1', T0)).toBe(false);
-            await recordSignInFailure(i % 2 === 0 ? ' A@SIC.edu.ph ' : 'a@sic.edu.ph', '198.51.100.1', T0);
+            expect(await claimSignInAttempt(i % 2 === 0 ? ' A@SIC.edu.ph ' : 'a@sic.edu.ph', '198.51.100.1', T0)).toBe(
+                true,
+            );
         }
-        expect(await isSignInBlocked('A@sic.edu.ph', '198.51.100.1', T0)).toBe(true);
-        expect(await isSignInBlocked('a@sic.edu.ph', '198.51.100.2', T0)).toBe(false);
-        expect(await isSignInBlocked('b@sic.edu.ph', '198.51.100.1', T0)).toBe(false);
+        expect(await claimSignInAttempt('A@sic.edu.ph', '198.51.100.1', T0)).toBe(false);
+        expect(await claimSignInAttempt('a@sic.edu.ph', '198.51.100.2', T0)).toBe(true);
+        expect(await claimSignInAttempt('b@sic.edu.ph', '198.51.100.1', T0)).toBe(true);
     });
 
-    it('blocks every address once an email failed 100 times in 15 minutes', async () => {
-        for (let i = 0; i < 100; i++) {
-            expect(await isSignInBlocked('c@sic.edu.ph', `192.0.2.${i}`, T0)).toBe(false);
-            await recordSignInFailure('c@sic.edu.ph', `192.0.2.${i}`, T0);
+    it('allows 100 attempts per email over all addresses, then refuses every address', async () => {
+        for (let i = 0; i < 100; i++) expect(await claimSignInAttempt('c@sic.edu.ph', `192.0.2.${i}`, T0)).toBe(true);
+        expect(await claimSignInAttempt('c@sic.edu.ph', '192.0.2.200', T0)).toBe(false);
+        expect(await claimSignInAttempt('d@sic.edu.ph', '192.0.2.200', T0)).toBe(true);
+    });
+
+    it('does not keep a slot for the address when the per-email limit refused it', async () => {
+        for (let i = 0; i < 100; i++) await claimSignInAttempt('f@sic.edu.ph', `192.0.2.${i}`, T0);
+        for (let i = 0; i < 20; i++) expect(await claimSignInAttempt('f@sic.edu.ph', '192.0.2.250', T0)).toBe(false);
+        const row = await db.rateLimit.findMany({ where: { key: { startsWith: 'app:signin:ip:' }, count: { gt: 0 } } });
+        expect(row.every((r) => r.count <= 10)).toBe(true);
+    });
+
+    it('never lets more than the limit through 15 concurrent attempts', async () => {
+        const results = await Promise.all(
+            Array.from({ length: 15 }, () => claimSignInAttempt('g@sic.edu.ph', '198.51.100.7', T0)),
+        );
+        expect(results.filter(Boolean)).toHaveLength(10);
+    });
+
+    it('gives the slots back on success, so only failures count', async () => {
+        for (let i = 0; i < 9; i++) await claimSignInAttempt('h@sic.edu.ph', '198.51.100.8', T0);
+        for (let i = 0; i < 5; i++) {
+            expect(await claimSignInAttempt('h@sic.edu.ph', '198.51.100.8', T0)).toBe(true);
+            await refundSignInAttempt('h@sic.edu.ph', '198.51.100.8', T0);
         }
-        expect(await isSignInBlocked('c@sic.edu.ph', '192.0.2.200', T0)).toBe(true);
-        expect(await isSignInBlocked('d@sic.edu.ph', '192.0.2.200', T0)).toBe(false);
+        expect(await claimSignInAttempt('h@sic.edu.ph', '198.51.100.8', T0)).toBe(true);
+        expect(await claimSignInAttempt('h@sic.edu.ph', '198.51.100.8', T0)).toBe(false);
     });
 
     it('lets an address in again 15 minutes after the window began, however often it was refused', async () => {
-        for (let i = 0; i < 10; i++) await recordSignInFailure('e@sic.edu.ph', '198.51.100.9', T0);
+        for (let i = 0; i < 10; i++) await claimSignInAttempt('e@sic.edu.ph', '198.51.100.9', T0);
         for (let i = 0; i < 5; i++) {
-            expect(await isSignInBlocked('e@sic.edu.ph', '198.51.100.9', T0 + 14 * MINUTE)).toBe(true);
+            expect(await claimSignInAttempt('e@sic.edu.ph', '198.51.100.9', T0 + 14 * MINUTE)).toBe(false);
         }
-        expect(await isSignInBlocked('e@sic.edu.ph', '198.51.100.9', T0 + 15 * MINUTE)).toBe(false);
+        expect(await claimSignInAttempt('e@sic.edu.ph', '198.51.100.9', T0 + 15 * MINUTE)).toBe(true);
     });
 });
 

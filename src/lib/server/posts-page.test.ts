@@ -64,6 +64,16 @@ describe('Post Excerpts', () => {
         expect(items.find((item) => item.slug === 'markdown')?.imageSmallUrl).toBeNull();
     });
 
+    it('starts no layout query for an unknown Post and hands them over for a found one', async () => {
+        const navLinks = vi.spyOn(db.navigationLink, 'findMany');
+        expect(await getPostPage('nope', site)).toBeNull();
+        expect(navLinks).not.toHaveBeenCalled();
+        vi.restoreAllMocks();
+        const page = await getPostPage('markdown', site);
+        expect(await page!.navLinks).toEqual(expect.any(Array));
+        expect(await page!.departments).toEqual(expect.any(Array));
+    });
+
     it('stay equal on the Post page, whose Excerpt comes from the content', async () => {
         const page = await getPostPage('markdown', site);
         expect(page?.post.excerpt).toBe(excerptOf(markdownContent));

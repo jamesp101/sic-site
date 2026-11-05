@@ -82,6 +82,10 @@ const ld = [
         <slot />
     </main>
     <SiteFooter {departments} />
+    <script>
+        // Closed accordions print open (`beforeprint` / `afterprint`).
+        import '@/scripts/print-details';
+    </script>
     {!Astro.locals.user && <script>
         // Hover prefetch: only for anonymous visitors, whose public pages the HTTP cache can reuse.
         import '@/scripts/public-prefetch';

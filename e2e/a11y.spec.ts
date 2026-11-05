@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { DEMO_DEPARTMENTS } from '../prisma/demo-data';
+import { postAction } from './actions';
 import { ADMIN } from './auth-state';
 
 const PAGES = ['/', '/posts', '/downloads', '/contact', `/departments/${DEMO_DEPARTMENTS.cit.slug}`, '/login'];
@@ -81,6 +82,53 @@ test('a printed Post shows only the article, black on white', async ({ page }) =
         return [getComputedStyle(h1).color, getComputedStyle(document.body).backgroundColor];
     });
     expect(colours).toEqual(['rgb(0, 0, 0)', 'rgb(255, 255, 255)']);
+});
+
+test.describe('printing accordions', () => {
+    test.use({ storageState: ADMIN });
+
+    test('closed accordions print open and close again afterwards', async ({ page }) => {
+        const title = `Print accordion ${Date.now().toString(36)}`;
+        const content = JSON.stringify({
+            type: 'sic-blocks',
+            version: 1,
+            blocks: [
+                {
+                    id: 'acc1',
+                    type: 'accordion',
+                    props: { items: [{ title: 'Printed question', body: 'Printed answer text.' }] },
+                },
+            ],
+        });
+        await page.goto('/admin/posts');
+        const created = await postAction<{ id: number }>(page, 'posts.create', {
+            multipart: { title, content, type: 'article', isFeatured: 'false' },
+        });
+        expect(created.ok, created.text).toBe(true);
+        try {
+            await page.goto('/posts');
+            await page.getByRole('link', { name: title }).first().click();
+            const answer = page.getByText('Printed answer text.');
+            const accordion = page.locator('details', { hasText: 'Printed question' });
+            await expect(accordion).not.toHaveAttribute('open', '');
+            await expect(answer).toBeHidden();
+
+            // Print media alone (what a browser without JavaScript gets) shows the answer.
+            await page.emulateMedia({ media: 'print' });
+            await expect(answer).toBeVisible();
+            await page.emulateMedia({ media: 'screen' });
+            await expect(answer).toBeHidden();
+
+            // With JavaScript, `beforeprint` opens the accordion and `afterprint` restores it.
+            await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+            await expect(accordion).toHaveAttribute('open', '');
+            await expect(answer).toBeVisible();
+            await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+            await expect(accordion).not.toHaveAttribute('open', '');
+        } finally {
+            await postAction(page, 'posts.delete', { json: { id: created.data.id } });
+        }
+    });
 });
 
 test.describe('admin', () => {

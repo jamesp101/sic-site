@@ -102,10 +102,15 @@ async function peek(
             yield* head;
             while (!done) {
                 const chunk = await reader.read();
-                if (chunk.done) return;
+                if (chunk.done) {
+                    done = true;
+                    return;
+                }
                 yield chunk.value;
             }
         } finally {
+            // The consumer stopped early (the client disconnected): stop the source too.
+            if (!done) await reader.cancel().catch(() => {});
             reader.releaseLock();
         }
     }

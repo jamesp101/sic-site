@@ -95,10 +95,11 @@
     {#if Editor}
       <Editor bind:value={heroContent} id="hero-content" label="Hero content (Markdown / MDX)" rows={8} error={form.errors.heroContent ?? ''} />
     {:else}
-      <!-- Same box as the editor (label, toolbar, 200 px of text) so nothing shifts when CodeMirror arrives. -->
+      <!-- Same box as the editor (label, toolbar, 192 px of text) so nothing shifts when CodeMirror arrives. The
+           toolbar wraps to three rows on a phone, two on a large phone, one from 37rem; the min-heights are those. -->
       <div class="w-full space-y-1.5" aria-busy={!editorError}>
         <p class="text-sm font-semibold text-foreground">Hero content (Markdown / MDX)</p>
-        <div class="flex h-[15.5rem] items-center justify-center rounded-xl border border-border-strong bg-surface-alt text-sm text-muted-foreground shadow-brand-sm">
+        <div class="flex min-h-[19.3125rem] min-[27rem]:min-h-[17.3125rem] min-[37rem]:min-h-[15.5625rem] items-center justify-center rounded-xl border border-border-strong bg-surface-alt text-sm text-muted-foreground shadow-brand-sm">
           {#if editorError}
             <span role="alert" class="text-destructive">The editor could not be loaded. Reload the page to try again.</span>
           {:else}

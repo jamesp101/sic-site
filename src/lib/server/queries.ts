@@ -119,6 +119,20 @@ export function startQuery<T>(query: Promise<T>): Promise<T> {
     return query;
 }
 
+/** The layout's queries, already running (`PublicLayout`'s `navLinks` / `departments`). */
+export interface LayoutQueries {
+    navLinks: Promise<NavLinkView[]>;
+    departments: Promise<DepartmentSummary[]>;
+}
+
+/**
+ * Starts the layout's queries. A page-by-slug query calls it right after its row lookup, so an unknown slug costs
+ * one query and a found page runs them beside its own remaining queries.
+ */
+function startLayoutQueries(): LayoutQueries {
+    return { navLinks: startQuery(getNavLinks()), departments: startQuery(getDepartments()) };
+}
+
 /** Active Navigation links with their active children: one flat query, nested in memory. */
 export async function getNavLinks(): Promise<NavLinkView[]> {
     const rows = await db.navigationLink.findMany({
@@ -178,20 +192,24 @@ export async function getHomeData(): Promise<{
 export async function getDepartmentPage(
     slug: string,
     site: URL,
-): Promise<{
-    department: DepartmentDetail;
-    carousel: CarouselSlide[];
-    posts: PostSummary[];
-    postCount: number;
-    members: MemberNode[];
-    heroSections: HeroSectionView[];
-    seo: PageSeo;
-} | null> {
+): Promise<
+    | ({
+          department: DepartmentDetail;
+          carousel: CarouselSlide[];
+          posts: PostSummary[];
+          postCount: number;
+          members: MemberNode[];
+          heroSections: HeroSectionView[];
+          seo: PageSeo;
+      } & LayoutQueries)
+    | null
+> {
     const row = await db.department.findUnique({
         where: { slug },
         select: { ...departmentSelect, heroContent: true },
     });
     if (!row) return null;
+    const layout = startLayoutQueries();
 
     const [carousel, posts, postCount, memberRows, heroes] = await Promise.all([
         findSlides({ departmentId: row.id }),
@@ -228,6 +246,7 @@ export async function getDepartmentPage(
         members,
         heroSections: heroes,
         seo: departmentPageSeo(department, members, carousel[0]?.imageUrl, site),
+        ...layout,
     };
 }
 
@@ -276,19 +295,20 @@ export async function getPostsPage(
 export async function getPostPage(
     slug: string,
     site: URL,
-): Promise<{ post: PostDetail; related: PostSummary[]; seo: PageSeo } | null> {
+): Promise<({ post: PostDetail; related: PostSummary[]; seo: PageSeo } & LayoutQueries) | null> {
     const row = await db.post.findUnique({
         where: { slug },
         select: { ...postSelect, content: true, hideAuthor: true, user: { select: { name: true } } },
     });
     if (!row) return null;
+    const layout = startLayoutQueries();
     const content = parseContent(row.content);
     const post: PostDetail = {
         ...summaryWithExcerpt(row, content.excerpt()),
         html: content.html(),
         authorName: row.hideAuthor ? null : row.user.name,
     };
-    return { post, related: await getRelatedPosts(post), seo: postPageSeo(post, site) };
+    return { post, related: await getRelatedPosts(post), seo: postPageSeo(post, site), ...layout };
 }
 
 /**

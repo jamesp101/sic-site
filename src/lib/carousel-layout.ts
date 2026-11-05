@@ -33,6 +33,19 @@ export const HERO_HEIGHT = {
     short: { base: 400, wide: 450 },
 } as const;
 
+/**
+ * Width (px) the hero photo is drawn at on a phone: `object-cover` fits the 16:9 image to the hero's height, so it
+ * is wider than the screen. Keyed like `HERO_HEIGHT`.
+ */
+export const HERO_PHONE_IMAGE_WIDTH = {
+    tall: Math.ceil((HERO_HEIGHT.tall.base * DESKTOP_FRAME.w) / DESKTOP_FRAME.h),
+    short: Math.ceil((HERO_HEIGHT.short.base * DESKTOP_FRAME.w) / DESKTOP_FRAME.h),
+} as const;
+
+/** `sizes` for a hero photo: the phone width below the phone breakpoint, the viewport otherwise. */
+export const heroImageSizes = (tall: boolean): string =>
+    `(max-width: ${PHONE_MAX_REM}rem) ${HERO_PHONE_IMAGE_WIDTH[tall ? 'tall' : 'short']}px, 100vw`;
+
 /** Screen width (px) the designer's "visible area" guide is drawn for. */
 export const GUIDE_SCREEN_WIDTH = 1440;
 

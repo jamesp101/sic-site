@@ -9,16 +9,14 @@ import { textLink } from '@/components/site/classes';
 import PublicLayout from '@/layouts/PublicLayout.astro';
 import { postsHref } from '@/lib/post-filters';
 import { siteUrl } from '@/lib/seo';
-import { getDepartmentPage, getDepartments, getNavLinks, startQuery } from '@/lib/server/queries';
+import { getDepartmentPage } from '@/lib/server/queries';
 
-// The layout's queries run beside the page's queries, not after them.
-const navLinks = startQuery(getNavLinks());
-const departments = startQuery(getDepartments());
 const { slug } = Astro.params;
 const page = slug ? await getDepartmentPage(slug, siteUrl(Astro)) : null;
 if (!page) return new Response(null, { status: 404, statusText: 'Not Found' });
 
-const { department, carousel, posts, postCount, members, heroSections, seo } = page;
+// The layout's queries start once the Department exists (an unknown slug costs one query) and run beside the page's own.
+const { department, carousel, posts, postCount, members, heroSections, seo, navLinks, departments } = page;
 ---
 
 <PublicLayout {...seo} {navLinks} {departments}>

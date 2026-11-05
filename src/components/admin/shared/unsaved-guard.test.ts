@@ -27,14 +27,22 @@ function setup(dirty: boolean, link: URL | null = new URL('https://sic.test/admi
     const state = { dirty };
     const held: Held[] = [];
     const navigate = vi.fn(async () => {});
+    const go = vi.fn();
     const guard = createUnsavedGuard({
         isDirty: () => state.dirty,
         onHold: (h) => held.push(h),
         navigate,
         linkAt: () => link,
+        go,
+        defer: (run) => run(),
     });
-    return { state, held, navigate, guard };
+    return { state, held, navigate, go, guard };
 }
+
+const prepared = (over: { navigationType?: string; direction?: string } = {}) => ({
+    preventDefault: vi.fn(),
+    ...over,
+});
 
 describe('isPlainPrimaryClick', () => {
     it('is the unmodified left button only', () => {
@@ -114,14 +122,74 @@ describe('unsaved guard', () => {
         expect(wasPrevented(after)).toBe(true);
     });
 
-    it('proceed re-submits a held form and keeps the guard open for the router', async () => {
+    it('proceed re-submits a held form and keeps the guard open for the router until the page settles', async () => {
         const { guard } = setup(true);
-        const requestSubmit = vi.fn();
-        const held = { closest: () => null, requestSubmit } as unknown as HTMLFormElement;
-        await guard.proceed({ form: held, submitter: null });
+        // A valid form: requestSubmit fires its submit event, which the guard lets through to the router.
+        const requestSubmit = vi.fn((_submitter: HTMLElement | null) => {
+            const event = submit(target);
+            guard.submit(event);
+            expect(wasPrevented(event)).toBe(false);
+        });
+        const target = { closest: () => null, requestSubmit } as unknown as HTMLFormElement;
+        await guard.proceed({ form: target, submitter: null });
         expect(requestSubmit).toHaveBeenCalledWith(null);
-        const prep = { preventDefault: vi.fn() };
+        const during = prepared();
+        guard.preparation(during);
+        expect(wasPrevented(during)).toBe(false);
+
+        guard.settled();
+        const after = prepared();
+        guard.preparation(after);
+        expect(wasPrevented(after)).toBe(true);
+    });
+
+    it('a held form the browser refuses to submit leaves the page guarded', async () => {
+        const { guard } = setup(true);
+        // An invalid form: requestSubmit fires no submit event.
+        await guard.proceed({ form: form(), submitter: null });
+        const prep = prepared();
         guard.preparation(prep);
-        expect(wasPrevented(prep)).toBe(false);
+        expect(wasPrevented(prep)).toBe(true);
+        const unload = { preventDefault: vi.fn() } as unknown as BeforeUnloadEvent;
+        guard.beforeUnload(unload);
+        expect(wasPrevented(unload)).toBe(true);
+    });
+
+    it('does not ask the browser to confirm a navigation the user already discarded', async () => {
+        const { guard, navigate } = setup(true);
+        const during = { preventDefault: vi.fn() } as unknown as BeforeUnloadEvent;
+        navigate.mockImplementation(async () => guard.beforeUnload(during));
+        await guard.proceed({ href: 'https://sic.test/admin/posts' });
+        expect(wasPrevented(during)).toBe(false);
+    });
+
+    it('puts the history back when a Back or Forward is held, and swallows that step’s popstate', () => {
+        const { guard, go } = setup(true);
+        const back = prepared({ navigationType: 'traverse', direction: 'back' });
+        guard.preparation(back);
+        expect(wasPrevented(back)).toBe(true);
+        expect(go).toHaveBeenLastCalledWith(1);
+        const own = { stopImmediatePropagation: vi.fn() };
+        guard.popstate(own);
+        expect(own.stopImmediatePropagation).toHaveBeenCalledTimes(1);
+        // Only the guard's own step is swallowed; a later popstate belongs to the router.
+        const later = { stopImmediatePropagation: vi.fn() };
+        guard.popstate(later);
+        expect(later.stopImmediatePropagation).not.toHaveBeenCalled();
+
+        guard.preparation(prepared({ navigationType: 'traverse', direction: 'forward' }));
+        expect(go).toHaveBeenLastCalledWith(-1);
+        expect(go).toHaveBeenCalledTimes(2);
+    });
+
+    it('leaves the history alone for pushes, clean pages and unknown directions', () => {
+        const { guard, go, state } = setup(true);
+        guard.preparation(prepared({ navigationType: 'push', direction: 'forward' }));
+        guard.preparation(prepared({ navigationType: 'traverse' }));
+        state.dirty = false;
+        const clean = prepared({ navigationType: 'traverse', direction: 'back' });
+        guard.preparation(clean);
+        expect(wasPrevented(clean)).toBe(false);
+        expect(go).not.toHaveBeenCalled();
     });
 });

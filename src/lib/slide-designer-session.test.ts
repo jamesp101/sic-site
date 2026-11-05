@@ -22,8 +22,6 @@ function slide(id: number, layers: Layer[] = [], extra: Partial<DesignerSlide> =
         id,
         imageUrl: `/img/${id}.webp`,
         title: null,
-        subtitle: null,
-        linkUrl: null,
         order: id,
         departmentId: null,
         showOnMain: true,

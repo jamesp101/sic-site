@@ -4,7 +4,7 @@ import { parseVideoUrl } from '../blocks/urls';
 import { parseOverlay, parseOverlayDocument } from '../carousel-overlay-schema';
 import { db } from './db';
 import { youtubeWatchUrl } from './slides';
-import { headUpload, keyFromPublicUrl, publicUrl, read, videoKeyFromUrl } from './storage';
+import { headUpload, keyFromPublicUrl, read, storedUrl, videoKeyFromUrl } from './storage';
 import { commitWithFiles, deleteWithFiles, type NewFile, type NewFiles } from './stored-files';
 
 /** The two video columns of a slide: an uploaded file the row owns, or a YouTube link; at most one is set. */
@@ -185,9 +185,7 @@ export async function duplicateSlide(row: CarouselItem): Promise<CarouselItem> {
                 ? serializeOverlay(
                       doc.layers.map((layer) => {
                           const copied = layer.type === 'image' ? keys[layerCopies.get(layer.src) ?? ''] : undefined;
-                          return layer.type === 'image' && copied
-                              ? { ...layer, src: publicUrl(copied) as string }
-                              : layer;
+                          return layer.type === 'image' && copied ? { ...layer, src: storedUrl(copied) } : layer;
                       }),
                       doc.mobile,
                   )

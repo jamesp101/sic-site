@@ -3,6 +3,7 @@
  * Admin-scoped routes, the Admin scope with the Departments the switcher offers. The middleware only assigns the
  * result. Free of `astro:*` imports.
  */
+import { cookieValue } from '../cookie-header';
 import { parseScope, resolveScope, SCOPE_COOKIE, type AdminScope } from './admin-scope';
 import { getSession } from './auth-session';
 import { isSuperAdmin } from './authz';
@@ -34,20 +35,6 @@ export const ANONYMOUS_CONTEXT: RequestContext = {
     adminDepartments: [],
 };
 
-function cookieValue(headers: Headers, name: string): string | undefined {
-    for (const part of (headers.get('cookie') ?? '').split(';')) {
-        const separator = part.indexOf('=');
-        if (separator === -1 || part.slice(0, separator).trim() !== name) continue;
-        const raw = part.slice(separator + 1).trim();
-        try {
-            return decodeURIComponent(raw);
-        } catch {
-            return raw;
-        }
-    }
-    return undefined;
-}
-
 /**
  * Reads the session named by the request's cookie and, when `scoped` (a `/dashboard`, `/admin` or `/settings`
  * route), validates the `admin_scope` cookie against the Departments: unknown ids fall back to `all`, a Department
@@ -78,7 +65,7 @@ export async function resolveRequestContext(
     return {
         user,
         session: found.session,
-        adminScope: resolveScope(user, parseScope(cookieValue(headers, SCOPE_COOKIE)), adminDepartments),
+        adminScope: resolveScope(user, parseScope(cookieValue(headers.get('cookie'), SCOPE_COOKIE)), adminDepartments),
         adminDepartments,
     };
 }

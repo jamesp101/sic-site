@@ -17,7 +17,7 @@ export const RATE_LIMITS = {
     contact: { max: 5, window: 60 * 60 },
     /** Uploads that are not yet attached to a record (inline images, layer images, presigned URLs), per user. */
     upload: { max: 60, window: 10 * 60 },
-    /** Failed password sign-ins (`/api/auth/sign-in/email`, `/login`) per normalised email and client IP: the hard block. */
+    /** Password sign-in attempts that stay failed (`/api/auth/sign-in/email`, `/login`) per normalised email and client IP: the hard block. */
     signInFailuresPerIp: { max: 10, window: 15 * 60 },
     /**
      * Failed password sign-ins per normalised email whatever the client IP: a backstop against guessing spread over
@@ -33,15 +33,7 @@ export const RATE_LIMITS = {
  */
 export async function consumeRateLimit(key: string, rule: RateLimitRule, now = Date.now()): Promise<boolean> {
     const rowKey = `app:${key}`;
-    const existing = await db.rateLimit.findUnique({ where: { key: rowKey }, select: { id: true } });
-    if (!existing) {
-        try {
-            await db.rateLimit.create({ data: { key: rowKey, count: 0, lastRequest: BigInt(now) } });
-        } catch (error) {
-            // A concurrent request created the row first.
-            if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
-        }
-    }
+    await ensureCounter(rowKey, now);
     // `lastRequest` holds the start of the current window; restart it once it has elapsed.
     await db.rateLimit.updateMany({
         where: { key: rowKey, lastRequest: { lte: BigInt(now - rule.window * 1000) } },
@@ -69,15 +61,6 @@ export async function sweepExpiredRateLimits(now = Date.now()): Promise<number> 
     return count;
 }
 
-/** True when `key` already used up `rule` in its current window. Counts nothing. */
-async function isRateLimited(key: string, rule: RateLimitRule, now: number): Promise<boolean> {
-    const row = await db.rateLimit.findUnique({
-        where: { key: `app:${key}` },
-        select: { count: true, lastRequest: true },
-    });
-    return row !== null && row.lastRequest > BigInt(now - rule.window * 1000) && row.count >= rule.max;
-}
-
 /** Hashed so the key always fits the column and no address is stored. The email is trimmed and lower-cased, so spelling variants share a counter. */
 const signInKey = (email: string, clientIp?: string) => {
     const normalised = email.trim().toLowerCase();
@@ -85,21 +68,59 @@ const signInKey = (email: string, clientIp?: string) => {
     return `signin:${clientIp === undefined ? 'email' : 'ip'}:${digest.digest('hex')}`;
 };
 
-/**
- * True when this email may not be tried from this address now: it already failed too often from there, or too
- * often overall. Counts nothing, so a refused attempt adds no failure; a correct password from another address
- * still works while that address has not used up its own failures.
- */
-export async function isSignInBlocked(email: string, clientIp: string, now = Date.now()): Promise<boolean> {
-    const [perIp, perEmail] = await Promise.all([
-        isRateLimited(signInKey(email, clientIp), RATE_LIMITS.signInFailuresPerIp, now),
-        isRateLimited(signInKey(email), RATE_LIMITS.signInFailuresPerEmail, now),
-    ]);
-    return perIp || perEmail;
+/** Creates the counter row for `rowKey` unless it exists; a concurrent creator winning the race is fine. */
+async function ensureCounter(rowKey: string, now: number): Promise<void> {
+    if (await db.rateLimit.findUnique({ where: { key: rowKey }, select: { id: true } })) return;
+    try {
+        await db.rateLimit.create({ data: { key: rowKey, count: 0, lastRequest: BigInt(now) } });
+    } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
+    }
 }
 
-/** Counts one failed sign-in of `email` from `clientIp` against both limits. */
-export async function recordSignInFailure(email: string, clientIp: string, now = Date.now()): Promise<void> {
-    await consumeRateLimit(signInKey(email, clientIp), RATE_LIMITS.signInFailuresPerIp, now);
-    await consumeRateLimit(signInKey(email), RATE_LIMITS.signInFailuresPerEmail, now);
+/**
+ * Takes one slot of `rule` for `key` in a single conditional update (`count < max`), so concurrent callers can
+ * never take more than `max` between them. Returns false, taking nothing, when the window is full.
+ */
+async function claimSlot(key: string, rule: RateLimitRule, now: number): Promise<boolean> {
+    const rowKey = `app:${key}`;
+    await ensureCounter(rowKey, now);
+    await db.rateLimit.updateMany({
+        where: { key: rowKey, lastRequest: { lte: BigInt(now - rule.window * 1000) } },
+        data: { count: 0, lastRequest: BigInt(now) },
+    });
+    const { count } = await db.rateLimit.updateMany({
+        where: { key: rowKey, count: { lt: rule.max } },
+        data: { count: { increment: 1 } },
+    });
+    return count === 1;
+}
+
+/** Gives back one slot taken with `claimSlot` in the same window (never below zero). */
+async function refundSlot(key: string, rule: RateLimitRule, now: number): Promise<void> {
+    await db.rateLimit.updateMany({
+        where: { key: `app:${key}`, count: { gt: 0 }, lastRequest: { gt: BigInt(now - rule.window * 1000) } },
+        data: { count: { decrement: 1 } },
+    });
+}
+
+/**
+ * Counts a password sign-in attempt of `email` from `clientIp` against both limits before the password is
+ * checked, atomically: returns false (and counts nothing) when either the per-address or the per-email limit is
+ * already full, so a burst of parallel guesses cannot exceed it. A correct password is refunded with
+ * `refundSignInAttempt`, so only failures stay counted. The hard block is per email and address (one address
+ * cannot lock a User out for everyone); the high per-email ceiling backstops guessing spread over many addresses.
+ */
+export async function claimSignInAttempt(email: string, clientIp: string, now = Date.now()): Promise<boolean> {
+    const ipKey = signInKey(email, clientIp);
+    if (!(await claimSlot(ipKey, RATE_LIMITS.signInFailuresPerIp, now))) return false;
+    if (await claimSlot(signInKey(email), RATE_LIMITS.signInFailuresPerEmail, now)) return true;
+    await refundSlot(ipKey, RATE_LIMITS.signInFailuresPerIp, now);
+    return false;
+}
+
+/** Gives back the attempt taken by `claimSignInAttempt` (the sign-in succeeded). */
+export async function refundSignInAttempt(email: string, clientIp: string, now = Date.now()): Promise<void> {
+    await refundSlot(signInKey(email, clientIp), RATE_LIMITS.signInFailuresPerIp, now);
+    await refundSlot(signInKey(email), RATE_LIMITS.signInFailuresPerEmail, now);
 }

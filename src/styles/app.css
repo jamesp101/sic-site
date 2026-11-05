@@ -245,4 +245,10 @@
     :where(h1, h2, h3, h4) {
         break-after: avoid;
     }
+    /* Closed accordions print open; scripts/print-details.ts does the same where this pseudo-element is unknown. */
+    details::details-content {
+        content-visibility: visible;
+        display: block;
+        block-size: auto;
+    }
 }

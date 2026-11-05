@@ -8,7 +8,7 @@ import { parseVideoUrl } from '@/lib/blocks/urls';
 import type { DesignerSlide } from '@/lib/designer-slide';
 import { slideDocument } from '@/lib/carousel-overlay-schema';
 import { db } from './db';
-import { publicUrl, variantUrl } from './storage';
+import { publicUrl, storedUrl, variantUrl } from './storage';
 import { SLIDE_WIDTH } from './storage/variants';
 
 /** Canonical watch URL a YouTube slide video is stored under. */
@@ -48,7 +48,7 @@ export async function findSlides(where: Prisma.CarouselItemWhereInput): Promise<
         const doc = slideDocument(row);
         return {
             id: row.id,
-            imageUrl: slideImageUrl(row.imagePath),
+            imageUrl: storedUrl(row.imagePath),
             imageMediumUrl: variantUrl(row.imagePath, SLIDE_WIDTH),
             layers: doc.layers,
             mobile: doc.mobile,
@@ -57,20 +57,13 @@ export async function findSlides(where: Prisma.CarouselItemWhereInput): Promise<
     });
 }
 
-/** The one Slide image rule for the public Carousel and the designer: stored key → URL; an unmappable value stays as stored. */
-export function slideImageUrl(imagePath: string): string {
-    return publicUrl(imagePath) ?? imagePath;
-}
-
 export function toDesignerSlide(row: CarouselItem): DesignerSlide {
     const doc = slideDocument(row);
     const video = slideVideoView(row);
     return {
         id: row.id,
-        imageUrl: slideImageUrl(row.imagePath),
+        imageUrl: storedUrl(row.imagePath),
         title: row.title,
-        subtitle: row.subtitle,
-        linkUrl: row.linkUrl,
         order: row.order,
         departmentId: row.departmentId,
         showOnMain: row.showOnMain,

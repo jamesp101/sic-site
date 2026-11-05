@@ -4,9 +4,11 @@ import { describe, expect, test } from 'vite-plus/test';
 import {
     FRAME_ASPECT_CLASS,
     HERO_HEIGHT,
+    HERO_PHONE_IMAGE_WIDTH,
     PHONE_FRAME,
     PHONE_MAX_REM,
     WIDE_MIN_REM,
+    heroImageSizes,
     layerPresentation,
     measureLayerBox,
     measureLayerBoxes,
@@ -49,6 +51,18 @@ describe('slide-layout.css agrees with the layout module', () => {
             )
             .map((file) => file.slice(src.length));
         expect(offenders).toEqual([]);
+    });
+});
+
+describe('hero image sizes', () => {
+    test('a phone hero draws the 16:9 photo as wide as its height requires', () => {
+        // 500 px tall at 16:9 is 888.9 px; 400 px tall is 711.1 px.
+        expect(HERO_PHONE_IMAGE_WIDTH).toEqual({ tall: 889, short: 712 });
+    });
+
+    test('sizes switch from the phone width to the viewport at the phone breakpoint', () => {
+        expect(heroImageSizes(true)).toBe('(max-width: 39.99rem) 889px, 100vw');
+        expect(heroImageSizes(false)).toBe('(max-width: 39.99rem) 712px, 100vw');
     });
 });
 

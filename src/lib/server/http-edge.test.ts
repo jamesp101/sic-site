@@ -1,5 +1,5 @@
 import { brotliDecompressSync, gunzipSync } from 'node:zlib';
-import { describe, expect, it } from 'vite-plus/test';
+import { describe, expect, it, vi } from 'vite-plus/test';
 import { etagMatches, finishResponse, isNotModified, MIN_COMPRESS_BYTES, objectEtag, pickEncoding } from './http-edge';
 
 const HTML = `<!doctype html><html><body>${'<p>San Isidro College</p>'.repeat(200)}</body></html>`;
@@ -195,5 +195,28 @@ describe('finishResponse', () => {
 
         const post = page(HTML);
         expect(await finishResponse(post, get('/', accept, 'POST'))).toBe(post);
+    });
+});
+
+describe('client disconnect', () => {
+    it.each(['br', 'gzip'] as const)('cancelling the %s output cancels the source stream', async (encoding) => {
+        let cancelled = false;
+        const chunk = new TextEncoder().encode('<p>San Isidro College</p>'.repeat(100));
+        const source = new ReadableStream<Uint8Array>({
+            pull(controller) {
+                controller.enqueue(chunk);
+            },
+            cancel() {
+                cancelled = true;
+            },
+        });
+        const response = new Response(source, {
+            headers: { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' },
+        });
+        const out = await finishResponse(response, get('/admin', { 'accept-encoding': encoding }));
+        const reader = out.body!.getReader();
+        await reader.read();
+        await reader.cancel();
+        await vi.waitFor(() => expect(cancelled).toBe(true));
     });
 });

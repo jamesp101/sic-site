@@ -234,7 +234,7 @@ test.describe('visual block editor (superadmin)', () => {
         await editorReady(page);
 
         await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
-        const dialog = page.getByRole('dialog');
+        const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
         await expect(dialog.getByRole('heading', { name: 'Keyboard shortcuts' })).toBeVisible();
         await expect(dialog.getByText('Duplicate the selected element')).toBeVisible();
         await page.keyboard.press('Escape');
@@ -359,8 +359,8 @@ test.describe('unsaved changes guard (superadmin)', () => {
         await page.getByLabel('Post title').fill('Unsaved draft');
         await page.getByRole('link', { name: 'Departments', exact: true }).first().click();
 
-        const dialog = page.getByRole('dialog');
-        await expect(dialog).toContainText('Discard unsaved changes?');
+        const dialog = page.getByRole('dialog', { name: 'Discard unsaved changes?' });
+        await expect(dialog).toBeVisible();
         await expect(page).toHaveURL(/\/admin\/posts\/create/);
         await dialog.getByRole('button', { name: 'Keep editing' }).click();
         await expect(dialog).toBeHidden();
@@ -369,5 +369,49 @@ test.describe('unsaved changes guard (superadmin)', () => {
         await page.getByRole('link', { name: 'Departments', exact: true }).first().click();
         await page.getByRole('dialog').getByRole('button', { name: 'Discard' }).click();
         await expect(page).toHaveURL(/\/admin\/departments/);
+    });
+
+    /** Opens the first Post's edit page from the list (a client-side navigation) and changes its title. */
+    async function editFirstPost(page: Page) {
+        await page.goto('/admin/posts');
+        await page.locator('a[href^="/admin/posts/"][href$="/edit"]').first().click();
+        await expect(page).toHaveURL(/\/admin\/posts\/\d+\/edit$/);
+        await editorReady(page);
+        await page.getByLabel('Post title').fill('Unsaved edit');
+        return page.url();
+    }
+
+    test('Back from a changed post asks once; Keep editing leaves the URL on the edit page', async ({ page }) => {
+        const editUrl = await editFirstPost(page);
+        const asked: string[] = [];
+        page.on('dialog', (dialog) => {
+            asked.push(dialog.type());
+            void dialog.dismiss();
+        });
+        await page.evaluate(() => history.back());
+        await expect.poll(() => asked).toEqual(['beforeunload']);
+        // The browser went back before it asked; the guard puts the history entry back.
+        await expect.poll(() => page.url()).toBe(editUrl);
+        await expect(page.getByLabel('Post title')).toHaveValue('Unsaved edit');
+
+        // Still guarded afterwards: Back asks again, and leaving goes to the list.
+        page.removeAllListeners('dialog');
+        page.once('dialog', (dialog) => void dialog.accept());
+        await page.evaluate(() => history.back());
+        await expect(page).toHaveURL(/\/admin\/posts$/);
+    });
+
+    test('Discard on a link to a public page does not make the browser ask a second time', async ({ page }) => {
+        await editFirstPost(page);
+        // The public site is a full page load, which is where `beforeunload` would ask again.
+        let asked = 0;
+        page.on('dialog', (dialog) => {
+            asked++;
+            void dialog.dismiss();
+        });
+        await page.getByRole('link', { name: 'View site' }).first().click();
+        await page.getByRole('dialog').getByRole('button', { name: 'Discard' }).click();
+        await expect(page).toHaveURL(/\/$/);
+        expect(asked).toBe(0);
     });
 });

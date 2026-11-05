@@ -1,11 +1,10 @@
 import { defineMiddleware } from 'astro:middleware';
 import { ANONYMOUS_CONTEXT, resolveRequestContext } from '@/lib/server/request-context';
-import { STAFF_HINT_COOKIE, STAFF_HINT_MAX_AGE } from '@/lib/staff-hint';
+import { STAFF_HINT_COOKIE, STAFF_HINT_MAX_AGE, staffHintAction } from '@/lib/staff-hint';
 import { finishResponse } from '@/lib/server/http-edge';
 import {
     anonymousActionResponse,
     isAssetPath,
-    isPublicPage,
     isScopedPath,
     loginRedirect,
     payloadTooLargeResponse,
@@ -30,22 +29,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
     context.locals.adminScope = request.adminScope;
     context.locals.adminDepartments = request.adminDepartments;
 
-    // Value-free hint for scripts (the session cookie is httpOnly). Set only on signed-in (no-store) responses and
-    // cleared only on private ones, so a shared cache never stores a Set-Cookie.
-    if (!isAsset) {
-        const hinted = context.cookies.has(STAFF_HINT_COOKIE);
-        if (context.locals.user && !hinted) {
-            context.cookies.set(STAFF_HINT_COOKIE, '1', {
-                path: '/',
-                sameSite: 'lax',
-                secure: context.site?.protocol === 'https:',
-                maxAge: STAFF_HINT_MAX_AGE,
-            });
-        } else if (!context.locals.user && hinted && !isPublicPage(pathname)) {
-            context.cookies.delete(STAFF_HINT_COOKIE, { path: '/' });
-        }
-    }
-
     // Before anything reads the body: a signed-out visitor never reaches an action (or its multipart parser),
     // and never makes the server take a large body.
     const signedIn = context.locals.user !== null;
@@ -69,6 +52,24 @@ export const onRequest = defineMiddleware(async (context, next) => {
         hasContentSecurityPolicy: response.headers.has('Content-Security-Policy'),
     });
     for (const [name, value] of Object.entries(headers)) response.headers.set(name, value);
+
+    // Value-free hint for scripts (the session cookie is httpOnly), decided on the final response: set or cleared
+    // only on a no-store one, so a shared cache never stores a Set-Cookie.
+    if (!isAsset) {
+        const action = staffHintAction({
+            signedIn,
+            hinted: context.cookies.has(STAFF_HINT_COOKIE),
+            cacheControl: response.headers.get('Cache-Control'),
+        });
+        if (action === 'set') {
+            context.cookies.set(STAFF_HINT_COOKIE, '1', {
+                path: '/',
+                sameSite: 'lax',
+                secure: context.site?.protocol === 'https:',
+                maxAge: STAFF_HINT_MAX_AGE,
+            });
+        } else if (action === 'delete') context.cookies.delete(STAFF_HINT_COOKIE, { path: '/' });
+    }
     if (edgeResponses)
         response = await finishResponse(response, { request: context.request, pathname: context.url.pathname });
     return response;

@@ -13,7 +13,7 @@ import { isSuperAdmin, type Actor } from './authz';
 import { db } from './db';
 import { getDepartments } from './queries';
 import { textContains } from './search';
-import { downloadUrl, publicUrl } from './storage';
+import { downloadUrl, storedUrl } from './storage';
 
 /** The Directory of a Download stored without one. */
 export const DEFAULT_DIRECTORY = 'General';
@@ -92,7 +92,7 @@ export function downloadFacts(row: { filePath: string; fileName: string }): {
     kind: DownloadView['kind'];
 } {
     const extension = extensionOf(row.filePath) || extensionOf(row.fileName);
-    return { url: publicUrl(row.filePath) ?? row.filePath, extension, kind: fileKind(extension) };
+    return { url: storedUrl(row.filePath), extension, kind: fileKind(extension) };
 }
 
 async function listDownloads(filters: Pick<DownloadFilters, 'search' | 'departmentId'>): Promise<DownloadView[]> {

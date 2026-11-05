@@ -5,8 +5,6 @@ export interface DesignerSlide {
     id: number;
     imageUrl: string;
     title: string | null;
-    subtitle: string | null;
-    linkUrl: string | null;
     order: number;
     departmentId: number | null;
     showOnMain: boolean;

@@ -7,7 +7,7 @@
 
     let { class: className = '', children }: { class?: string; children?: Snippet } = $props();
 
-    const { open, setOpen } = getContext<DialogContext>(DIALOG_CONTEXT);
+    const { open, setOpen, titleId, descriptionId, hasDescription } = getContext<DialogContext>(DIALOG_CONTEXT);
 
     const close = () => setOpen(false);
 </script>
@@ -28,6 +28,8 @@
             )}
             role="dialog"
             aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={hasDescription() ? descriptionId : undefined}
             tabindex="-1"
             use:focusScope
         >

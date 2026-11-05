@@ -8,16 +8,14 @@ import { hasAlbum } from '@/lib/blocks/content';
 import { formatDate, formatDateRange } from '@/lib/format';
 import { siteUrl } from '@/lib/seo';
 import { departmentHref } from '@/lib/site-nav';
-import { getDepartments, getNavLinks, getPostPage, startQuery } from '@/lib/server/queries';
+import { getPostPage } from '@/lib/server/queries';
 
-// The layout's queries run beside the page's query, not after it.
-const navLinks = startQuery(getNavLinks());
-const departments = startQuery(getDepartments());
 const { slug } = Astro.params;
 const page = slug ? await getPostPage(slug, siteUrl(Astro)) : null;
 if (!page) return new Response(null, { status: 404, statusText: 'Not Found' });
 
-const { post, related, seo } = page;
+// The layout's queries start once the Post exists (an unknown slug costs one query) and run beside the related Posts.
+const { post, related, seo, navLinks, departments } = page;
 const hasEventDates = post.type === 'event' && post.startDate;
 ---
 

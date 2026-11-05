@@ -2,6 +2,7 @@
   import { ChevronLeft, ChevronRight, Pause, Play } from '@lucide/svelte';
   import { onMount, tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
+  import { heroImageSizes } from '@/lib/carousel-layout';
   import { readingOrder } from '@/lib/carousel-overlay';
   import { resolveMobile, slideFocus } from '@/lib/carousel-overlay-mobile';
   import type { CarouselSlide } from '@/lib/content-types';
@@ -167,7 +168,7 @@
           srcset={slide.imageMediumUrl && (index === 0 || loaded.has(slide.id))
             ? `${slide.imageMediumUrl} 960w, ${slide.imageUrl} 1920w`
             : undefined}
-          sizes={slide.imageMediumUrl ? '100vw' : undefined}
+          sizes={slide.imageMediumUrl ? heroImageSizes(tall) : undefined}
           alt=""
           width="1920"
           height="1080"

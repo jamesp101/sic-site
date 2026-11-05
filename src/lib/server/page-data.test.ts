@@ -71,8 +71,19 @@ describe('getHomeData', () => {
 });
 
 describe('getDepartmentPage', () => {
-    it('is null for an unknown Department', async () => {
+    it('is null for an unknown Department and has run no layout query for it', async () => {
+        const navLinks = vi.spyOn(db.navigationLink, 'findMany');
+        const departments = vi.spyOn(db.department, 'findMany');
         expect(await getDepartmentPage('nope', site)).toBeNull();
+        expect(navLinks).not.toHaveBeenCalled();
+        expect(departments).not.toHaveBeenCalled();
+        vi.restoreAllMocks();
+    });
+
+    it('hands over the layout queries, started once the Department was found', async () => {
+        const page = await getDepartmentPage('cit', site);
+        expect((await page!.departments).map((d) => d.name)).toContain('CIT');
+        expect(await page!.navLinks).toEqual(expect.any(Array));
     });
 
     it("reads the Department's 6 newest Posts with their total, its Slides, People and hero sections", async () => {

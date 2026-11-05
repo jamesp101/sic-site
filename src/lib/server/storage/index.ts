@@ -138,6 +138,13 @@ export function publicUrl(value: string | null | undefined): string | null {
     return directBaseUrl ? `${directBaseUrl}/${key}` : `/storage/${key}`;
 }
 
+/** The public URL of a non-empty stored key (`publicUrl` for a column that always holds one); throws on an empty key. */
+export function storedUrl(key: string): string {
+    const url = publicUrl(key);
+    if (url === null) throw new Error('storedUrl needs a stored key');
+    return url;
+}
+
 /**
  * URL of the `width` px variant of a stored image whose kind has one (`storage/variants.ts`), else null. Always the
  * app route: it serves the original when the variant is missing (not backfilled yet, or never made), which a

@@ -134,6 +134,21 @@ describe('local driver (default)', () => {
     });
 });
 
+describe('storedUrl', () => {
+    it('is the public URL of a non-empty stored key and throws on an empty one', async () => {
+        const local = await loadStorage({ UPLOAD_DIR: dir });
+        expect(local.storedUrl('carousels/a.webp')).toBe('/storage/carousels/a.webp');
+        expect(local.storedUrl('https://example.org/x.png')).toBe('https://example.org/x.png');
+        expect(() => local.storedUrl('')).toThrow();
+        const s3 = await loadStorage({
+            STORAGE_DRIVER: 's3',
+            S3_BUCKET: 'b',
+            S3_PUBLIC_URL: 'https://cdn.example.org',
+        });
+        expect(s3.storedUrl('carousels/a.webp')).toBe('https://cdn.example.org/carousels/a.webp');
+    });
+});
+
 describe('driver selection', () => {
     it('rejects unknown drivers', async () => {
         await expect(loadStorage({ STORAGE_DRIVER: 'ftp' })).rejects.toThrow('Unsupported STORAGE_DRIVER "ftp"');

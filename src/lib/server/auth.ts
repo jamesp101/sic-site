@@ -8,7 +8,7 @@ import { db, dbProvider } from './db';
 import { sendMail } from './mail';
 import { resetPasswordMessage, verifyEmailMessage } from './mail-messages';
 import { hashPassword, verifyPassword } from './password';
-import { isSignInBlocked, recordSignInFailure } from './rate-limit';
+import { claimSignInAttempt, refundSignInAttempt } from './rate-limit';
 
 export const CLIENT_IP_HEADER = 'x-sic-client-ip';
 
@@ -68,19 +68,21 @@ export const auth = betterAuth({
     basePath: '/api/auth',
     disabledPaths: DISABLED_PATHS,
     hooks: {
-        // Only failed sign-ins count (after hook below), so a correct password never adds to a lockout and a
-        // refused attempt adds nothing more. The hard block is per email and client IP, so one address cannot lock
-        // a User out for everyone; a high per-email ceiling backstops guessing spread over many addresses. Runs for
-        // every sign-in, whether posted by the login form's fetch or by `/login` (auth-session.ts).
+        // Each sign-in takes a slot atomically before the password is checked (`claimSignInAttempt`), so parallel
+        // guesses cannot exceed the limit; a correct password gives it back, so only failures stay counted and a
+        // refused attempt adds nothing more. The hard block is per email and client IP; a high per-email ceiling
+        // backstops guessing spread over many addresses. Runs for every sign-in, whether posted by the login
+        // form's fetch or by `/login` (auth-session.ts).
         before: createAuthMiddleware(async (ctx) => {
             const attempt = signInAttempt(ctx);
-            if (attempt && (await isSignInBlocked(attempt.email, attempt.clientIp))) {
+            if (attempt && !(await claimSignInAttempt(attempt.email, attempt.clientIp))) {
                 throw new APIError('TOO_MANY_REQUESTS', { message: 'Too many attempts. Please try again later.' });
             }
         }),
         after: createAuthMiddleware(async (ctx) => {
             const attempt = signInAttempt(ctx);
-            if (attempt && isAPIError(ctx.context.returned)) await recordSignInFailure(attempt.email, attempt.clientIp);
+            if (attempt && !isAPIError(ctx.context.returned))
+                await refundSignInAttempt(attempt.email, attempt.clientIp);
         }),
     },
     database: prismaAdapter(db, { provider: dbProvider }),

@@ -7,7 +7,7 @@ import type { ImageTargetName } from '@/lib/image-compress';
 import { imageFile, storedImage } from './image-file';
 import { assertUploadQuota } from './rate-limit';
 import { RequestError } from './request-error';
-import { LIMITS, publicUrl, put, type StoragePrefix } from './storage';
+import { LIMITS, put, storedUrl, type StoragePrefix } from './storage';
 
 /** Intake kinds: the image target (also the browser's compression box) and where the file is stored. Layer images stay under `carousels/` so `unusedLayerImageKeys` finds them. */
 export const IMAGE_INTAKES = {
@@ -35,5 +35,5 @@ export async function acceptImage(
     const parsed = await imageFile(LIMITS.image, target).safeParseAsync(raw);
     if (!parsed.success) throw new RequestError('BAD_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid image.');
     const key = await put(prefix, await storedImage(parsed.data));
-    return { key, url: publicUrl(key) as string };
+    return { key, url: storedUrl(key) };
 }
