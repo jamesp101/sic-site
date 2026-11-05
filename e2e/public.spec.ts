@@ -87,10 +87,22 @@ test('page sections line up with the header container on wide screens', async ({
             });
         const sections = page.locator('main section[data-content-section] > div');
         expect(await sections.count(), path).toBeGreaterThan(0);
-        for (const left of await sections.evaluateAll((els) =>
-            els.map((el) => el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft)),
+        for (const box of await sections.evaluateAll((els) =>
+            els.map((el) => {
+                const style = getComputedStyle(el);
+                const rect = el.getBoundingClientRect();
+                const content = el.lastElementChild!.getBoundingClientRect();
+                return {
+                    left: rect.left + parseFloat(style.paddingLeft),
+                    innerWidth: rect.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+                    contentWidth: content.width,
+                };
+            }),
         )) {
-            expect(Math.abs(left - headerLeft), path).toBeLessThan(1);
+            expect(Math.abs(box.left - headerLeft), path).toBeLessThan(1);
+            // The reading measure applies per text element, never to the whole content, so grids, cards and
+            // centred text span (and centre on) the full container.
+            expect(Math.abs(box.contentWidth - box.innerWidth), path).toBeLessThan(1);
         }
     }
 });

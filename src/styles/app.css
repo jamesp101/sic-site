@@ -169,7 +169,12 @@
         margin-top: 0;
     }
     /* 65-75 characters per line; centred or right-aligned text keeps its side. */
-    [data-sic-blocks] > :is(p, ul, ol, blockquote) {
+    [data-sic-blocks] > :is(p, ul, ol, blockquote),
+    [data-markdown] > :is(p, ul, ol, blockquote) {
+        max-width: 70ch;
+    }
+    /* Legacy Markdown <Center> wraps its text in a centred flex column. */
+    [data-markdown] > .text-center > :is(p, ul, ol) {
         max-width: 70ch;
     }
     [data-sic-blocks] > :is(p, ul, ol, blockquote):is(.text-center) {
