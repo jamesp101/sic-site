@@ -1,7 +1,8 @@
 /**
  * Admin scope: the department context chosen in the sidebar switcher.
  * Free of `astro:*` imports so it is unit-testable. `departmentWhere` is the only way to turn
- * (actor, scope) into a list filter: the actor's restriction always wins over the scope.
+ * (actor, scope) into a list filter and `listWhere` the only way to add more conditions to it: the
+ * actor's restriction always wins over the scope and over any search or filter.
  */
 import { isSuperAdmin, type Actor } from './authz';
 
@@ -54,7 +55,8 @@ export interface DepartmentWhere {
  * The one list filter for (actor, admin scope). Department users always get their own department
  * (the scope is ignored for them, so no scope value can widen or move it); superadmins get what the
  * scope selects (`main` = rows with no department). `includeGeneral` also matches rows with no
- * department (shared download folders); it adds an `OR`, so do not spread another `OR` over it.
+ * department (shared download folders); it adds an `OR`, so combine it with other conditions only
+ * through `listWhere`.
  */
 export function departmentWhere(
     actor: Actor,
@@ -67,6 +69,20 @@ export function departmentWhere(
     if (scope.kind === 'main') return { departmentId: null };
     if (scope.kind === 'department') return only(scope.id);
     return {};
+}
+
+/**
+ * `departmentWhere` plus extra list conditions (search, type, flags), combined with `AND` so none of
+ * them, including an `OR` search, can overwrite or widen the actor's restriction. Empty filters are skipped.
+ */
+export function listWhere<F extends object>(
+    actor: Actor,
+    scope: AdminScope,
+    filters: readonly (F | '' | null | undefined | false)[],
+    options: { includeGeneral?: boolean } = {},
+): { AND: (DepartmentWhere | F)[] } {
+    const extra = filters.filter((f): f is F => !!f && Object.keys(f).length > 0);
+    return { AND: [departmentWhere(actor, scope, options), ...extra] };
 }
 
 /** Human label used by the switcher and page indicators. */

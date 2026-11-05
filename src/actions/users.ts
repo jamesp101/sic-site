@@ -3,7 +3,7 @@ import { z } from 'astro/zod';
 import { db } from '@/lib/server/db';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { AuthzError, requireSuperAdmin } from '@/lib/server/authz';
-import { assertDepartmentExists } from '@/lib/server/department-access';
+import { assertDepartmentExists, departmentIdField } from '@/lib/server/department-access';
 import { hashPassword } from '@/lib/server/password';
 import { deleteWithFiles } from '@/lib/server/stored-files';
 
@@ -14,7 +14,7 @@ const base = {
         .max(255)
         .transform((value) => value.trim().toLowerCase()),
     role: z.enum(['superadmin', 'department_user'], { error: 'Choose a role.' }),
-    departmentId: z.number().int().nullable().optional(),
+    departmentId: departmentIdField,
 };
 
 type Draft = { role: 'superadmin' | 'department_user'; departmentId?: number | null };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { renderContent } from './content';
 import { createBlock, createDocument, serializeDocument } from './document';
-import { renderBlocks, renderDocument } from './render';
+import { renderBlocks } from './render';
 import type { Block } from './types';
 
 const render = (block: Block, options?: { editor?: boolean }) => renderBlocks([block], options);
@@ -13,7 +13,6 @@ const YOUTUBE = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 describe('renderBlocks: wrapper', () => {
     it('returns an empty string when nothing renders', () => {
         expect(renderBlocks([])).toBe('');
-        expect(renderDocument(createDocument([]))).toBe('');
     });
 
     it('wraps content in the standard flow container', () => {
@@ -21,7 +20,6 @@ describe('renderBlocks: wrapper', () => {
         expect(html.startsWith('<div class="flex flex-col gap-5" data-sic-blocks>')).toBe(true);
         expect(html.endsWith('</div>')).toBe(true);
         expect(html).toContain('Hello');
-        expect(renderDocument(createDocument([createBlock('paragraph', { text: 'Hello' })]))).toContain('Hello');
     });
 });
 

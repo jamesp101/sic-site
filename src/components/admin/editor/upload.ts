@@ -51,3 +51,35 @@ export async function uploadImage(original: File): Promise<UploadedImage> {
     const { url, file } = await postImage(original, 'content');
     return { url, ...(await measure(file)) };
 }
+
+/**
+ * Uploads a Download file straight to the S3 bucket through a presigned URL (request bodies over
+ * ~4.5 MB never reach the server) and returns its stored key. `onProgress` gets 0–100. Throws an
+ * `Error` with a user-presentable message when the upload fails.
+ */
+export async function uploadDownloadDirect(file: File, onProgress?: (percent: number) => void): Promise<string> {
+    const contentType = file.type || 'application/octet-stream';
+    const issued = await fetch('/api/admin/uploads/direct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, contentType, size: file.size }),
+    });
+    const grant = (await issued.json().catch(() => null)) as { key: string; url: string; message?: string } | null;
+    if (!issued.ok || !grant?.key) throw new Error(grant?.message ?? 'Could not start the upload.');
+    // XHR rather than fetch: only XHR reports upload progress.
+    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', grant.url);
+    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
+    };
+    xhr.onload = () =>
+        xhr.status >= 200 && xhr.status < 300
+            ? resolve()
+            : reject(new Error(`The upload failed (HTTP ${xhr.status}).`));
+    xhr.onerror = () => reject(new Error('The upload failed. Check your connection and try again.'));
+    xhr.send(file);
+    await promise;
+    return grant.key;
+}

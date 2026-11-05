@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { createDocument, flatten } from './document';
-import { renderDocument } from './render';
+import { renderBlocks } from './render';
 import { validateDocument } from './schema';
 import { TEMPLATES } from './templates';
 
@@ -10,7 +10,7 @@ describe('starter templates', () => {
             const result = validateDocument(createDocument(template.create()));
             expect(result.ok).toBe(true);
             if (!result.ok) return;
-            const html = renderDocument(result.document);
+            const html = renderBlocks(result.document.blocks);
             expect(html).not.toBe('');
             expect(html).not.toContain('<h1');
         });

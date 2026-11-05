@@ -184,6 +184,8 @@ model Post {
   title              String
   slug               String    @unique
   content            String {{longtext}}
+  /// Plain text of `content` for admin and public search (kept by `searchTextOf`)
+  searchText         String    @default("") @map("search_text") {{longtext}}
   /// article | event | announcement
   type               String
   startDate          DateTime? @map("start_date")
@@ -238,6 +240,8 @@ model HeroSection {
   id           Int      @id @default(autoincrement())
   title        String?
   content      String {{longtext}}
+  /// Plain text of `content` for admin search (kept by `searchTextOf`)
+  searchText   String   @default("") @map("search_text") {{longtext}}
   order        Int      @default(0)
   isActive     Boolean  @default(true) @map("is_active")
   departmentId Int?     @map("department_id")

@@ -1,10 +1,11 @@
 import { defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
+import { searchTextOf } from '@/lib/blocks/content';
 import { POST_TYPES } from '@/lib/content-types';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { contentField } from '@/lib/server/content-field';
 import { db } from '@/lib/server/db';
-import { loadScoped, resolveWriteDepartment } from '@/lib/server/department-access';
+import { departmentIdField, loadScoped, resolveWriteDepartment } from '@/lib/server/department-access';
 import { imageFile } from '@/lib/server/image-file';
 import { uniqueSlug } from '@/lib/server/slug';
 import { LIMITS } from '@/lib/server/storage';
@@ -22,7 +23,7 @@ const fields = {
     type: z.enum(POST_TYPES as [string, ...string[]], { error: 'Choose a valid post type.' }),
     startDate: dateString,
     endDate: dateString,
-    departmentId: z.number().int().nullish(),
+    departmentId: departmentIdField,
     isFeatured: z.boolean(),
 };
 
@@ -68,6 +69,7 @@ export const posts = {
                                 title: input.title,
                                 slug,
                                 content: input.content,
+                                searchText: searchTextOf(input.content),
                                 type: input.type,
                                 startDate: toDate(input.startDate),
                                 endDate: toDate(input.endDate),
@@ -104,6 +106,7 @@ export const posts = {
                                 title: input.title,
                                 slug,
                                 content: input.content,
+                                searchText: searchTextOf(input.content),
                                 type: input.type,
                                 startDate: toDate(input.startDate),
                                 endDate: toDate(input.endDate),

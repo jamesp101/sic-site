@@ -163,6 +163,7 @@
         }
     }
 
+    // Live preview of the in-memory draft: the one allowed direct Markdown render (see AGENTS.md, Rich content).
     const previewHtml = $derived(parseMarkdown(value));
 
     const toolClass = 'rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground';

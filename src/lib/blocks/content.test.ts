@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { EXCERPT_LENGTH, excerptOf, parseContent, renderContent, toPlainText } from './content';
+import { EXCERPT_LENGTH, editableBlocks, excerptOf, parseContent, renderContent, toPlainText } from './content';
 import { createBlock, createDocument, serializeDocument } from './document';
 
 const validDocument = serializeDocument(
@@ -73,5 +73,35 @@ describe('check', () => {
     it('rejects a truncated document instead of saving it as Markdown', () => {
         const result = parseContent(truncatedDocument).check();
         expect(result.ok).toBe(false);
+    });
+});
+
+describe('editableBlocks', () => {
+    it('opens a valid document as its blocks', () => {
+        const blocks = editableBlocks(validDocument);
+        expect(blocks.map((block) => block.type)).toEqual(['heading', 'paragraph']);
+    });
+
+    it('opens an invalid but parseable document as-is so nothing is lost', () => {
+        const unknown = '{"type":"sic-blocks","version":1,"blocks":[{"id":"a","type":"nope","props":{}}]}';
+        expect(editableBlocks(unknown)).toEqual([{ id: 'a', type: 'nope', props: {} }]);
+    });
+
+    it('opens unparseable block JSON as one Markdown block with the source', () => {
+        const blocks = editableBlocks(truncatedDocument);
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({ type: 'markdown', props: { source: truncatedDocument } });
+    });
+
+    it('opens Markdown as one Markdown block', () => {
+        const blocks = editableBlocks('# Title\n\nText');
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({ type: 'markdown', props: { source: '# Title\n\nText' } });
+    });
+
+    it('opens empty and blank values as no blocks', () => {
+        expect(editableBlocks('')).toEqual([]);
+        expect(editableBlocks(null)).toEqual([]);
+        expect(editableBlocks('  \n')).toEqual([]);
     });
 });

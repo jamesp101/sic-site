@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { departmentWhere, parseScope, resolveScope, scopeDefaultDepartment, scopeLabel } from './admin-scope';
+import {
+    departmentWhere,
+    listWhere,
+    parseScope,
+    resolveScope,
+    scopeDefaultDepartment,
+    scopeLabel,
+} from './admin-scope';
 
 const admin = { id: 1, role: 'superadmin', departmentId: null };
 const cit = { id: 2, role: 'department_user', departmentId: 10 };
@@ -86,6 +93,17 @@ describe('departmentWhere', () => {
         });
         expect(departmentWhere(admin, scopes[1], { includeGeneral: true })).toEqual({ departmentId: null });
         expect(departmentWhere(admin, scopes[0], { includeGeneral: true })).toEqual({});
+    });
+
+    it('keeps the actor restriction when a search OR is added to a list filter', () => {
+        const search = { OR: [{ title: { contains: 'x' } }, { searchText: { contains: 'x' } }] };
+        for (const scope of scopes) {
+            expect(listWhere(cit, scope, [search, '', null])).toEqual({ AND: [{ departmentId: 10 }, search] });
+            expect(listWhere(cit, scope, [search], { includeGeneral: true })).toEqual({
+                AND: [{ OR: [{ departmentId: 10 }, { departmentId: null }] }, search],
+            });
+        }
+        expect(listWhere(admin, scopes[0], [false])).toEqual({ AND: [{}] });
     });
 });
 

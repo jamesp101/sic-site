@@ -231,7 +231,7 @@ export async function listPosts(
     if (filters.type) where.type = filters.type;
     if (filters.departmentId) where.departmentId = filters.departmentId;
     const search = filters.search?.trim();
-    if (search) where.OR = [{ title: textContains(search) }, { content: textContains(search) }];
+    if (search) where.OR = [{ title: textContains(search) }, { searchText: textContains(search) }];
 
     const [total, rows] = await Promise.all([
         db.post.count({ where }),

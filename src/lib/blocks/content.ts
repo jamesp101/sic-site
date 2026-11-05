@@ -11,10 +11,11 @@
  */
 import { parseMarkdown } from '../markdown';
 import { stripMarkdown } from '../markdown-strip';
-import { isBlockDocument } from './document';
+import { createBlock, isBlockDocument } from './document';
 import { documentToPlainText } from './plain-text';
-import { renderDocument } from './render';
+import { renderBlocks } from './render';
 import { parseBlockJson } from './schema';
+import type { Block } from './types';
 
 /** Longest Excerpt (characters, ellipsis included). */
 export const EXCERPT_LENGTH = 200;
@@ -64,7 +65,7 @@ export function parseContent(content: string | null | undefined): RichContent {
             format,
             html: once(() => {
                 const { result } = parsed();
-                return result.ok ? renderDocument(result.document) : '';
+                return result.ok ? renderBlocks(result.document.blocks) : '';
             }),
             text,
             excerpt: excerpt(text),
@@ -98,3 +99,25 @@ export const excerptOf = (content: string | null | undefined): string => parseCo
 
 /** Save-time gate for a content column (see `RichContent.check`). */
 export const checkContent = (content: string): ContentCheck => parseContent(content).check();
+
+/**
+ * Stored content → blocks for the editor. Empty → none; a valid block document → its blocks; a block document
+ * that fails validation but still has a `blocks` array → those blocks as-is (nothing is lost, the editor lists
+ * the issues); anything else (Markdown, unparseable block JSON) → one Markdown block holding the source.
+ */
+export function editableBlocks(content: string | null | undefined): Block[] {
+    const source = content ?? '';
+    const { format } = parseContent(source);
+    if (format === 'empty' || !source.trim()) return [];
+    if (format === 'blocks') {
+        const { raw, result } = parseBlockJson(source);
+        if (result.ok) return result.document.blocks;
+        if (typeof raw === 'object' && raw !== null && 'blocks' in raw && Array.isArray(raw.blocks)) {
+            return raw.blocks as Block[];
+        }
+    }
+    return [createBlock('markdown', { source })];
+}
+
+/** Plain text of stored content for the `searchText` column of posts and hero sections. */
+export const searchTextOf = (content: string | null | undefined): string => parseContent(content).text();

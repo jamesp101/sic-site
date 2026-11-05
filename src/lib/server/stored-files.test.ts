@@ -194,3 +194,16 @@ describe('deleteWithFiles', () => {
         expect(keys.size).toBe(0);
     });
 });
+
+describe('discardFiles', () => {
+    it('removes the keys, logs a failing removal and never throws', async () => {
+        const { keys, failing, files } = fakeStore();
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        keys.add('a');
+        keys.add('b');
+        failing.removeKeys.add('a');
+        await expect(files.discardFiles(['a', 'b', null], 'rejected upload')).resolves.toBeUndefined();
+        expect([...keys]).toEqual(['a']);
+        expect(error).toHaveBeenCalledWith('Stored file cleanup failed (rejected upload): a', expect.any(Error));
+    });
+});

@@ -30,6 +30,7 @@ Site: <http://localhost:4321>. Seeded logins: `admin@sic.edu.ph` (superadmin), `
 | New migration after editing `prisma/schema.base.prisma`                                                        | `vp run db:migrate`                                       |
 | Apply migrations / seed / reset                                                                                | `vp run db:deploy` / `vp run db:seed` / `vp run db:reset` |
 | Sample schools: 5 departments, 20 posts and 7–15 members each (recreate: `tsx prisma/seed-schools.ts --reset`) | `vp run db:seed:schools`                                  |
+| Recompute post / hero-section search text (once after `db:deploy` added `search_text`)                         | `vp run db:backfill-search`                               |
 | Create or reset a superadmin                                                                                   | `ADMIN_EMAIL=… ADMIN_NAME=… vp run db:create-admin`       |
 | Prisma Studio                                                                                                  | `vp run db:studio`                                        |
 
@@ -40,6 +41,7 @@ Site: <http://localhost:4321>. Seeded logins: `admin@sic.edu.ph` (superadmin), `
 - Edit `prisma/schema.base.prisma` only. `scripts/prisma-schema.mjs` renders the gitignored `prisma/schema.prisma` with the provider taken from `DATABASE_URL` (`file:` → sqlite, `mysql://`/`mariadb://` → mysql, `postgres(ql)://` → postgresql) and runs on install and every `db:*` task.
 - Runtime picks the matching driver adapter (`src/lib/server/db.ts`): better-sqlite3, mariadb or pg.
 - Migrations are provider-specific: `prisma/migrations/<provider>/`. Switching provider = set `DATABASE_URL`, then `vp run db:migrate` to create that provider's baseline.
+- `posts.search_text` and `hero_sections.search_text` hold the plain text of `content` for search and are filled on save. Deploy note: after `prisma migrate deploy` applies `search_text`, run `vp run db:backfill-search` once so existing rows become searchable.
 - Table and column names match the Laravel schema; Better Auth uses its own `auth_sessions`, `auth_accounts`, `auth_verifications` and `auth_rate_limits` (shared rate-limit counters) tables.
 
 ## Visual block editor

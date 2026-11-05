@@ -6,7 +6,8 @@ import { scopeDefaultDepartment } from '@/lib/server/admin-scope';
 import { isSuperAdmin, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
 import { db } from '@/lib/server/db';
-import { directUploads, LIMITS, MB } from '@/lib/server/storage';
+import { departmentOptions } from '@/lib/server/department-access';
+import { DOWNLOAD_MAX_MB, downloadUploadMode } from '@/lib/server/download-intake';
 
 let actor;
 try {
@@ -16,11 +17,7 @@ try {
 }
 
 const [departments, directories] = await Promise.all([
-    db.department.findMany({
-        where: isSuperAdmin(actor) ? {} : { id: actor.departmentId ?? -1 },
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true },
-    }),
+    departmentOptions(actor),
     db.downloadDirectory.findMany({ orderBy: { name: 'asc' }, select: { name: true } }),
 ]);
 ---
@@ -45,8 +42,8 @@ const [departments, directories] = await Promise.all([
             directories={[...new Set(directories.map((d) => d.name))]}
             isSuperAdmin={isSuperAdmin(actor)}
             defaultDepartmentId={scopeDefaultDepartment(Astro.locals.adminScope)}
-            maxMb={LIMITS.download / MB}
-            directUpload={directUploads}
+            maxMb={DOWNLOAD_MAX_MB}
+            uploadMode={downloadUploadMode}
         />
     </div>
 </AppLayout>

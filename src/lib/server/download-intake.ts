@@ -10,15 +10,21 @@ import { z } from 'astro/zod';
 import { isDirectUploadKey } from './direct-upload';
 import { claimPendingUpload, ownsPendingUpload } from './pending-uploads';
 import { RequestError } from './request-error';
-import { directUploads, headUpload, LIMITS, MB, put, remove } from './storage';
+import { discardFiles } from './stored-files';
+import { directUploads, headUpload, LIMITS, MB, put } from './storage';
 
-export const DOWNLOAD_TOO_LARGE = `The file must not be larger than ${LIMITS.download / MB} MB.`;
+export const DOWNLOAD_MAX_MB = LIMITS.download / MB;
+export const DOWNLOAD_TOO_LARGE = `The file must not be larger than ${DOWNLOAD_MAX_MB} MB.`;
 
 /** Zod schema of the multipart Download file (field-level errors for the upload form). */
 export const downloadFile = z
     .instanceof(File, { error: 'Choose a file to upload.' })
     .refine((file) => file.size > 0, 'Choose a file to upload.')
     .refine((file) => file.size <= LIMITS.download, DOWNLOAD_TOO_LARGE);
+
+/** How the browser delivers a Download file: straight to the bucket (`direct`) or as a multipart `file`. */
+export type DownloadUploadMode = 'direct' | 'multipart';
+export const downloadUploadMode: DownloadUploadMode = directUploads ? 'direct' : 'multipart';
 
 export interface DownloadIntakeDeps {
     directUploads: boolean;
@@ -27,7 +33,7 @@ export interface DownloadIntakeDeps {
     claimPendingUpload(key: string, userId: number): Promise<boolean>;
     headUpload(key: string): Promise<{ size: number } | null>;
     put(file: File): Promise<string>;
-    remove(key: string): Promise<void>;
+    discardFiles(keys: readonly string[], context: string): Promise<void>;
 }
 
 export interface AcceptedDownload {
@@ -46,11 +52,7 @@ export function createDownloadIntake(deps: DownloadIntakeDeps) {
         if (!uploaded) throw new RequestError('BAD_REQUEST', 'The uploaded file was not found. Upload it again.');
         if (uploaded.size > deps.maxBytes) {
             // The claim is consumed so only the owner's rejected object is removed, once.
-            if (await deps.claimPendingUpload(key, userId)) {
-                await deps
-                    .remove(key)
-                    .catch((error: unknown) => console.error(`Stored file cleanup failed: ${key}`, error));
-            }
+            if (await deps.claimPendingUpload(key, userId)) await deps.discardFiles([key], 'rejected upload');
             throw new RequestError('BAD_REQUEST', DOWNLOAD_TOO_LARGE);
         }
         if (!(await deps.claimPendingUpload(key, userId))) throw invalid();
@@ -77,5 +79,5 @@ export const { acceptDownloadFile } = createDownloadIntake({
     claimPendingUpload,
     headUpload,
     put: (file) => put('downloads', file),
-    remove,
+    discardFiles,
 });

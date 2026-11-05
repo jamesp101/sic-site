@@ -98,7 +98,12 @@ export function createStoredFiles(store: FileStore) {
         return result;
     }
 
-    return { commitWithFiles, deleteWithFiles };
+    /** Removes stored files that no row owns (e.g. a rejected direct upload); failures are logged, never thrown. */
+    async function discardFiles(keys: readonly StoredKey[], context: string): Promise<void> {
+        await removeAll(keys, context);
+    }
+
+    return { commitWithFiles, deleteWithFiles, discardFiles };
 }
 
-export const { commitWithFiles, deleteWithFiles } = createStoredFiles({ put, remove });
+export const { commitWithFiles, deleteWithFiles, discardFiles } = createStoredFiles({ put, remove });

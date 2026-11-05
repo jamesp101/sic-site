@@ -103,6 +103,19 @@ export function publicUrl(value: string | null | undefined): string | null {
     return directBaseUrl ? `${directBaseUrl}/${key}` : `/storage/${key}`;
 }
 
+/** Inverse of `publicUrl`: the bare key of one of our own file URLs (`/storage/<key>` or the direct base), else null. */
+export function keyFromPublicUrl(url: string): string | null {
+    const prefixes = directBaseUrl ? [`${directBaseUrl}/`, '/storage/'] : ['/storage/'];
+    const prefix = prefixes.find((candidate) => url.startsWith(candidate));
+    if (!prefix) return null;
+    const rest = url.slice(prefix.length);
+    try {
+        return toKey(rest) === rest ? rest : null;
+    } catch {
+        return null;
+    }
+}
+
 /** URL that downloads the object as an attachment named `fileName` (always via the app route). */
 export function downloadUrl(value: string, fileName: string): string {
     if (isExternal(value)) return value;

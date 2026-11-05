@@ -5,7 +5,7 @@ import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DeleteHeroSectionButton from '@/components/admin/hero-sections/DeleteHeroSectionButton.svelte';
 import { cardClass, iconLinkClass, thClass } from '@/components/admin/ui';
 import AppLayout from '@/layouts/AppLayout.astro';
-import { departmentWhere } from '@/lib/server/admin-scope';
+import { listWhere } from '@/lib/server/admin-scope';
 import { requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
 import { db } from '@/lib/server/db';
@@ -27,10 +27,9 @@ const sort = ['title', 'department', 'order', 'active'].includes(params.get('sor
 const dir: 'asc' | 'desc' = params.get('dir') === 'desc' ? 'desc' : 'asc';
 
 const scope = Astro.locals.adminScope;
-const where: Prisma.HeroSectionWhereInput = {
-    ...departmentWhere(actor, scope),
-    ...(q ? { OR: [{ title: textContains(q) }, { content: textContains(q) }] } : {}),
-};
+const where: Prisma.HeroSectionWhereInput = listWhere<Prisma.HeroSectionWhereInput>(actor, scope, [
+    q && { OR: [{ title: textContains(q) }, { searchText: textContains(q) }] },
+]);
 const orderBy: Prisma.HeroSectionOrderByWithRelationInput =
     sort === 'title'
         ? { title: dir }

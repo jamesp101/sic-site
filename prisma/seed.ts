@@ -9,6 +9,7 @@
  *  - carousel items (image_path is required; only /sic-seal.png exists, which is not a slide image)
  *  - downloads (the Laravel seeder wrote mock text files named *.pdf, not real documents)
  */
+import { searchTextOf } from '../src/lib/blocks/content';
 import { db } from '../src/lib/server/db';
 import { hashPassword } from '../src/lib/server/password';
 
@@ -217,7 +218,9 @@ async function main() {
         },
     ];
     for (const post of posts) {
-        await db.post.create({ data: { ...post, slug: slugify(post.title) } });
+        await db.post.create({
+            data: { ...post, slug: slugify(post.title), searchText: searchTextOf(post.content) },
+        });
     }
 
     // 6. Members (image_path null: /images/member-*.jpg do not exist)
@@ -242,41 +245,42 @@ async function main() {
     });
 
     // 9. Hero sections
+    const heroSections = [
+        {
+            title: 'Welcome Introduction',
+            content:
+                '# Welcome to San Isidro College\n\n<Center>\nEmpowering minds, cultivating values, and inspiring service since 1949.\n</Center>',
+            order: 1,
+            isActive: true,
+            departmentId: null,
+        },
+        {
+            title: 'Academic & Campus Life Blocks',
+            content:
+                '<Flex>\n<Card title="Academic Programs">\nExplore our comprehensive collegiate courses and find the perfect path for your future career.\n</Card>\n<Card title="Campus Life">\nJoin student organizations, varsity sports, and artistic groups to build lifelong connections.\n</Card>\n</Flex>\n\n<Accordion title="Learn More About SIC">\nSan Isidro College is a Catholic diocesan educational institution located in Malaybalay City, Bukidnon, Philippines. We are committed to developing students with strong values, academic excellence, and a passion for community service.\n</Accordion>\n\n<Badges>Values, Excellence, Service, Innovation</Badges>',
+            order: 2,
+            isActive: true,
+            departmentId: null,
+        },
+        {
+            title: 'CIT Tech Spotlight',
+            content:
+                '# Lead the Digital Frontier\n\n<Center>\nThe College of Information Technology at San Isidro College offers state-of-the-art specialization in **Software Engineering**, **Network Administration**, and **Data Analytics**.\n</Center>\n\n<Flex>\n<Card title="Modern Laboratories">\nEquipped with high-spec developer environments and active publication in AI.\n</Card>\n<Card title="Industry Integration">\nInternships with top-tier technology firms and coding hackathons.\n</Card>\n</Flex>',
+            order: 1,
+            isActive: true,
+            departmentId: cit.id,
+        },
+        {
+            title: 'CBA Commerce Highlight',
+            content:
+                '# Shape the Future of Commerce\n\n<Center>\nDeveloping ethical business leaders, entrepreneurs, and financial managers.\n</Center>\n\n<Flex>\n<Card title="Business Incubator">\nPitch, prototype, and launch your own startup with mentor support.\n</Card>\n<Card title="Case-Study Method">\nLearn through real-world corporate challenges and strategic marketing.\n</Card>\n</Flex>',
+            order: 1,
+            isActive: true,
+            departmentId: cba.id,
+        },
+    ];
     await db.heroSection.createMany({
-        data: [
-            {
-                title: 'Welcome Introduction',
-                content:
-                    '# Welcome to San Isidro College\n\n<Center>\nEmpowering minds, cultivating values, and inspiring service since 1949.\n</Center>',
-                order: 1,
-                isActive: true,
-                departmentId: null,
-            },
-            {
-                title: 'Academic & Campus Life Blocks',
-                content:
-                    '<Flex>\n<Card title="Academic Programs">\nExplore our comprehensive collegiate courses and find the perfect path for your future career.\n</Card>\n<Card title="Campus Life">\nJoin student organizations, varsity sports, and artistic groups to build lifelong connections.\n</Card>\n</Flex>\n\n<Accordion title="Learn More About SIC">\nSan Isidro College is a Catholic diocesan educational institution located in Malaybalay City, Bukidnon, Philippines. We are committed to developing students with strong values, academic excellence, and a passion for community service.\n</Accordion>\n\n<Badges>Values, Excellence, Service, Innovation</Badges>',
-                order: 2,
-                isActive: true,
-                departmentId: null,
-            },
-            {
-                title: 'CIT Tech Spotlight',
-                content:
-                    '# Lead the Digital Frontier\n\n<Center>\nThe College of Information Technology at San Isidro College offers state-of-the-art specialization in **Software Engineering**, **Network Administration**, and **Data Analytics**.\n</Center>\n\n<Flex>\n<Card title="Modern Laboratories">\nEquipped with high-spec developer environments and active publication in AI.\n</Card>\n<Card title="Industry Integration">\nInternships with top-tier technology firms and coding hackathons.\n</Card>\n</Flex>',
-                order: 1,
-                isActive: true,
-                departmentId: cit.id,
-            },
-            {
-                title: 'CBA Commerce Highlight',
-                content:
-                    '# Shape the Future of Commerce\n\n<Center>\nDeveloping ethical business leaders, entrepreneurs, and financial managers.\n</Center>\n\n<Flex>\n<Card title="Business Incubator">\nPitch, prototype, and launch your own startup with mentor support.\n</Card>\n<Card title="Case-Study Method">\nLearn through real-world corporate challenges and strategic marketing.\n</Card>\n</Flex>',
-                order: 1,
-                isActive: true,
-                departmentId: cba.id,
-            },
-        ],
+        data: heroSections.map((section) => ({ ...section, searchText: searchTextOf(section.content) })),
     });
 
     console.log('Seeded navigation, departments, users, posts, members, settings and hero sections.');

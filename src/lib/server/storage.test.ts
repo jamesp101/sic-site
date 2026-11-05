@@ -113,6 +113,28 @@ describe('driver selection', () => {
     });
 });
 
+describe('keyFromPublicUrl', () => {
+    it('reads back what publicUrl produced and rejects everything else', async () => {
+        const proxied = await loadStorage({ UPLOAD_DIR: dir });
+        expect(proxied.keyFromPublicUrl('/storage/carousels/a.webp')).toBe('carousels/a.webp');
+        expect(proxied.keyFromPublicUrl('https://cdn.example.org/carousels/a.webp')).toBeNull();
+        expect(proxied.keyFromPublicUrl('/other/carousels/a.webp')).toBeNull();
+        expect(proxied.keyFromPublicUrl('/storage/../secret')).toBeNull();
+        expect(proxied.keyFromPublicUrl('/storage/carousels/../../secret')).toBeNull();
+        expect(proxied.keyFromPublicUrl('/storage/')).toBeNull();
+
+        const direct = await loadStorage({
+            STORAGE_DRIVER: 's3',
+            S3_BUCKET: 'sic',
+            S3_PUBLIC_URL: 'https://cdn.example.org/sic/',
+        });
+        expect(direct.keyFromPublicUrl('https://cdn.example.org/sic/carousels/a.webp')).toBe('carousels/a.webp');
+        expect(direct.keyFromPublicUrl('/storage/carousels/a.webp')).toBe('carousels/a.webp');
+        expect(direct.keyFromPublicUrl('https://evil.example.org/sic/carousels/a.webp')).toBeNull();
+        expect(direct.keyFromPublicUrl('https://cdn.example.org/sic/../x')).toBeNull();
+    });
+});
+
 describe('s3 direct uploads', () => {
     const S3 = {
         STORAGE_DRIVER: 's3',

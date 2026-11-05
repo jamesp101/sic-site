@@ -21,7 +21,7 @@ function setup(opts: { head?: { size: number } | null; owned?: boolean; direct?:
         }),
         headUpload: vi.fn(async () => (opts.head === undefined ? { size: 10 } : opts.head)),
         put: vi.fn(async () => 'downloads/stored.pdf'),
-        remove: vi.fn(async (key: string) => void removed.push(key)),
+        discardFiles: vi.fn(async (keys: readonly string[]) => void removed.push(...keys)),
     };
     return { deps, claims, removed, intake: createDownloadIntake(deps) };
 }

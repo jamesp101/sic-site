@@ -7,9 +7,8 @@ import { parseOverlay } from '@/lib/carousel-overlay-schema';
 import { parseOverlayStrict } from '@/lib/carousel-overlay-schema';
 import { db } from '@/lib/server/db';
 import { actorOf, guarded } from '@/lib/server/action-guard';
-import { AuthzError, scopeDepartment } from '@/lib/server/authz';
 import { overlayImageSrcs, ownedImageKey, toDesignerSlide, unusedLayerImageKeys } from '@/lib/server/carousel-admin';
-import { loadScoped, resolveWriteDepartment } from '@/lib/server/department-access';
+import { departmentIdField, loadScoped, loadScopedMany, resolveWriteDepartment } from '@/lib/server/department-access';
 import { imageFile } from '@/lib/server/image-file';
 import { LIMITS, publicUrl, read } from '@/lib/server/storage';
 import { commitWithFiles, deleteWithFiles, type NewFile, type NewFiles } from '@/lib/server/stored-files';
@@ -40,7 +39,7 @@ export const carousels = {
         input: z.object({
             image: imageFile(LIMITS.image, 'slide'),
             overlay: overlayField.optional(),
-            departmentId: z.number().int().nullable().optional(),
+            departmentId: departmentIdField,
             showOnMain: z.boolean(),
         }),
         handler: (input, context) =>
@@ -106,7 +105,7 @@ export const carousels = {
         input: z.object({
             id: z.number().int(),
             showOnMain: z.boolean().optional(),
-            departmentId: z.number().int().nullable().optional(),
+            departmentId: departmentIdField,
         }),
         handler: (input, context) =>
             guarded(async () => {
@@ -190,12 +189,7 @@ export const carousels = {
                 const actor = actorOf(context);
                 if (new Set(ids).size !== ids.length)
                     throw new ActionError({ code: 'BAD_REQUEST', message: 'Duplicate slides in the order.' });
-                const rows = await db.carouselItem.findMany({
-                    where: { id: { in: ids } },
-                    select: { id: true, order: true, departmentId: true },
-                });
-                if (rows.length !== ids.length) throw new AuthzError('NOT_FOUND');
-                for (const row of rows) scopeDepartment(actor, row);
+                const rows = await loadScopedMany(actor, 'carouselItem', ids);
 
                 const orders = assignOrders(rows.map((row) => row.order));
                 await db.$transaction(

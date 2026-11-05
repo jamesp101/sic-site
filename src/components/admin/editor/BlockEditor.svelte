@@ -33,7 +33,6 @@
     flatten,
     insertBlock,
     insertionPoint,
-    isBlockDocument,
     moveBlock,
     removeBlock,
     serializeDocument,
@@ -41,9 +40,10 @@
     shiftBlock,
     updateBlock,
   } from '@/lib/blocks/document';
+  import { editableBlocks } from '@/lib/blocks/content';
   import { markdownToBlocks } from '@/lib/blocks/from-markdown';
   import { renderBlocks } from '@/lib/blocks/render';
-  import { parseBlockDocument, validateDocument } from '@/lib/blocks/schema';
+  import { validateDocument } from '@/lib/blocks/schema';
   import { TEMPLATES, type BlockTemplate } from '@/lib/blocks/templates';
   import { BLOCK_META, LIMITS, type Block, type BlockType } from '@/lib/blocks/types';
   import { buildSrcdoc, CanvasController, type CanvasHost, type CanvasSource, type DropTarget } from './canvas';
@@ -74,27 +74,8 @@
 
   const initialValue = untrack(() => value);
 
-  function load(raw: string): Block[] {
-    if (!raw.trim()) return [];
-    if (isBlockDocument(raw)) {
-      const parsed = parseBlockDocument(raw);
-      if (parsed.ok) return parsed.document.blocks;
-      // Stored document no longer validates (hand-edited?): open it as-is so nothing is lost; issues are listed.
-      // One that does not even parse falls through and opens as raw text in a Markdown block.
-      try {
-        const loose: unknown = JSON.parse(raw);
-        if (typeof loose === 'object' && loose !== null && 'blocks' in loose && Array.isArray(loose.blocks)) {
-          return loose.blocks as Block[];
-        }
-      } catch {
-        // not JSON
-      }
-    }
-    // Legacy Markdown / MDX-lite opens as a single Markdown block.
-    return [createBlock('markdown', { source: raw })];
-  }
+  const initialBlocks = editableBlocks(initialValue);
 
-  const initialBlocks = load(initialValue);
   let blocks = $state.raw<Block[]>(initialBlocks);
   let selectedId = $state<string | null>(null);
   const history = new History<Block[]>(initialBlocks);
@@ -398,6 +379,7 @@
 
   function renderSafe(list: Block[], editor: boolean): string {
     try {
+      // Live preview of the in-memory draft: the one allowed direct block render (see AGENTS.md, Rich content).
       return renderBlocks(list, { editor });
     } catch {
       return '<p class="text-sm text-destructive">This content could not be displayed.</p>';

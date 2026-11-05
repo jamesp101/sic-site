@@ -1,16 +1,17 @@
 import { defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
+import { searchTextOf } from '@/lib/blocks/content';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { contentField } from '@/lib/server/content-field';
 import { db } from '@/lib/server/db';
-import { loadScoped, resolveWriteDepartment } from '@/lib/server/department-access';
+import { departmentIdField, loadScoped, resolveWriteDepartment } from '@/lib/server/department-access';
 
 const fields = {
     title: z.string().trim().max(255).nullish(),
     content: contentField({ required: true }),
     order: z.number({ error: 'The order must be a whole number.' }).int('The order must be a whole number.'),
     isActive: z.boolean(),
-    departmentId: z.number().int().nullish(),
+    departmentId: departmentIdField,
 };
 
 export const heroSections = {
@@ -24,6 +25,7 @@ export const heroSections = {
                     data: {
                         title: input.title || null,
                         content: input.content,
+                        searchText: searchTextOf(input.content),
                         order: input.order,
                         isActive: input.isActive,
                         departmentId,
@@ -46,6 +48,7 @@ export const heroSections = {
                     data: {
                         title: input.title || null,
                         content: input.content,
+                        searchText: searchTextOf(input.content),
                         order: input.order,
                         isActive: input.isActive,
                         departmentId,

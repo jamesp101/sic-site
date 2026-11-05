@@ -6,6 +6,7 @@ import { departmentWhere } from '@/lib/server/admin-scope';
 import { isSuperAdmin, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
 import { db } from '@/lib/server/db';
+import { departmentOptions } from '@/lib/server/department-access';
 import { extensionOf, fileKind } from '@/lib/files';
 import { publicUrl } from '@/lib/server/storage';
 
@@ -37,11 +38,7 @@ const [rows, departments, directories] = await Promise.all([
         orderBy: { createdAt: 'desc' },
         include: { department: { select: { name: true } } },
     }),
-    db.department.findMany({
-        where: superadmin ? {} : { id: actor.departmentId ?? -1 },
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true },
-    }),
+    departmentOptions(actor),
     // General folders (no department) are shared, so a department scope still lists them.
     db.downloadDirectory.findMany({
         where: departmentWhere(actor, Astro.locals.adminScope, { includeGeneral: true }),

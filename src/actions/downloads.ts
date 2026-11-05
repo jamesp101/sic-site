@@ -2,7 +2,7 @@ import { defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { db } from '@/lib/server/db';
-import { loadScoped, resolveWriteDepartment } from '@/lib/server/department-access';
+import { departmentIdField, loadScoped, resolveWriteDepartment } from '@/lib/server/department-access';
 import { acceptDownloadFile, downloadFile } from '@/lib/server/download-intake';
 import { commitWithFiles, deleteWithFiles } from '@/lib/server/stored-files';
 
@@ -18,8 +18,8 @@ export const downloads = {
             // Key of a file the browser already uploaded straight to the S3 bucket (`/api/admin/uploads/direct`).
             uploadedKey: z.string().trim().max(255).optional(),
             tags: z.string().nullish(),
-            directory: z.string().trim().max(255).nullish(),
-            departmentId: z.number().int().nullish(),
+            directoryName: z.string().trim().max(255).nullish(),
+            departmentId: departmentIdField,
         }),
         handler: (input, context) =>
             guarded(async () => {
@@ -41,7 +41,7 @@ export const downloads = {
                                 filePath: key,
                                 fileSize: size,
                                 tags: JSON.stringify(tags),
-                                directory: input.directory || DEFAULT_DIRECTORY,
+                                directory: input.directoryName || DEFAULT_DIRECTORY,
                                 departmentId,
                                 userId: actor.id,
                             },

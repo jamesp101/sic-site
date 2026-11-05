@@ -7,6 +7,7 @@
   import Field from '@/components/admin/shared/Field.svelte';
   import FormActions from '@/components/admin/shared/FormActions.svelte';
   import { append, formatFileSize, inputClass } from '@/components/admin/shared/form-utils';
+  import { uploadDownloadDirect } from '@/components/admin/editor/upload';
   import { cardClass, selectClass } from '@/components/admin/ui';
 
   let {
@@ -15,7 +16,7 @@
     isSuperAdmin,
     defaultDepartmentId = null,
     maxMb = 20,
-    directUpload = false,
+    uploadMode = 'multipart',
   }: {
     departments: { id: number; name: string }[];
     directories: string[];
@@ -23,8 +24,8 @@
     /** Admin scope's department, preselected (superadmins may change it). */
     defaultDepartmentId?: number | null;
     maxMb?: number;
-    /** True when the server stores files in S3: upload from the browser, then submit only the key. */
-    directUpload?: boolean;
+    /** `direct`: upload from the browser to the bucket, then submit only the key; `multipart`: submit the file. */
+    uploadMode?: 'direct' | 'multipart';
   } = $props();
 
   let file = $state<File | null>(null);
@@ -35,31 +36,6 @@
   let progress = $state<number | null>(null);
   /** Already uploaded file, reused when the form is resubmitted after a validation error. */
   let uploaded: { file: File; key: string } | null = null;
-
-  /** Uploads straight to the S3 bucket (request bodies over ~4.5 MB never reach the server) and returns the key. */
-  async function uploadDirect(chosen: File): Promise<string> {
-    const contentType = chosen.type || 'application/octet-stream';
-    const issued = await fetch('/api/admin/uploads/direct', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: chosen.name, contentType, size: chosen.size }),
-    });
-    const grant = (await issued.json().catch(() => null)) as { key: string; url: string; message?: string } | null;
-    if (!issued.ok || !grant?.key) throw new Error(grant?.message ?? 'Could not start the upload.');
-    // XHR rather than fetch: only XHR reports upload progress.
-    const { promise, resolve, reject } = Promise.withResolvers<void>();
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', grant.url);
-    xhr.setRequestHeader('Content-Type', contentType);
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) progress = Math.round((event.loaded / event.total) * 100);
-    };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`The upload failed (HTTP ${xhr.status}).`)));
-    xhr.onerror = () => reject(new Error('The upload failed. Check your connection and try again.'));
-    xhr.send(chosen);
-    await promise;
-    return grant.key;
-  }
 
   function onFile(event: Event) {
     const chosen = (event.currentTarget as HTMLInputElement).files?.[0] ?? null;
@@ -74,10 +50,10 @@
     async run() {
       const data = new FormData();
       append(data, 'fileName', fileName);
-      if (directUpload && file) {
+      if (uploadMode === 'direct' && file) {
         if (file.size > maxMb * 1024 * 1024) return { failure: { fields: { file: `The file must not be larger than ${maxMb} MB.` } } };
         try {
-          if (uploaded?.file !== file) uploaded = { file, key: await uploadDirect(file) };
+          if (uploaded?.file !== file) uploaded = { file, key: await uploadDownloadDirect(file, (percent) => (progress = percent)) };
         } catch (error) {
           progress = null;
           return { failure: { message: error instanceof Error ? error.message : 'The upload failed.' } };
@@ -86,7 +62,7 @@
       } else {
         append(data, 'file', file);
       }
-      append(data, 'directory', directory);
+      append(data, 'directoryName', directory);
       append(data, 'tags', tags);
       append(data, 'departmentId', departmentId);
 
@@ -123,7 +99,7 @@
   </Field>
 
   <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-    <Field label="Category / folder" id="directory" error={form.errors.directory} hint="Defaults to General.">
+    <Field label="Category / folder" id="directory" error={form.errors.directoryName} hint="Defaults to General.">
       <div class="relative">
         <Folder class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <input id="directory" type="text" list="directory-list" bind:value={directory} class="{inputClass} pl-10" placeholder="e.g. Handbook, Enrollment" />

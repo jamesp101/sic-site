@@ -4,8 +4,7 @@ import HeroSectionForm from '@/components/admin/hero-sections/HeroSectionForm.sv
 import AppLayout from '@/layouts/AppLayout.astro';
 import { isSuperAdmin, requireUser } from '@/lib/server/authz';
 import { authzResponse, parseId } from '@/lib/server/authz-response';
-import { db } from '@/lib/server/db';
-import { loadScoped } from '@/lib/server/department-access';
+import { departmentOptions, loadScoped } from '@/lib/server/department-access';
 
 let actor;
 let section;
@@ -17,11 +16,7 @@ try {
     return authzResponse(error);
 }
 
-const departments = await db.department.findMany({
-    where: isSuperAdmin(actor) ? {} : { id: actor.departmentId ?? -1 },
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true },
-});
+const departments = await departmentOptions(actor);
 const values = {
     id: section.id,
     title: section.title,

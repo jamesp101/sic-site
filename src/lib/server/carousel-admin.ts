@@ -2,7 +2,7 @@ import type { CarouselItem } from '@/generated/prisma/client';
 import type { Layer } from '@/lib/carousel-overlay';
 import { parseOverlay } from '@/lib/carousel-overlay-schema';
 import { db } from './db';
-import { directBaseUrl, publicUrl } from './storage';
+import { keyFromPublicUrl, publicUrl } from './storage';
 
 /** Slide as the admin designer sees it. */
 export interface DesignerSlide {
@@ -40,10 +40,8 @@ export function overlayImageSrcs(raw: string | null | undefined): string[] {
 
 /** Storage key of a layer image uploaded under `carousels/`; null for anything else (never delete foreign files). */
 export function ownedImageKey(src: string): string | null {
-    const prefix = directBaseUrl ? `${directBaseUrl}/` : '/storage/';
-    if (!src.startsWith(prefix)) return null;
-    const key = src.slice(prefix.length);
-    return /^carousels\/[A-Za-z0-9._-]+$/.test(key) ? key : null;
+    const key = keyFromPublicUrl(src);
+    return key && /^carousels\/[A-Za-z0-9._-]+$/.test(key) ? key : null;
 }
 
 /**

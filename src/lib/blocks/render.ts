@@ -7,7 +7,7 @@
 import { escapeHtml, parseMarkdown } from '../markdown';
 import { eventDateKey, formatEventDay, formatEventTime, parseEventDate, type EventDate } from './event-date';
 import { inlineToHtml, paragraphsOf } from './inline';
-import type { Block, BlockDocument, PropsByType, BlockType } from './types';
+import type { Block, PropsByType, BlockType } from './types';
 import { BLOCK_META } from './types';
 import { isExternalHref, parseVideoUrl, safeHref, safeImageSrc } from './urls';
 
@@ -407,10 +407,6 @@ function renderBlock(block: Block, ctx: Ctx): string {
 export function renderBlocks(blocks: Block[], options: RenderOptions = {}): string {
     const inner = blocks.map((block) => renderBlock(block, { editor: options.editor === true })).join('');
     return inner ? `<div class="flex flex-col gap-5" data-sic-blocks>${inner}</div>` : '';
-}
-
-export function renderDocument(doc: BlockDocument, options: RenderOptions = {}): string {
-    return renderBlocks(doc.blocks, options);
 }
 
 export type { PropsByType };

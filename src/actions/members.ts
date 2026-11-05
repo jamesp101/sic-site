@@ -2,8 +2,7 @@ import { ActionError, defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
 import { db } from '@/lib/server/db';
 import { actorOf, guarded } from '@/lib/server/action-guard';
-import { AuthzError, scopeDepartment, type Actor } from '@/lib/server/authz';
-import { loadOwnDepartment } from '@/lib/server/department-access';
+import { loadMember, loadOwnDepartment } from '@/lib/server/department-access';
 import { imageFile } from '@/lib/server/image-file';
 import { LIMITS, publicUrl } from '@/lib/server/storage';
 import { commitWithFiles, deleteWithFiles } from '@/lib/server/stored-files';
@@ -37,13 +36,6 @@ async function assertValidParent(departmentId: number, parentId: number | null |
             message: 'A member cannot report to itself or to one of its own subordinates.',
         });
     }
-}
-
-async function memberFor(actor: Actor, departmentId: number, id: number) {
-    await loadOwnDepartment(actor, departmentId);
-    const member = await db.member.findUnique({ where: { id } });
-    if (!member || member.departmentId !== departmentId) throw new AuthzError('NOT_FOUND');
-    return scopeDepartment(actor, member);
 }
 
 export const members = {
@@ -80,7 +72,7 @@ export const members = {
         handler: (input, context) =>
             guarded(async () => {
                 const actor = actorOf(context);
-                const member = await memberFor(actor, input.departmentId, input.id);
+                const member = await loadMember(actor, input.departmentId, input.id);
                 await assertValidParent(member.departmentId, input.parentId, member.id);
 
                 const saved = await commitWithFiles({
@@ -142,7 +134,7 @@ export const members = {
         handler: ({ departmentId, id }, context) =>
             guarded(async () => {
                 const actor = actorOf(context);
-                const member = await memberFor(actor, departmentId, id);
+                const member = await loadMember(actor, departmentId, id);
                 await deleteWithFiles(
                     () =>
                         db.$transaction(async (tx) => {

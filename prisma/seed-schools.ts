@@ -8,6 +8,7 @@
  * recreates them. Posts are authored by the first superadmin, so run `prisma/seed.ts` or
  * `prisma/create-admin.ts` first.
  */
+import { searchTextOf } from '../src/lib/blocks/content';
 import { createDocument, serializeDocument } from '../src/lib/blocks/document';
 import { markdownToBlocks } from '../src/lib/blocks/from-markdown';
 import { db } from '../src/lib/server/db';
@@ -806,11 +807,13 @@ async function main() {
             // Events alternate between recent past and upcoming dates so both listings have entries.
             const startDate = type === 'event' ? manilaDay((eventIndex % 2 === 0 ? 7 : -14) + eventIndex * 5, 9) : null;
             if (type === 'event') eventIndex++;
+            const content = serializeDocument(createDocument(markdownToBlocks(body(school, post))));
             await db.post.create({
                 data: {
                     title,
                     slug: `${school.slug}-${slugify(title)}`,
-                    content: serializeDocument(createDocument(markdownToBlocks(body(school, post)))),
+                    content,
+                    searchText: searchTextOf(content),
                     type,
                     startDate,
                     endDate: startDate ? new Date(startDate.getTime() + 4 * 60 * 60 * 1000) : null,
