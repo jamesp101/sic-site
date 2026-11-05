@@ -9,6 +9,7 @@
  * 2. Progress bar: navigations slower than 120 ms show a thin bar at the top.
  */
 import type { TransitionBeforePreparationEvent } from 'astro:transitions/client';
+import { plainLinkAt } from '@/lib/link-intent';
 
 const TTL_MS = 15_000;
 const HOVER_DELAY_MS = 50;
@@ -23,14 +24,9 @@ function cacheKey(url: URL): string {
 
 /** Admin URL of the link under `target`, or null when it should not be prefetched. */
 function eligibleUrl(target: EventTarget | null): URL | null {
-    const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null;
-    if (!anchor || anchor.target || anchor.hasAttribute('download') || anchor.hasAttribute('data-astro-reload')) {
-        return null;
-    }
-    const url = new URL(anchor.href, location.href);
-    if (url.origin !== location.origin || !SECTION.test(url.pathname)) return null;
-    if (cacheKey(url) === cacheKey(new URL(location.href))) return null;
-    return url;
+    const url = plainLinkAt(target);
+    if (!url || !SECTION.test(url.pathname)) return null;
+    return target instanceof Element && target.closest('a[href]')?.hasAttribute('data-astro-reload') ? null : url;
 }
 
 function prefetch(url: URL): void {

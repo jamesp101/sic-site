@@ -12,6 +12,7 @@
     cancelLabel = 'Cancel',
     destructive = false,
     processing = false,
+    processingLabel = 'Deleting…',
     onConfirm,
   }: {
     open?: boolean;
@@ -21,6 +22,7 @@
     cancelLabel?: string;
     destructive?: boolean;
     processing?: boolean;
+    processingLabel?: string;
     onConfirm: () => void | Promise<void>;
   } = $props();
 
@@ -54,13 +56,14 @@
         <button
           type="button"
           onclick={onConfirm}
+          aria-busy={processing}
           disabled={processing}
           class={destructive
             ? 'inline-flex items-center justify-center gap-2 rounded-lg bg-destructive px-4 py-2 text-sm font-semibold text-destructive-foreground shadow-brand-sm transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60'
             : primaryButtonClass}
         >
           {#if processing}<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />{/if}
-          {confirmLabel}
+          {processing ? processingLabel : confirmLabel}
         </button>
       </DialogFooter>
     </div>

@@ -66,7 +66,7 @@
               onclick={() => click(type)}
             >
               <Icon class="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <span class="truncate">{BLOCK_REGISTRY[type].meta.label}</span>
+              <span class="min-w-0 break-words">{BLOCK_REGISTRY[type].meta.label}</span>
             </button>
           </li>
         {/each}

@@ -8,6 +8,8 @@
   import FormActions from '@/components/admin/shared/FormActions.svelte';
   import ImageField from '@/components/admin/shared/ImageField.svelte';
   import { append, inputClass } from '@/components/admin/shared/form-utils';
+  import UnsavedChangesGuard from '@/components/admin/shared/UnsavedChangesGuard.svelte';
+  import { unsavedChanges } from '@/components/admin/shared/unsaved-changes.svelte';
   import { cardClass, selectClass } from '@/components/admin/ui';
   import { slugify } from '@/lib/server/slug';
 
@@ -66,6 +68,10 @@
 
   const isoOrEmpty = (local: string) => (local ? new Date(local).toISOString() : '');
 
+  const unsaved = unsavedChanges(() => [
+    title, slug, content, type, startDate, endDate, departmentId, isFeatured, hideAuthor, highlightImage !== null,
+  ]);
+
   const form = actionForm({
     run() {
       const data = new FormData();
@@ -82,11 +88,14 @@
       append(data, 'highlightImage', highlightImage);
       return post ? actions.posts.update(data) : actions.posts.create(data);
     },
-    onSuccess: () => navigate('/admin/posts'),
+    onSuccess: () => {
+      unsaved.markSaved();
+      return navigate('/admin/posts');
+    },
   });
 </script>
 
-<form method="post" onsubmit={form.submit} class="space-y-6">
+<form method="post" onsubmit={form.submit} data-unsaved-own class="space-y-6">
   <div class="{cardClass} grid gap-8 p-6 lg:grid-cols-3">
     <div class="space-y-5 lg:col-span-2">
       <Field label="Post title" id="title" error={form.errors.title} required>
@@ -180,3 +189,5 @@
 
   <FormActions cancelHref="/admin/posts" processing={form.processing} message={form.message} submitLabel={post ? 'Save changes' : 'Publish post'} />
 </form>
+
+<UnsavedChangesGuard dirty={unsaved.dirty} />

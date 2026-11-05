@@ -1,16 +1,7 @@
-<script lang="ts" module>
-  export interface MemberValues {
-    name: string;
-    role: string;
-    parentId: number | null;
-    order: number;
-    image: File | null;
-  }
-</script>
-
 <script lang="ts">
   import { Loader2, Save, Trash, X } from '@lucide/svelte';
   import { untrack } from 'svelte';
+  import type { MemberValues } from '@/lib/org-chart-session';
   import { parentOptions, type OrgMember } from '@/lib/org-tree';
   import Field from '../shared/Field.svelte';
   import ImageField from '../shared/ImageField.svelte';

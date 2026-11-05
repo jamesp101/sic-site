@@ -1,5 +1,6 @@
 ---
 import ErrorPanel from '@/components/site/ErrorPanel.astro';
+import { btnPrimary } from '@/components/site/classes';
 import PublicLayout from '@/layouts/PublicLayout.astro';
 
 Astro.response.status = 500;
@@ -10,5 +11,13 @@ Astro.response.status = 500;
         code="500"
         title="Something went wrong"
         message="An unexpected error occurred on our side. Please try again in a moment."
-    />
+    >
+        <button type="button" data-reload class={`${btnPrimary} mt-8`}>
+            Try again
+        </button>
+    </ErrorPanel>
 </PublicLayout>
+
+<script>
+    document.querySelector('[data-reload]')?.addEventListener('click', () => location.reload());
+</script>

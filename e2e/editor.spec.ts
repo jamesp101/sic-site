@@ -229,6 +229,22 @@ test.describe('visual block editor (superadmin)', () => {
         await expect(canvas(page).locator('[data-block-type="paragraph"]')).toHaveCount(1);
     });
 
+    test('the Keyboard shortcuts button and the ? key open the shortcuts dialog', async ({ page }) => {
+        await page.goto('/admin/posts/create');
+        await editorReady(page);
+
+        await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
+        const dialog = page.getByRole('dialog');
+        await expect(dialog.getByRole('heading', { name: 'Keyboard shortcuts' })).toBeVisible();
+        await expect(dialog.getByText('Duplicate the selected element')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(dialog).toBeHidden();
+
+        await add(page, 'Heading').focus();
+        await page.keyboard.press('Shift+?');
+        await expect(dialog).toBeVisible();
+    });
+
     test('opens an existing Markdown post as a legacy block and keeps it rendering unchanged', async ({ page }) => {
         const slug = 'cit-unveils-new-ai-research-laboratory';
         await page.goto(`/posts/${slug}`);
@@ -324,5 +340,34 @@ test.describe('visual block editor (department user)', () => {
         await page.getByRole('button', { name: 'Publish post' }).click();
         await expect(page).toHaveURL(/\/admin\/posts$/);
         await expect(page.locator('main')).toContainText(title);
+    });
+});
+
+test.describe('unsaved changes guard (superadmin)', () => {
+    test.use({ storageState: ADMIN });
+
+    test('editing a post, then clicking a sidebar link, asks before leaving', async ({ page }) => {
+        await page.goto('/admin/posts/create');
+        await editorReady(page);
+
+        // Untouched form: leaving is free.
+        await page.getByRole('link', { name: 'Departments', exact: true }).first().click();
+        await expect(page).toHaveURL(/\/admin\/departments/);
+
+        await page.goto('/admin/posts/create');
+        await editorReady(page);
+        await page.getByLabel('Post title').fill('Unsaved draft');
+        await page.getByRole('link', { name: 'Departments', exact: true }).first().click();
+
+        const dialog = page.getByRole('dialog');
+        await expect(dialog).toContainText('Discard unsaved changes?');
+        await expect(page).toHaveURL(/\/admin\/posts\/create/);
+        await dialog.getByRole('button', { name: 'Keep editing' }).click();
+        await expect(dialog).toBeHidden();
+        await expect(page.getByLabel('Post title')).toHaveValue('Unsaved draft');
+
+        await page.getByRole('link', { name: 'Departments', exact: true }).first().click();
+        await page.getByRole('dialog').getByRole('button', { name: 'Discard' }).click();
+        await expect(page).toHaveURL(/\/admin\/departments/);
     });
 });

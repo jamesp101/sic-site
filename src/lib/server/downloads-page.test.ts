@@ -6,6 +6,7 @@ vi.mock('./db', async () => ({ db: await (await import('./test-db')).openTestDb(
 const { db } = await import('./db');
 const {
     DEFAULT_DIRECTORY,
+    downloadFacts,
     directoryWhere,
     encodeTags,
     getAdminFolders,
@@ -119,6 +120,39 @@ describe('Tags', () => {
         expect(parseTags('"a,b"')).toEqual(['a', 'b']);
         expect(parseTags('  ')).toEqual([]);
         expect(parseTags(null)).toEqual([]);
+    });
+});
+
+describe('downloadFacts', () => {
+    it('takes the extension from the stored key, else from the file name', () => {
+        expect(downloadFacts({ filePath: 'downloads/abc.PDF', fileName: 'Handbook.docx' })).toMatchObject({
+            extension: 'pdf',
+            kind: 'pdf',
+            url: '/storage/downloads/abc.PDF',
+        });
+        expect(downloadFacts({ filePath: 'downloads/abc', fileName: 'Handbook.docx' })).toMatchObject({
+            extension: 'docx',
+            kind: 'doc',
+        });
+        expect(downloadFacts({ filePath: 'downloads/abc', fileName: 'Handbook' })).toMatchObject({
+            extension: '',
+            kind: 'other',
+        });
+    });
+
+    it('feeds the admin list too: an extensionless key falls back to the file name', () => {
+        const row = {
+            id: 1,
+            fileName: 'Calendar.xlsx',
+            filePath: 'downloads/cal',
+            fileSize: 10,
+            tags: '[]',
+            directory: null,
+            departmentId: null,
+            department: null,
+            createdAt: new Date(0),
+        } as unknown as Parameters<typeof toAdminDownload>[0];
+        expect(toAdminDownload(row)).toMatchObject({ url: '/storage/downloads/cal', extension: 'xlsx', kind: 'sheet' });
     });
 });
 

@@ -1,8 +1,8 @@
-import sharp, { type Metadata } from 'sharp';
+import type { Metadata } from 'sharp';
 import { IMAGE_TARGETS, webpName, type ImageTargetName } from '../image-compress';
 
-/** Decoding guard: refuses images with more pixels than a 64-megapixel photo (decompression bombs). */
-const MAX_INPUT_PIXELS = 8000 * 8000;
+/** Decoding guard for every image sharp reads: refuses images with more pixels than a 64-megapixel photo (decompression bombs). */
+export const MAX_INPUT_PIXELS = 8000 * 8000;
 
 /** Formats an upload may really be, as sharp names them (AVIF is reported as `heif` with AV1 compression). */
 const ALLOWED_FORMATS = new Set(['jpeg', 'png', 'webp', 'gif', 'avif']);
@@ -29,6 +29,8 @@ function realFormat({ format, compression }: Metadata): string | undefined {
 export async function toWebp(file: File, targetName: ImageTargetName): Promise<File> {
     const target = IMAGE_TARGETS[targetName];
     const bytes = new Uint8Array(await file.arrayBuffer());
+    // sharp (native binary) loads on the first image, not at server start.
+    const { default: sharp } = await import('sharp');
     const image = sharp(bytes, { animated: true, limitInputPixels: MAX_INPUT_PIXELS });
     const meta = await image.metadata();
     const format = realFormat(meta);

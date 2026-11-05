@@ -7,6 +7,23 @@
 /** Laravel stored these wall-clock times in the app timezone (Asia/Manila). */
 const manila = (local: string) => new Date(`${local.replace(' ', 'T')}+08:00`);
 
+/** Seeding writes demo Users with known Passwords: only a local database is accepted unless SEED_ALLOW_REMOTE=1. */
+export function assertLocalDatabase(): void {
+    const url = process.env.DATABASE_URL ?? '';
+    if (process.env.SEED_ALLOW_REMOTE === '1' || url.startsWith('file:')) return;
+    let host = '';
+    try {
+        host = new URL(url).hostname;
+    } catch {
+        // Unparseable: treated as remote below.
+    }
+    if (['localhost', '127.0.0.1', '[::1]'].includes(host)) return;
+    throw new Error(
+        `Refusing to seed ${host ? `the database on ${host}` : 'a database that is not local'}. ` +
+            'Set SEED_ALLOW_REMOTE=1 if that is really intended.',
+    );
+}
+
 /** The Password of a seeded User: the env override, else `password` (never defaulted in production). */
 export function seedPassword(envName: 'SEED_SUPERADMIN_PASSWORD' | 'SEED_DEPARTMENT_PASSWORD'): string {
     const value = process.env[envName];

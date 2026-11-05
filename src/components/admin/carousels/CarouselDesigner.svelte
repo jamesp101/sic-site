@@ -16,27 +16,27 @@
     Type,
     Undo2,
   } from '@lucide/svelte';
-  import { navigate } from 'astro:transitions/client';
   import { onMount, tick, untrack } from 'svelte';
   import { toast } from 'svelte-sonner';
   import { NUDGE, NUDGE_BIG, type Box, type ZMove } from '@/lib/carousel-editor';
   import { measureLayerBox } from '@/lib/carousel-layout';
   import {
-    IMAGE_PRESETS,
     MAX_LAYERS,
     TYPE_LABEL,
     defaultLayer,
+    imageLayerFor,
     layerLabel,
     type Layer,
     type LayerType,
     type MobileOverride,
   } from '@/lib/carousel-overlay';
   import { resolveMobile, slideFocus } from '@/lib/carousel-overlay-mobile';
-  import type { DesignerSlide } from '@/lib/server/slides';
+  import type { DesignerSlide } from '@/lib/designer-slide';
   import { SlideDesignerSession, type DesignerPort, type PortResult, type ReorderResult } from '@/lib/slide-designer-session';
   import ConfirmDialog from '../ConfirmDialog.svelte';
   import { postImage } from '../editor/upload';
   import { append, inputClass, parseActionError, primaryButtonClass, secondaryButtonClass } from '../shared/form-utils';
+  import UnsavedChangesGuard from '../shared/UnsavedChangesGuard.svelte';
   import LayerInspector from './LayerInspector.svelte';
   import SlideCanvas from './SlideCanvas.svelte';
   import SlideSettings from './SlideSettings.svelte';
@@ -116,9 +116,6 @@
   let view = $state<'desktop' | 'mobile'>('desktop');
   let deleteKey = $state<string | null>(null);
   let deleting = $state(false);
-  /** Navigation or form submit held back until the user decides about unsaved changes. */
-  let leave = $state.raw<{ href: string } | { form: HTMLFormElement; submitter: HTMLElement | null } | null>(null);
-  let discarding = false;
   let fileInput = $state<HTMLInputElement | null>(null);
 
   const active = $derived(designer.active);
@@ -136,39 +133,7 @@
     tab = selectedId ? 'layer' : 'slide';
   });
 
-  onMount(() => {
-    const warn = (event: BeforeUnloadEvent) => {
-      if (designer.anyDirty) event.preventDefault();
-    };
-    // ClientRouter navigation cannot be cancelled once the router sees it, so unsaved changes are
-    // guarded earlier: capture-phase click/submit listeners hold the navigation and ask first.
-    const guardClick = (event: MouseEvent) => {
-      if (!designer.anyDirty || discarding || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href]');
-      if (!link || (link.target && link.target !== '_self') || link.hasAttribute('download')) return;
-      const url = new URL(link.href, location.href);
-      if (url.origin !== location.origin || (url.pathname === location.pathname && url.search === location.search)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      leave = { href: url.href };
-    };
-    const guardSubmit = (event: SubmitEvent) => {
-      const form = event.target as HTMLFormElement;
-      if (!designer.anyDirty || discarding || form.closest('[data-designer-root]')) return;
-      event.preventDefault();
-      event.stopPropagation();
-      leave = { form, submitter: event.submitter };
-    };
-    window.addEventListener('beforeunload', warn);
-    document.addEventListener('click', guardClick, true);
-    document.addEventListener('submit', guardSubmit, true);
-    return () => {
-      window.removeEventListener('beforeunload', warn);
-      document.removeEventListener('click', guardClick, true);
-      document.removeEventListener('submit', guardSubmit, true);
-      session.dispose();
-    };
-  });
+  onMount(() => () => session.dispose());
 
   // ---------------------------------------------------------------- layers
 
@@ -202,17 +167,7 @@
         toast.error(error instanceof Error ? error.message : 'The image could not be uploaded.');
         return;
       }
-      const ratio = await naturalRatio(uploaded.url);
-      const layer = { ...defaultLayer('image'), src: uploaded.url, alt: '' } as Extract<Layer, { type: 'image' }>;
-      // Snap the box to the file's natural aspect ratio (slide percentages are of a 16:9 box).
-      const height = IMAGE_PRESETS[1].h;
-      layer.h = height;
-      layer.w = Math.round(height * ratio * (9 / 16) * 100) / 100;
-      if (layer.w > 60) {
-        layer.w = 60;
-        layer.h = Math.round(((60 / ratio) * (16 / 9)) * 100) / 100;
-      }
-      addLayer(layer);
+      addLayer(imageLayerFor(uploaded.url, await naturalRatio(uploaded.url)));
       await tick();
       document.getElementById('layer-alt')?.focus();
     } finally {
@@ -385,18 +340,6 @@
     }
   }
 
-  function discardAndLeave() {
-    const target = leave;
-    leave = null;
-    if (!target) return;
-    discarding = true;
-    if ('href' in target) navigate(target.href).finally(() => (discarding = false));
-    else {
-      target.form.requestSubmit(target.submitter);
-      discarding = false;
-    }
-  }
-
   const addTools: { type: LayerType; label: string; icon: typeof Type }[] = [
     { type: 'text', label: 'Add text', icon: Type },
     { type: 'button', label: 'Add button', icon: MousePointerClick },
@@ -411,7 +354,7 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div data-designer-root class="flex min-h-[calc(100dvh-4rem)] flex-col lg:h-[calc(100dvh-4rem)]">
+<div data-unsaved-own class="flex min-h-[calc(100dvh-4rem)] flex-col lg:h-[calc(100dvh-4rem)]">
   <div class="grid min-h-0 flex-1 gap-4 p-4 lg:grid-cols-[15rem_minmax(0,1fr)_21rem]">
     <!-- Slides -->
     <aside aria-label="Slides" class="flex min-h-0 flex-col gap-3 lg:overflow-hidden">
@@ -612,14 +555,9 @@
   </div>
 </div>
 
-<ConfirmDialog
-  bind:open={() => leave !== null, (value) => { if (!value) leave = null; }}
-  title="Discard unsaved changes?"
+<UnsavedChangesGuard
+  dirty={designer.anyDirty}
   description="Some slides have changes that have not been saved. Leaving this page will lose them."
-  confirmLabel="Discard"
-  cancelLabel="Keep editing"
-  destructive
-  onConfirm={discardAndLeave}
 />
 
 <ConfirmDialog

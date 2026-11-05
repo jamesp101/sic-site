@@ -4,7 +4,15 @@ import { closeTestDb } from './test-db';
 // `vi.mock` is hoisted above the imports, so the factory loads the harness itself.
 vi.mock('./db', async () => ({ db: await (await import('./test-db')).openTestDb() }));
 
-const { RATE_LIMITS, assertUploadQuota, consumeRateLimit, consumeSignInAttempt } = await import('./rate-limit');
+const {
+    RATE_LIMITS,
+    assertUploadQuota,
+    consumeRateLimit,
+    isSignInBlocked,
+    recordSignInFailure,
+    sweepExpiredRateLimits,
+} = await import('./rate-limit');
+const { db } = await import('./db');
 const { RequestError } = await import('./request-error');
 
 afterAll(closeTestDb);
@@ -44,21 +52,51 @@ describe('rate limit window', () => {
     });
 });
 
-describe('sign-in attempts', () => {
-    it('shares one counter between spelling variants of the same email', async () => {
-        const max = RATE_LIMITS.signIn.max;
-        for (let i = 0; i < max; i++) {
-            const email = i % 2 === 0 ? ' Admin@SIC.edu.ph ' : 'admin@sic.edu.ph';
-            expect(await consumeSignInAttempt(email, T0)).toBe(true);
+describe('sign-in failures', () => {
+    const MINUTE = 60_000;
+
+    it('blocks one address after 10 failures for an email, whatever the spelling, and no other address or email', async () => {
+        for (let i = 0; i < 10; i++) {
+            expect(await isSignInBlocked('a@sic.edu.ph', '198.51.100.1', T0)).toBe(false);
+            await recordSignInFailure(i % 2 === 0 ? ' A@SIC.edu.ph ' : 'a@sic.edu.ph', '198.51.100.1', T0);
         }
-        expect(await consumeSignInAttempt('admin@sic.edu.ph', T0)).toBe(false);
-        expect(await consumeSignInAttempt(' ADMIN@sic.edu.ph', T0)).toBe(false);
+        expect(await isSignInBlocked('A@sic.edu.ph', '198.51.100.1', T0)).toBe(true);
+        expect(await isSignInBlocked('a@sic.edu.ph', '198.51.100.2', T0)).toBe(false);
+        expect(await isSignInBlocked('b@sic.edu.ph', '198.51.100.1', T0)).toBe(false);
     });
 
-    it('counts different emails separately', async () => {
-        for (let i = 0; i <= RATE_LIMITS.signIn.max; i++) await consumeSignInAttempt('locked@sic.edu.ph', T0);
-        expect(await consumeSignInAttempt('locked@sic.edu.ph', T0)).toBe(false);
-        expect(await consumeSignInAttempt('other@sic.edu.ph', T0)).toBe(true);
+    it('blocks every address once an email failed 100 times in 15 minutes', async () => {
+        for (let i = 0; i < 100; i++) {
+            expect(await isSignInBlocked('c@sic.edu.ph', `192.0.2.${i}`, T0)).toBe(false);
+            await recordSignInFailure('c@sic.edu.ph', `192.0.2.${i}`, T0);
+        }
+        expect(await isSignInBlocked('c@sic.edu.ph', '192.0.2.200', T0)).toBe(true);
+        expect(await isSignInBlocked('d@sic.edu.ph', '192.0.2.200', T0)).toBe(false);
+    });
+
+    it('lets an address in again 15 minutes after the window began, however often it was refused', async () => {
+        for (let i = 0; i < 10; i++) await recordSignInFailure('e@sic.edu.ph', '198.51.100.9', T0);
+        for (let i = 0; i < 5; i++) {
+            expect(await isSignInBlocked('e@sic.edu.ph', '198.51.100.9', T0 + 14 * MINUTE)).toBe(true);
+        }
+        expect(await isSignInBlocked('e@sic.edu.ph', '198.51.100.9', T0 + 15 * MINUTE)).toBe(false);
+    });
+});
+
+describe('sweepExpiredRateLimits', () => {
+    it('removes app counters whose window is over and keeps current ones and Better Auth rows', async () => {
+        const HOUR = 60 * 60 * 1000;
+        await db.rateLimit.deleteMany();
+        await db.rateLimit.createMany({
+            data: [
+                { key: 'app:old', count: 3, lastRequest: BigInt(T0 - 2 * HOUR) },
+                { key: 'app:current', count: 3, lastRequest: BigInt(T0 - 10 * 60_000) },
+                { key: '203.0.113.7/sign-in/email', count: 1, lastRequest: BigInt(T0 - 2 * HOUR) },
+            ],
+        });
+        expect(await sweepExpiredRateLimits(T0)).toBe(1);
+        const keys = (await db.rateLimit.findMany({ select: { key: true } })).map((row) => row.key).sort();
+        expect(keys).toEqual(['203.0.113.7/sign-in/email', 'app:current']);
     });
 });
 

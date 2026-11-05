@@ -1,11 +1,13 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
   import { navigate } from 'astro:transitions/client';
-    import { untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { actionForm } from '@/components/admin/shared/action-form.svelte';
   import BlockEditor from '@/components/admin/editor/BlockEditor.svelte';
   import Field from '@/components/admin/shared/Field.svelte';
   import FormActions from '@/components/admin/shared/FormActions.svelte';
+  import UnsavedChangesGuard from '@/components/admin/shared/UnsavedChangesGuard.svelte';
+  import { unsavedChanges } from '@/components/admin/shared/unsaved-changes.svelte';
   import { inputClass } from '@/components/admin/shared/form-utils';
   import { cardClass, selectClass } from '@/components/admin/ui';
 
@@ -39,6 +41,8 @@
   let departmentId = $state(initial?.departmentId ? String(initial.departmentId) : isSuperAdmin ? (initial ? '' : String(untrack(() => defaultDepartmentId) ?? '')) : String(untrack(() => departments)[0]?.id ?? ''));
 
 
+  const unsaved = unsavedChanges(() => [title, content, order, isActive, departmentId]);
+
   const form = actionForm({
     run() {
       const input = {
@@ -50,11 +54,14 @@
       };
       return section ? actions.heroSections.update({ id: section.id, ...input }) : actions.heroSections.create(input);
     },
-    onSuccess: () => navigate('/admin/hero-sections'),
+    onSuccess: () => {
+      unsaved.markSaved();
+      return navigate('/admin/hero-sections');
+    },
   });
 </script>
 
-<form method="post" onsubmit={form.submit} class="space-y-6">
+<form method="post" onsubmit={form.submit} data-unsaved-own class="space-y-6">
   <div class="{cardClass} space-y-6 p-6">
     <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
       <Field label="Page location" id="departmentId" error={form.errors.departmentId}>
@@ -92,3 +99,5 @@
 
   <FormActions cancelHref="/admin/hero-sections" processing={form.processing} message={form.message} submitLabel={section ? 'Save changes' : 'Create section'} />
 </form>
+
+<UnsavedChangesGuard dirty={unsaved.dirty} />

@@ -3,15 +3,29 @@ import {
     MAX_SCALE,
     MIN_SCALE,
     afterDelete,
+    beginPan,
     canvasClick,
     closeInspector,
     commitRename,
     createdMember,
+    dragEnd,
+    dragLeaveCard,
+    dragLeaveLane,
+    dragOverCard,
+    dragOverLane,
+    dragStart,
+    dropOnCard,
+    dropOnLane,
     dropZone,
+    endPan,
     fitViewport,
+    initialDrag,
+    initialPan,
     initialUi,
     isPanGesture,
+    isPanning,
     itemKeyIntent,
+    movePan,
     nextSearchMatch,
     panBy,
     peerAnchor,
@@ -20,6 +34,7 @@ import {
     setRenameValue,
     startCreate,
     startRename,
+    takeControl,
     wheelIntent,
     zoomAt,
     type KeyInput,
@@ -271,5 +286,100 @@ describe('rename state', () => {
     it('does nothing when that member is not being renamed (blur after Escape or Enter)', () => {
         expect(commitRename(initialUi, members, 2)).toBeNull();
         expect(commitRename(startRename(initialUi, members, 2), members, 3)).toBeNull();
+    });
+});
+
+describe('pan lifecycle', () => {
+    const view = { scale: 1, tx: 10, ty: 20 };
+
+    it('auto-fits until the user takes control, and stays off afterwards', () => {
+        expect(initialPan.autoFit).toBe(true);
+        const taken = takeControl(initialPan);
+        expect(taken.autoFit).toBe(false);
+        expect(takeControl(taken)).toBe(taken);
+    });
+
+    it('a short press is a click: the view stays and the press ends unmoved', () => {
+        const pan = beginPan(initialPan, { x: 100, y: 100 }, view);
+        const moved = movePan(pan, view, { x: 101, y: 102 });
+        expect(moved.view).toBe(view);
+        expect(isPanning(moved.pan)).toBe(false);
+        expect(endPan(moved.pan)).toEqual({ pan: { ...initialPan, gesture: null }, moved: false });
+    });
+
+    it('past the threshold the view follows the pointer from where the press began', () => {
+        const pan = beginPan(initialPan, { x: 100, y: 100 }, view);
+        const first = movePan(pan, view, { x: 130, y: 90 });
+        expect(isPanning(first.pan)).toBe(true);
+        expect(first.view).toEqual({ scale: 1, tx: 40, ty: 10 });
+        // Coming back near the start keeps panning: it is one gesture.
+        const back = movePan(first.pan, first.view, { x: 101, y: 100 });
+        expect(back.view).toEqual({ scale: 1, tx: 11, ty: 20 });
+        expect(endPan(back.pan)?.moved).toBe(true);
+    });
+
+    it('ignores moves and releases without a press', () => {
+        expect(movePan(initialPan, view, { x: 500, y: 500 })).toEqual({ pan: initialPan, view });
+        expect(endPan(initialPan)).toBeNull();
+    });
+});
+
+describe('drag and drop', () => {
+    it('starts and ends a drag, clearing the hover', () => {
+        const dragging = dragStart(4);
+        expect(dragging).toEqual({ dragId: 4, drop: null });
+        expect(dragEnd()).toEqual(initialDrag);
+    });
+
+    it('hovering a card reports whether the drop is allowed (never onto its own subtree)', () => {
+        const ok = dragOverCard(dragStart(2), members, 3, 'after');
+        expect(ok).toEqual({ allowed: true, drag: { dragId: 2, drop: { id: 3, position: 'after', ok: true } } });
+        const denied = dragOverCard(dragStart(2), members, 4, 'child');
+        expect(denied).toEqual({ allowed: false, drag: { dragId: 2, drop: { id: 4, position: 'child', ok: false } } });
+    });
+
+    it('keeps the same state object while the hover is unchanged', () => {
+        const first = dragOverCard(dragStart(2), members, 3, 'after')!;
+        expect(dragOverCard(first.drag, members, 3, 'after')!.drag).toBe(first.drag);
+    });
+
+    it('ignores hovering and dropping when nothing is dragged', () => {
+        expect(dragOverCard(initialDrag, members, 3, 'after')).toBeNull();
+        expect(dragOverLane(initialDrag)).toBeNull();
+        expect(dropOnCard(initialDrag, members, 3, 'after')).toBeNull();
+        expect(dropOnLane(initialDrag, members)).toBeNull();
+    });
+
+    it('leaving a card clears only that card, and only when the pointer really left it', () => {
+        const over = dragOverCard(dragStart(2), members, 3, 'after')!.drag;
+        expect(dragLeaveCard(over, 3, true)).toBe(over);
+        expect(dragLeaveCard(over, 1, false)).toBe(over);
+        expect(dragLeaveCard(over, 3, false)).toEqual({ dragId: 2, drop: null });
+    });
+
+    it('the lane accepts, and leaving it clears only the lane hover', () => {
+        const lane = dragOverLane(dragStart(4))!;
+        expect(lane.drop).toEqual({ id: null, position: 'root', ok: true });
+        expect(dragLeaveLane(lane)).toEqual({ dragId: 4, drop: null });
+        const card = dragOverCard(dragStart(4), members, 3, 'before')!.drag;
+        expect(dragLeaveLane(card)).toBe(card);
+    });
+
+    it('dropping on a card ends the drag and returns the moves', () => {
+        const dropped = dropOnCard(dragStart(4), members, 3, 'child');
+        expect(dropped).toEqual({ drag: initialDrag, moving: 4, placements: [{ id: 4, parentId: 3, order: 1 }] });
+    });
+
+    it('dropping onto the own subtree ends the drag without moves', () => {
+        const dropped = dropOnCard(dragStart(2), members, 4, 'child');
+        expect(dropped?.drag).toEqual(initialDrag);
+        expect(dropped?.placements ?? []).toEqual([]);
+    });
+
+    it('dropping on the lane makes the member the last top-level member', () => {
+        const dropped = dropOnLane(dragStart(4), members);
+        expect(dropped?.drag).toEqual(initialDrag);
+        expect(dropped?.moving).toBe(4);
+        expect(dropped?.placements).toContainEqual({ id: 4, parentId: null, order: 2 });
     });
 });

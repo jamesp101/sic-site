@@ -127,10 +127,16 @@ const columns = [
                                             <Sparkles class="h-4 w-4" aria-hidden="true" />
                                         </div>
                                         <div class="min-w-0">
-                                            <span class="block max-w-xs truncate font-semibold text-foreground" title={hs.title || undefined}>
+                                            <span
+                                                class="block max-w-xs truncate font-semibold text-foreground"
+                                                title={hs.title || undefined}
+                                            >
                                                 {hs.title || 'Untitled section'}
                                             </span>
-                                            <span class="mt-0.5 block max-w-xs truncate text-xs text-muted-foreground" title={hs.searchText || undefined}>
+                                            <span
+                                                class="mt-0.5 block max-w-xs truncate text-xs text-muted-foreground"
+                                                title={hs.searchText || undefined}
+                                            >
                                                 {hs.searchText.slice(0, 75)}
                                                 {hs.searchText.length > 75 ? '…' : ''}
                                             </span>
@@ -140,7 +146,10 @@ const columns = [
                                 {showLocation && (
                                     <td class="px-4 py-3">
                                         {hs.department ? (
-                                            <span class={`${pillClass} max-w-48 truncate bg-secondary text-secondary-foreground`} title={hs.department.name}>
+                                            <span
+                                                class={`${pillClass} max-w-48 truncate bg-secondary text-secondary-foreground`}
+                                                title={hs.department.name}
+                                            >
                                                 {hs.department.name}
                                             </span>
                                         ) : (

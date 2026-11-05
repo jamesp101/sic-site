@@ -4,11 +4,14 @@
  * only calls `finishResponse` on Node.
  */
 import { createHash } from 'node:crypto';
-import { brotliCompress, constants, gzip } from 'node:zlib';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { brotliCompress, constants, createBrotliCompress, createGzip, gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 
 const brotli = promisify(brotliCompress);
 const gzipAsync = promisify(gzip);
+const BROTLI_PARAMS = { params: { [constants.BROTLI_PARAM_QUALITY]: 4 } };
 
 /** Bodies smaller than this are sent as is: the gain does not pay for the CPU and the header. */
 export const MIN_COMPRESS_BYTES = 1024;
@@ -75,11 +78,57 @@ export interface FinishOptions {
 }
 
 /**
+ * Reads `body` until `min` bytes are in or it ends. `rest` is the whole body again (the bytes read, then the
+ * unread remainder, still streaming); `size` is what was read, which is the full length when it is below `min`.
+ */
+async function peek(
+    body: ReadableStream<Uint8Array>,
+    min: number,
+): Promise<{ rest: AsyncGenerator<Uint8Array>; size: number; done: boolean }> {
+    const reader = body.getReader();
+    const head: Uint8Array[] = [];
+    let size = 0;
+    let done = false;
+    while (size < min && !done) {
+        const chunk = await reader.read();
+        done = chunk.done;
+        if (chunk.value) {
+            head.push(chunk.value);
+            size += chunk.value.byteLength;
+        }
+    }
+    async function* rest(): AsyncGenerator<Uint8Array> {
+        try {
+            yield* head;
+            while (!done) {
+                const chunk = await reader.read();
+                if (chunk.done) return;
+                yield chunk.value;
+            }
+        } finally {
+            reader.releaseLock();
+        }
+    }
+    return { rest: rest(), size, done };
+}
+
+/** `source` through a brotli or gzip stream; the compressed bytes flow as the source produces them. */
+function compressStream(source: AsyncGenerator<Uint8Array>, encoding: 'br' | 'gzip'): ReadableStream<Uint8Array> {
+    const compressor = encoding === 'br' ? createBrotliCompress(BROTLI_PARAMS) : createGzip();
+    pipeline(Readable.from(source), compressor).catch(() => {
+        // The pipeline already destroyed `compressor`; its readers see the error.
+    });
+    return Readable.toWeb(compressor) as ReadableStream<Uint8Array>;
+}
+
+/**
  * Last step of a Node response (after the request policy headers):
- * - a public, cacheable HTML page (GET, 200) gets a weak ETag over its body and `If-None-Match` is answered
- *   with 304;
- * - a text response (HTML, XML, JSON, JS, CSS, plain text) of at least `MIN_COMPRESS_BYTES` that is not
+ * - a public, cacheable HTML page (GET, 200) is buffered to get a weak ETag over its body; `If-None-Match` is
+ *   answered with 304;
+ * - any other text response (HTML, XML, JSON, JS, CSS, plain text) of at least `MIN_COMPRESS_BYTES` that is not
  *   already encoded is compressed with brotli or gzip, as the client accepts, and gets `Vary: Accept-Encoding`.
+ *   Only the public HTML above is buffered (it needs its length and ETag); the rest streams through the
+ *   compressor, so its length is not sent.
  * `/storage` and every other type pass through untouched, streams included.
  */
 export async function finishResponse(response: Response, { request, pathname }: FinishOptions): Promise<Response> {
@@ -88,30 +137,51 @@ export async function finishResponse(response: Response, { request, pathname }: 
     const type = response.headers.get('content-type') ?? '';
     if (!COMPRESSIBLE.test(type)) return response;
 
+    const isPublicHtml =
+        /^text\/html\b/i.test(type) && /(^|,\s*)public\b/i.test(response.headers.get('cache-control') ?? '');
+    return isPublicHtml ? bufferedPublicHtml(response, request) : streamed(response, request);
+}
+
+async function streamed(response: Response, request: Request): Promise<Response> {
+    const { rest, size, done } = await peek(response.body!, MIN_COMPRESS_BYTES);
+    if (done && size < MIN_COMPRESS_BYTES) {
+        return new Response(Readable.toWeb(Readable.from(rest)) as ReadableStream<Uint8Array>, {
+            status: 200,
+            headers: response.headers,
+        });
+    }
+    const headers = new Headers(response.headers);
+    appendVary(headers, 'Accept-Encoding');
+    const encoding = pickEncoding(request.headers.get('accept-encoding'));
+    if (!encoding) {
+        return new Response(Readable.toWeb(Readable.from(rest)) as ReadableStream<Uint8Array>, {
+            status: 200,
+            headers,
+        });
+    }
+    headers.delete('content-length');
+    headers.set('content-encoding', encoding);
+    return new Response(compressStream(rest, encoding), { status: 200, headers });
+}
+
+async function bufferedPublicHtml(response: Response, request: Request): Promise<Response> {
     const body = new Uint8Array(await response.arrayBuffer());
     const headers = withoutBody(response.headers);
-    const isPublicHtml = /^text\/html\b/i.test(type) && /(^|,\s*)public\b/i.test(headers.get('cache-control') ?? '');
-
-    if (isPublicHtml) {
-        const digest = createHash('sha1').update(body).digest('base64url').slice(0, 22);
-        const etag = `W/"${body.byteLength.toString(16)}-${digest}"`;
-        headers.set('etag', etag);
-        if (etagMatches(request.headers.get('if-none-match'), etag)) {
-            return new Response(null, { status: 304, headers });
-        }
+    const digest = createHash('sha1').update(body).digest('base64url').slice(0, 22);
+    const etag = `W/"${body.byteLength.toString(16)}-${digest}"`;
+    headers.set('etag', etag);
+    if (etagMatches(request.headers.get('if-none-match'), etag)) {
+        return new Response(null, { status: 304, headers });
     }
 
-    const encoding =
-        body.byteLength >= MIN_COMPRESS_BYTES ? pickEncoding(request.headers.get('accept-encoding')) : null;
-    if (body.byteLength >= MIN_COMPRESS_BYTES) appendVary(headers, 'Accept-Encoding');
+    const big = body.byteLength >= MIN_COMPRESS_BYTES;
+    const encoding = big ? pickEncoding(request.headers.get('accept-encoding')) : null;
+    if (big) appendVary(headers, 'Accept-Encoding');
     if (!encoding) {
         headers.set('content-length', String(body.byteLength));
         return new Response(body, { status: 200, headers });
     }
-    const compressed =
-        encoding === 'br'
-            ? await brotli(body, { params: { [constants.BROTLI_PARAM_QUALITY]: 4 } })
-            : await gzipAsync(body);
+    const compressed = encoding === 'br' ? await brotli(body, BROTLI_PARAMS) : await gzipAsync(body);
     headers.set('content-encoding', encoding);
     headers.set('content-length', String(compressed.byteLength));
     return new Response(new Uint8Array(compressed), { status: 200, headers });

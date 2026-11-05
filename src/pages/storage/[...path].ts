@@ -48,7 +48,8 @@ export const GET: APIRoute = async ({ params, url, request, redirect }) => {
             headers: { 'Content-Range': `bytes */${error.size}`, 'Accept-Ranges': 'bytes' },
         });
     }
-    if (!file) return new Response('Not found', { status: 404 });
+    // A short cache time keeps a crawler or a broken link from reaching the store on every request.
+    if (!file) return new Response('Not found', { status: 404, headers: { 'Cache-Control': 'public, max-age=60' } });
     // The type follows the extension only (never the stored object's metadata), so an upload can
     // never be served as HTML. Legacy Laravel `.svg` files render as images under the CSP below.
     const type = ext === '.svg' ? 'image/svg+xml' : (FILE_TYPES[ext] ?? 'application/octet-stream');

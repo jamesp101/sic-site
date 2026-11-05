@@ -6,19 +6,26 @@
   import { actionForm } from '@/components/admin/shared/action-form.svelte';
   import BlockEditor from '@/components/admin/editor/BlockEditor.svelte';
   import { primaryButtonClass } from '@/components/admin/shared/form-utils';
+  import UnsavedChangesGuard from '@/components/admin/shared/UnsavedChangesGuard.svelte';
+  import { unsavedChanges } from '@/components/admin/shared/unsaved-changes.svelte';
 
   let { welcomeHeroContent = '' }: { welcomeHeroContent?: string } = $props();
 
   let content = $state(untrack(() => welcomeHeroContent));
+  const unsaved = unsavedChanges(() => content);
+
   const form = actionForm({
     run: () => actions.settings.updateLanding({ welcomeHeroContent: content }),
     // The action queued a flash message; re-rendering the view shows it as a toast.
-    onSuccess: () => reloadView(),
+    onSuccess: () => {
+      unsaved.markSaved();
+      return reloadView();
+    },
   });
   const error = $derived(form.message || form.errors.welcomeHeroContent || '');
 </script>
 
-<form method="post" onsubmit={form.submit} class="space-y-6">
+<form method="post" onsubmit={form.submit} data-unsaved-own class="space-y-6">
   <BlockEditor bind:value={content} id="welcome_hero_content" label="Welcome hero content" context="section" />
 
   {#if error}
@@ -30,3 +37,5 @@
     </button>
   </div>
 </form>
+
+<UnsavedChangesGuard dirty={unsaved.dirty} />

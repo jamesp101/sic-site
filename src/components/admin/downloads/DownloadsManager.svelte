@@ -192,13 +192,13 @@
     <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
       <a href={manager.allFoldersHref} aria-current={manager.folder === '' ? 'true' : undefined} class="flex items-center gap-3 rounded-xl border p-3 text-left transition-colors {manager.folder === '' ? 'border-gold-500 bg-gold-500/10' : 'border-border bg-surface hover:border-gold-400'}">
         <Folder class="h-5 w-5 shrink-0 text-gold-500" aria-hidden="true" />
-        <span class="min-w-0"><span class="block truncate text-xs font-semibold">All files</span><span class="block text-xs text-muted-foreground">{manager.totalFiles} items</span></span>
+        <span class="min-w-0"><span class="block truncate text-xs font-semibold [a:focus-visible_&]:overflow-visible [a:focus-visible_&]:break-words [a:focus-visible_&]:whitespace-normal">All files</span><span class="block text-xs text-muted-foreground">{manager.totalFiles} items</span></span>
       </a>
       {#each manager.folders as dir (dir.name)}
         <div class="group relative flex items-center justify-between rounded-xl border p-3 transition-colors {manager.folder === dir.name ? 'border-gold-500 bg-gold-500/10' : 'border-border bg-surface hover:border-gold-400'}">
           <a href={dir.href} aria-current={manager.folder === dir.name ? 'true' : undefined} class="flex min-w-0 flex-1 items-center gap-3 text-left">
             <Folder class="h-5 w-5 shrink-0 text-gold-500" aria-hidden="true" />
-            <span class="min-w-0"><span class="block truncate text-xs font-semibold">{dir.name}</span><span class="block text-xs text-muted-foreground">{dir.count} items</span></span>
+            <span class="min-w-0"><span class="block truncate text-xs font-semibold [a:focus-visible_&]:overflow-visible [a:focus-visible_&]:break-words [a:focus-visible_&]:whitespace-normal">{dir.name}</span><span class="block text-xs text-muted-foreground">{dir.count} items</span></span>
           </a>
           {#if dir.id && dir.canDelete}
             <button type="button" onclick={() => askDelete('folder', dir.id!, dir.name)} class="ml-1 inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete directory ${dir.name}`}>
@@ -246,14 +246,14 @@
             <div class="flex items-center gap-3 overflow-hidden">
               <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl {kindClass[d.kind]}"><Icon class="h-5 w-5" aria-hidden="true" /></div>
               <div class="min-w-0">
-                <a href={d.url} target="_blank" rel="noopener" class="block truncate text-sm font-bold text-foreground hover:text-link" title={d.fileName}>{d.fileName}</a>
+                <a href={d.url} target="_blank" rel="noopener" class="block truncate text-sm font-bold text-foreground hover:text-link focus-visible:overflow-visible focus-visible:break-words focus-visible:whitespace-normal" title={d.fileName}>{d.fileName}</a>
                 <span class="mt-0.5 block font-mono text-xs text-muted-foreground">{formatFileSize(d.size)}</span>
               </div>
             </div>
             <div class="my-3 space-y-2 border-t border-border pt-2">
               <div class="flex items-center justify-between text-xs">
                 <span class={chip}><Folder class="h-3 w-3 text-gold-500" aria-hidden="true" /> {d.directory}</span>
-                <span class="max-w-[120px] truncate text-xs font-semibold text-link">{d.departmentName ?? 'General'}</span>
+                <span class="max-w-[120px] break-words text-xs font-semibold text-link">{d.departmentName ?? 'General'}</span>
               </div>
               {#if d.tags.length > 0}
                 <div class="flex flex-wrap gap-1">{#each d.tags.slice(0, 3) as tag (tag)}<span class={chip}><Tag class="h-2.5 w-2.5" aria-hidden="true" /> {tag}</span>{/each}</div>
@@ -291,7 +291,7 @@
                   <div class="flex items-center gap-3">
                     <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {kindClass[d.kind]}"><Icon class="h-4 w-4" aria-hidden="true" /></div>
                     <div class="min-w-0">
-                      <a href={d.url} target="_blank" rel="noopener" class="block max-w-xs truncate font-bold text-foreground hover:text-link" title={d.fileName}>{d.fileName}</a>
+                      <a href={d.url} target="_blank" rel="noopener" class="block max-w-xs truncate font-bold text-foreground hover:text-link focus-visible:overflow-visible focus-visible:break-words focus-visible:whitespace-normal" title={d.fileName}>{d.fileName}</a>
                       {#if d.tags.length > 0}<div class="mt-0.5 flex flex-wrap gap-1">{#each d.tags as tag (tag)}<span class="text-xs text-muted-foreground">#{tag}</span>{/each}</div>{/if}
                     </div>
                   </div>

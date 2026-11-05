@@ -98,6 +98,7 @@
   let showHidden = $state(false);
   let dragging = $state(false);
   let renamingId = $state<number | null>(null);
+  let previewHeight = $state(0);
   let renameValue = $state('');
   let seeding = $state(false);
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -306,8 +307,9 @@
     selectedId = id;
     const row = document.querySelector<HTMLElement>(`[data-link-id="${id}"]`);
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    row?.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
-    row?.querySelector<HTMLElement>('[data-handle]')?.focus({ preventScroll: true });
+    const handle = row?.querySelector<HTMLElement>('[data-handle]');
+    handle?.focus();
+    row?.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
   }
 
   async function useDefaultMenu() {
@@ -410,7 +412,7 @@
             data-testid="nav-label"
             title="Double-click to rename"
             ondblclick={() => startRename(node)}
-            class="min-w-0 max-w-full cursor-text truncate text-sm font-semibold {node.isActive ? 'text-foreground' : 'text-muted-foreground'}"
+            class="min-w-0 max-w-full cursor-text break-words text-sm font-semibold {node.isActive ? 'text-foreground' : 'text-muted-foreground'}"
           >
             {node.label}
           </p>
@@ -434,7 +436,7 @@
           </span>
         {/each}
       </div>
-      <p class="truncate font-mono text-xs {dropdown ? 'text-muted-foreground line-through' : 'text-link'}">{node.url}</p>
+      <p class="break-all font-mono text-xs {dropdown ? 'text-muted-foreground line-through' : 'text-link'}">{node.url}</p>
       {#if dropdown}
         <p class="text-xs text-muted-foreground">Opens a dropdown — its URL isn't used.</p>
       {/if}
@@ -496,8 +498,8 @@
   {/if}
 {/snippet}
 
-<div class="space-y-6">
-  <NavHeaderPreview tree={tops} {departments} bind:showHidden {selectedId} onselect={selectRow} />
+<div class="space-y-6" style:--nav-preview-offset="{previewHeight + 16}px">
+  <NavHeaderPreview tree={tops} {departments} bind:showHidden bind:height={previewHeight} {selectedId} onselect={selectRow} />
 
   <section aria-labelledby="nav-tree-title" class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -592,7 +594,7 @@
           animate:flip={{ duration: flipDurationMs }}
           data-testid="nav-top"
           data-link-id={top.id}
-          class="scroll-mt-24 rounded-xl border bg-card shadow-brand-sm transition-[box-shadow,border-color] motion-reduce:transition-none {selectedId === top.id
+          class="scroll-mt-4 md:scroll-mt-(--nav-preview-offset) rounded-xl border bg-card shadow-brand-sm transition-[box-shadow,border-color] motion-reduce:transition-none {selectedId === top.id
             ? 'border-brand-600 ring-2 ring-ring/50'
             : top.isActive
               ? 'border-border hover:border-border-strong'
@@ -616,7 +618,7 @@
                 animate:flip={{ duration: flipDurationMs }}
                 data-testid="nav-child"
                 data-link-id={child.id}
-                class="flex scroll-mt-24 flex-col rounded-lg border bg-surface transition-[box-shadow,border-color] motion-reduce:transition-none {selectedId === child.id
+                class="flex scroll-mt-4 md:scroll-mt-(--nav-preview-offset) flex-col rounded-lg border bg-surface transition-[box-shadow,border-color] motion-reduce:transition-none {selectedId === child.id
                   ? 'border-brand-600 ring-2 ring-ring/50'
                   : child.isActive
                     ? 'border-border hover:border-border-strong'

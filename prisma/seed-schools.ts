@@ -13,6 +13,7 @@ import { createDocument, serializeDocument } from '../src/lib/blocks/document';
 import { markdownToBlocks } from '../src/lib/blocks/from-markdown';
 import { db } from '../src/lib/server/db';
 import { slugify } from '../src/lib/server/slug';
+import { assertLocalDatabase } from './demo-data';
 
 const reset = process.argv.includes('--reset');
 
@@ -762,6 +763,7 @@ async function createMembers(member: MemberSeed, departmentId: number, parentId:
 }
 
 async function main() {
+    assertLocalDatabase();
     const author = await db.user.findFirst({ where: { role: 'superadmin' }, orderBy: { id: 'asc' } });
     if (!author) throw new Error('No superadmin user found; run `vp run db:seed` or `vp run db:create-admin` first.');
 

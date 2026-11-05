@@ -105,7 +105,7 @@
       >
         <Icon class="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span class="shrink-0">{BLOCK_REGISTRY[block.type].meta.label}</span>
-        {#if preview(block)}<span class="truncate font-normal text-muted-foreground">{preview(block)}</span>{/if}
+        {#if preview(block)}<span class="min-w-0 break-words font-normal text-muted-foreground">{preview(block)}</span>{/if}
       </button>
       {#if isContainerType(block.type)}
         <LayerList

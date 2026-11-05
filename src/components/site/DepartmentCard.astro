@@ -1,7 +1,9 @@
 ---
 import type { DepartmentSummary } from '@/lib/content-types';
 import { card } from './classes';
+import { IMAGE_TARGETS } from '@/lib/image-compress';
 import { getInitials } from '@/lib/initials';
+import { THUMB_WIDTH } from '@/lib/server/storage/variants';
 import { departmentHref } from '@/lib/site-nav';
 
 interface Props {
@@ -20,6 +22,12 @@ const { department } = Astro.props;
     {department.logoUrl ? (
         <img
             src={department.logoUrl}
+            srcset={
+                department.logoSmallUrl
+                    ? `${department.logoSmallUrl} ${THUMB_WIDTH}w, ${department.logoUrl} ${IMAGE_TARGETS.logo.maxWidth}w`
+                    : undefined
+            }
+            sizes={department.logoSmallUrl ? '56px' : undefined}
             alt=""
             width="56"
             height="56"

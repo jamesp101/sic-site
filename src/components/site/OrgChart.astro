@@ -1,6 +1,8 @@
 ---
 import type { MemberNode } from '@/lib/content-types';
+import { IMAGE_TARGETS } from '@/lib/image-compress';
 import { getInitials } from '@/lib/initials';
+import { THUMB_WIDTH } from '@/lib/server/storage/variants';
 
 interface Props {
     nodes: MemberNode[];
@@ -18,6 +20,12 @@ const { nodes, root = true } = Astro.props;
                 {node.imageUrl ? (
                     <img
                         src={node.imageUrl}
+                        srcset={
+                            node.imageSmallUrl
+                                ? `${node.imageSmallUrl} ${THUMB_WIDTH}w, ${node.imageUrl} ${IMAGE_TARGETS.portrait.maxWidth}w`
+                                : undefined
+                        }
+                        sizes={node.imageSmallUrl ? '(min-width: 768px) 64px, 48px' : undefined}
                         alt=""
                         width="64"
                         height="64"

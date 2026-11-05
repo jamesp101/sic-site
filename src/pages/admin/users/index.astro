@@ -120,18 +120,24 @@ const { rows: users, q, sort, dir } = list;
                             <tr class="hover:bg-surface-alt/60">
                                 <td class="px-4 py-3 font-semibold text-foreground">
                                     <span class="inline-flex items-center gap-2">
-                                        <span class="max-w-64 truncate" title={user.name}>{user.name}</span>
+                                        <span class="max-w-64 truncate" title={user.name}>
+                                            {user.name}
+                                        </span>
                                         {user.id === actor.id && (
                                             <span class="text-xs font-normal text-muted-foreground">(you)</span>
                                         )}
                                     </span>
                                 </td>
                                 <td class="px-4 py-3 text-muted-foreground">
-                                    <span class="block max-w-64 truncate" title={user.email}>{user.email}</span>
+                                    <span class="block max-w-64 truncate" title={user.email}>
+                                        {user.email}
+                                    </span>
                                 </td>
                                 <td class="px-4 py-3">
                                     {user.role === 'superadmin' ? (
-                                        <span class={`${pillClass} bg-status-announcement-bg text-status-announcement-fg`}>
+                                        <span
+                                            class={`${pillClass} bg-status-announcement-bg text-status-announcement-fg`}
+                                        >
                                             Superadmin
                                         </span>
                                     ) : (

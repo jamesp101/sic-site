@@ -1,6 +1,7 @@
 /**
- * Creates the missing variants (`<key>.w640.webp` for Highlight images, `<key>.w960.webp` for Slide photos) of stored
- * images. Run once after deploying variants to existing data; safe to run again (existing variants are kept).
+ * Creates the missing variants (`<key>.w640.webp` for Highlight images, `<key>.w960.webp` for Slide photos,
+ * `<key>.w128.webp` for Department logos and Member portraits) of stored images. Run once after deploying variants
+ * to existing data; safe to run again (existing variants are kept).
  *
  *   vp run storage:variants
  */

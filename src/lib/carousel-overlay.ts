@@ -11,6 +11,8 @@
  * Free of `astro:*` imports and of zod (validation lives in carousel-overlay-schema.ts) so the public
  * carousel bundle stays small and the module runs in the browser, on the server and in unit tests.
  */
+import { DESKTOP_FRAME } from './carousel-layout';
+
 export const OVERLAY_VERSION = 1;
 export const MAX_LAYERS = 24;
 export const MAX_OVERLAY_JSON = 40_000;
@@ -347,6 +349,22 @@ export function defaultLayer(type: LayerType): Layer {
         case 'image':
             return { type, id, ...common, x: 8, y: 8, w: 10.1, h: 18, src: '/', alt: '', radius: 'none' };
     }
+}
+
+/** Widest an image Layer is made from its natural ratio (percent of the slide width). */
+const IMAGE_MAX_WIDTH = 60;
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+/** A new image Layer for `src` whose box follows the file's natural `ratio` (width / height): medium height, capped in width. */
+export function imageLayerFor(src: string, ratio: number): ImageLayer {
+    // Percentages are of the 16:9 desktop frame, so a box of the same ratio is narrower by its height / width.
+    const frame = DESKTOP_FRAME.h / DESKTOP_FRAME.w;
+    const layer = { ...defaultLayer('image'), src, alt: '' } as ImageLayer;
+    const h = IMAGE_PRESETS[1].h;
+    const w = round2(h * ratio * frame);
+    return w > IMAGE_MAX_WIDTH
+        ? { ...layer, w: IMAGE_MAX_WIDTH, h: round2(IMAGE_MAX_WIDTH / ratio / frame) }
+        : { ...layer, w, h };
 }
 
 export const TYPE_LABEL: Record<LayerType, string> = {

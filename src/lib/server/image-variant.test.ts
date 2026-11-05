@@ -63,4 +63,23 @@ describe('backfillVariants', () => {
         );
         expect(await driver.head('carousels/layer.w960.webp')).toBeNull();
     });
+
+    it('creates the 128 px variant of every Department logo and Member portrait, but never for other folders', async () => {
+        for (const folder of ['departments', 'members', 'downloads'])
+            mkdirSync(path.join(dir, folder), { recursive: true });
+        writeFileSync(path.join(dir, 'departments/logo.webp'), await image(512));
+        writeFileSync(path.join(dir, 'members/face.webp'), await image(480));
+        writeFileSync(path.join(dir, 'downloads/scan.webp'), await image(900));
+        const driver = createLocalDriver(dir);
+
+        const report = await backfillVariants(driver);
+        expect(report.created).toBe(2);
+        for (const key of ['departments/logo.w128.webp', 'members/face.w128.webp']) {
+            const variant = await driver.get(key);
+            expect(
+                (await sharp(new Uint8Array(await new Response(variant!.body).arrayBuffer())).metadata()).width,
+            ).toBe(128);
+        }
+        expect(await driver.head('downloads/scan.w128.webp')).toBeNull();
+    });
 });

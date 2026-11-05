@@ -5,12 +5,15 @@ import PageBanner from '@/components/site/PageBanner.astro';
 import PublicLayout from '@/layouts/PublicLayout.astro';
 import { hasDownloadFilters, parseDownloadFilters } from '@/lib/post-filters';
 import { getDownloadsPage } from '@/lib/server/downloads';
+import { getNavLinks, startQuery } from '@/lib/server/queries';
 
+// The layout's Navigation links run beside the page's queries, not after them.
+const navLinks = startQuery(getNavLinks());
 const filters = parseDownloadFilters(Astro.url.searchParams);
 const { departments, seo, ...listing } = await getDownloadsPage(filters);
 ---
 
-<PublicLayout {...seo} {departments}>
+<PublicLayout {...seo} {navLinks} {departments}>
     <PageBanner
         eyebrow="Downloads"
         title="Documents & Files"

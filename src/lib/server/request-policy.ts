@@ -72,15 +72,34 @@ export function anonymousActionResponse(): Response {
     );
 }
 
-export type RequestGuard = { redirect: string } | { redirect: null; scoped: boolean };
+/** Largest body a signed-out visitor may send: the contact form, the login form and Better Auth's JSON calls are far below it. */
+export const ANONYMOUS_BODY_LIMIT = 64 * 1024;
 
-/** Before rendering: send anonymous visitors of protected routes to login; flag Admin-scoped routes. */
-export function guardRequest(url: URL, signedIn: boolean): RequestGuard {
+/**
+ * True for a signed-out request that can carry a body (anything but GET/HEAD) and does not declare a
+ * `Content-Length` of at most `ANONYMOUS_BODY_LIMIT` bytes (missing, malformed or larger). Every upload route and
+ * every signed-in action needs a session, so nothing a signed-out visitor legitimately sends is exempt. The
+ * middleware answers it with 413 before anything reads the body.
+ */
+export function rejectsLargeAnonymousBody(method: string, signedIn: boolean, contentLength: string | null): boolean {
+    if (signedIn || method === 'GET' || method === 'HEAD') return false;
+    if (contentLength === null || !/^\d+$/.test(contentLength)) return true;
+    return Number(contentLength) > ANONYMOUS_BODY_LIMIT;
+}
+
+/** The 413 `rejectsLargeAnonymousBody` is answered with. */
+export function payloadTooLargeResponse(): Response {
+    return new Response('Request body too large.', { status: 413, headers: { 'Content-Type': 'text/plain' } });
+}
+
+/** An Admin-scoped route (`/dashboard`, `/admin`, `/settings`): its request context carries the Admin scope. */
+export const isScopedPath = (pathname: string) => matches(SCOPED, pathname);
+
+/** Before rendering: where to send an anonymous visitor of a protected route (login, keeping the target), else null. */
+export function loginRedirect(url: URL, signedIn: boolean): string | null {
     const { pathname } = url;
-    if (!signedIn && matches(PROTECTED, pathname)) {
-        return { redirect: `/login?redirect=${encodeURIComponent(pathname + url.search)}` };
-    }
-    return { redirect: null, scoped: signedIn && matches(SCOPED, pathname) };
+    if (signedIn || !matches(PROTECTED, pathname)) return null;
+    return `/login?redirect=${encodeURIComponent(pathname + url.search)}`;
 }
 
 export interface ResponsePolicyInput {

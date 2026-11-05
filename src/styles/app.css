@@ -128,6 +128,19 @@
     }
 }
 
+/*
+ * The sticky public header (about 4.5rem tall) must never cover the focused element (WCAG 2.4.11): scrolling to
+ * focus, to a #fragment or to the skip link's target stops below it. Pages without that header are unaffected.
+ */
+@layer base {
+    html:has([data-site-header]) {
+        scroll-padding-top: 5.5rem;
+    }
+    html:has([data-site-header]) :where(main, [id]) {
+        scroll-margin-top: 0.5rem;
+    }
+}
+
 /* Focus ring on the navy header/footer and over carousel photos: the blue ring is invisible there, so use gold. */
 @layer base {
     .on-navy :focus-visible {
@@ -192,5 +205,44 @@
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
+    }
+}
+
+/* Printed Posts: the article only, black on white, with external link addresses spelled out. */
+@media print {
+    [data-site-header],
+    footer.on-navy-deep,
+    nav[aria-label='Breadcrumb'],
+    a[href='#main'] {
+        display: none !important;
+    }
+    html,
+    body {
+        background: white !important;
+    }
+    body *,
+    body ::before,
+    body ::after {
+        color: black !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+    }
+    main a[href^='http']:not(:has(img))::after {
+        content: ' (' attr(href) ')';
+        font-size: 0.85em;
+        overflow-wrap: anywhere;
+    }
+    img,
+    figure,
+    table,
+    blockquote {
+        break-inside: avoid;
+    }
+    img {
+        max-width: 100%;
+    }
+    :where(h1, h2, h3, h4) {
+        break-after: avoid;
     }
 }

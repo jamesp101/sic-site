@@ -1,12 +1,16 @@
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 import type { PrismaClient } from '../../generated/prisma/client';
 import { cleanupStorage, KeyMatcher } from './storage-cleanup';
 import { closeTestDb, openTestDb } from './test-db';
 import { createLocalDriver } from './storage/local';
 import { createStoredFiles } from './stored-files';
+
+// The rate-limit sweep runs on the same test database the cleanup is given.
+vi.mock('./db', async () => ({ db: await (await import('./test-db')).openTestDb() }));
+const { sweepExpiredRateLimits } = await import('./rate-limit');
 
 const HOUR = 60 * 60 * 1000;
 let db: PrismaClient;
@@ -42,6 +46,7 @@ function deps() {
         driver,
         discard: discardFiles,
         sweepPending: async () => 0,
+        sweepRateLimits: sweepExpiredRateLimits,
         countExpiredPending: async () => 0,
         pendingSweepCutoff: (now: number) => new Date(now - 5 * 60 * 1000),
     };
@@ -198,5 +203,54 @@ describe('cleanupStorage', () => {
         await cleanupStorage(deps());
         for (const key of ['carousels/kept.webp', 'carousels/kept.w960.webp']) expect(exists(key)).toBe(true);
         for (const key of ['carousels/gone.webp', 'carousels/gone.w960.webp']) expect(exists(key)).toBe(false);
+    });
+
+    it('keeps a Department logo and a Member portrait variant (128 px) with their originals and deletes them with unreferenced ones', async () => {
+        for (const key of ['departments/kept', 'departments/gone', 'members/kept', 'members/gone']) {
+            file(`${key}.webp`, 48);
+            file(`${key}.w128.webp`, 48);
+        }
+        const department = await db.department.create({
+            data: { name: 'Cleanup', slug: 'cleanup', logoPath: 'departments/kept.webp' },
+        });
+        await db.member.create({
+            data: { name: 'M', role: 'R', departmentId: department.id, imagePath: 'members/kept.webp' },
+        });
+
+        const dry = await cleanupStorage(deps(), { dryRun: true });
+        expect(dry.keys).toEqual(expect.arrayContaining(['departments/gone.webp', 'members/gone.webp']));
+        for (const key of ['departments/kept', 'members/kept']) {
+            expect(dry.keys).not.toContain(`${key}.webp`);
+            expect(dry.keys).not.toContain(`${key}.w128.webp`);
+        }
+        for (const key of ['departments/gone', 'members/gone']) expect(dry.keys).not.toContain(`${key}.w128.webp`);
+
+        await cleanupStorage(deps());
+        for (const key of ['departments/kept', 'members/kept']) {
+            expect(exists(`${key}.webp`)).toBe(true);
+            expect(exists(`${key}.w128.webp`)).toBe(true);
+        }
+        for (const key of ['departments/gone', 'members/gone']) {
+            expect(exists(`${key}.webp`)).toBe(false);
+            expect(exists(`${key}.w128.webp`)).toBe(false);
+        }
+    });
+
+    it('sweeps expired app rate-limit counters, keeps current ones and Better Auth rows, and leaves them alone in a dry run', async () => {
+        const now = Date.now();
+        await db.rateLimit.createMany({
+            data: [
+                { key: 'app:contact:expired', count: 5, lastRequest: BigInt(now - 3 * HOUR) },
+                { key: 'app:contact:current', count: 5, lastRequest: BigInt(now - 10 * 60 * 1000) },
+                { key: '203.0.113.9/sign-in/email', count: 1, lastRequest: BigInt(now - 3 * HOUR) },
+            ],
+        });
+        const keys = async () => (await db.rateLimit.findMany({ select: { key: true } })).map((row) => row.key).sort();
+
+        expect((await cleanupStorage(deps(), { dryRun: true })).rateLimits).toBe(0);
+        expect(await keys()).toHaveLength(3);
+
+        expect((await cleanupStorage(deps())).rateLimits).toBe(1);
+        expect(await keys()).toEqual(['203.0.113.9/sign-in/email', 'app:contact:current']);
     });
 });

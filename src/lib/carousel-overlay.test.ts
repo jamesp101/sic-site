@@ -12,11 +12,38 @@ import {
     normalizeSize,
     TYPE_SCALE,
     DEFAULT_SIZE,
+    imageLayerFor,
     type Layer,
 } from './carousel-overlay';
 import { parseOverlay, parseOverlayDocument, parseOverlayStrict, slideDocument } from './carousel-overlay-schema';
 
 const text = (over: Partial<Layer> = {}): Layer => ({ ...defaultLayer('text'), ...over }) as Layer;
+
+describe('imageLayerFor', () => {
+    // Boxes are percent of a 16:9 slide: a medium (18 % tall) square image is 18 × 9/16 % wide.
+    test('sizes the box to the image ratio at medium height', () => {
+        expect(imageLayerFor('/storage/a.webp', 1)).toMatchObject({
+            type: 'image',
+            src: '/storage/a.webp',
+            alt: '',
+            h: 18,
+            w: 10.13,
+        });
+        expect(imageLayerFor('/storage/a.webp', 4)).toMatchObject({ h: 18, w: 40.5 });
+        expect(imageLayerFor('/storage/a.webp', 0.5)).toMatchObject({ h: 18, w: 5.06 });
+    });
+
+    test('very wide images are capped at 60 % of the slide width and the height follows', () => {
+        expect(imageLayerFor('/storage/a.webp', 8)).toMatchObject({ w: 60, h: 13.33 });
+    });
+
+    test('each call is a new layer with the image defaults', () => {
+        const a = imageLayerFor('/a.webp', 1);
+        const b = imageLayerFor('/a.webp', 1);
+        expect(a.id).not.toBe(b.id);
+        expect({ ...a, id: '' }).toEqual({ ...defaultLayer('image'), src: '/a.webp', w: 10.13, id: '' });
+    });
+});
 
 describe('safeHref', () => {
     test('allows paths, fragments and http(s)/mailto/tel', () => {

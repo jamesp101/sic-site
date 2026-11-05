@@ -1,14 +1,16 @@
 import { defineMiddleware } from 'astro:middleware';
-import { parseScope, resolveScope, SCOPE_COOKIE } from '@/lib/server/admin-scope';
-import { getSession } from '@/lib/server/auth-session';
-import { isSuperAdmin } from '@/lib/server/authz';
-import { db } from '@/lib/server/db';
+import { ANONYMOUS_CONTEXT, resolveRequestContext } from '@/lib/server/request-context';
+import { STAFF_HINT_COOKIE, STAFF_HINT_MAX_AGE } from '@/lib/staff-hint';
 import { finishResponse } from '@/lib/server/http-edge';
 import {
     anonymousActionResponse,
-    guardRequest,
     isAssetPath,
+    isPublicPage,
+    isScopedPath,
+    loginRedirect,
+    payloadTooLargeResponse,
     rejectsAnonymousAction,
+    rejectsLargeAnonymousBody,
     responseHeaders,
 } from '@/lib/server/request-policy';
 
@@ -20,48 +22,41 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const { pathname } = context.url;
     const isAsset = isAssetPath(pathname);
 
+    const request = isAsset
+        ? ANONYMOUS_CONTEXT
+        : await resolveRequestContext(context.request.headers, { scoped: isScopedPath(pathname) });
+    context.locals.user = request.user;
+    context.locals.session = request.session;
+    context.locals.adminScope = request.adminScope;
+    context.locals.adminDepartments = request.adminDepartments;
+
+    // Value-free hint for scripts (the session cookie is httpOnly). Set only on signed-in (no-store) responses and
+    // cleared only on private ones, so a shared cache never stores a Set-Cookie.
     if (!isAsset) {
-        const session = await getSession(context.request.headers);
-        context.locals.user = session
-            ? {
-                  id: Number(session.user.id),
-                  name: session.user.name,
-                  email: session.user.email,
-                  emailVerified: session.user.emailVerified,
-                  role: (session.user.role as string | undefined) ?? 'department_user',
-                  departmentId: session.user.departmentId == null ? null : Number(session.user.departmentId),
-              }
-            : null;
-        context.locals.session = session?.session ?? null;
-    } else {
-        context.locals.user = null;
-        context.locals.session = null;
+        const hinted = context.cookies.has(STAFF_HINT_COOKIE);
+        if (context.locals.user && !hinted) {
+            context.cookies.set(STAFF_HINT_COOKIE, '1', {
+                path: '/',
+                sameSite: 'lax',
+                secure: context.site?.protocol === 'https:',
+                maxAge: STAFF_HINT_MAX_AGE,
+            });
+        } else if (!context.locals.user && hinted && !isPublicPage(pathname)) {
+            context.cookies.delete(STAFF_HINT_COOKIE, { path: '/' });
+        }
     }
 
-    // Before anything reads the body: a signed-out visitor never reaches an action (or its multipart parser).
-    const rejected = rejectsAnonymousAction(context.request.method, context.url, context.locals.user !== null)
+    // Before anything reads the body: a signed-out visitor never reaches an action (or its multipart parser),
+    // and never makes the server take a large body.
+    const signedIn = context.locals.user !== null;
+    const rejected = rejectsAnonymousAction(context.request.method, context.url, signedIn)
         ? anonymousActionResponse()
-        : null;
+        : rejectsLargeAnonymousBody(context.request.method, signedIn, context.request.headers.get('content-length'))
+          ? payloadTooLargeResponse()
+          : null;
 
-    const guard = guardRequest(context.url, context.locals.user !== null);
-    if (guard.redirect !== null) return context.redirect(guard.redirect, 302);
-
-    if (context.locals.user && guard.scoped) {
-        // Validated on every request: unknown ids fall back to `all`, department users ignore the cookie.
-        // Only Superadmins get the switcher's full list; a Department user loads just their own Department.
-        const user = context.locals.user;
-        const departments = await db.department.findMany({
-            where: isSuperAdmin(user) ? {} : { id: user.departmentId ?? -1 },
-            orderBy: { name: 'asc' },
-            select: { id: true, name: true, slug: true, logoPath: true },
-        });
-        context.locals.adminDepartments = departments;
-        context.locals.adminScope = resolveScope(
-            context.locals.user,
-            parseScope(context.cookies.get(SCOPE_COOKIE)?.value),
-            departments,
-        );
-    }
+    const redirect = loginRedirect(context.url, signedIn);
+    if (redirect !== null) return context.redirect(redirect, 302);
 
     let response = rejected ?? (await next());
 

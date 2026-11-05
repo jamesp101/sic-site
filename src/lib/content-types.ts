@@ -23,6 +23,8 @@ export interface DepartmentRef {
 export interface DepartmentSummary extends DepartmentRef {
     description: string | null;
     logoUrl: string | null;
+    /** Smaller version of `logoUrl` (128 px wide), when the logo has one; the server falls back to the original if it is missing. */
+    logoSmallUrl?: string | null;
     updatedAt: Date;
 }
 
@@ -84,6 +86,8 @@ export interface MemberNode {
     name: string;
     role: string;
     imageUrl: string | null;
+    /** Smaller version of `imageUrl` (128 px wide), when the portrait has one; the server falls back to the original if it is missing. */
+    imageSmallUrl?: string | null;
     children: MemberNode[];
 }
 

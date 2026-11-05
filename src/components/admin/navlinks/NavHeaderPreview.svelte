@@ -26,12 +26,15 @@
     tree,
     departments,
     showHidden = $bindable(false),
+    height = $bindable(0),
     selectedId,
     onselect,
   }: {
     tree: NavNode[];
     departments: { name: string; slug: string }[];
     showHidden?: boolean;
+    /** Rendered height of the sticky preview, so the list can keep rows clear of it. */
+    height?: number;
     selectedId: number | null;
     onselect: (id: number) => void;
   } = $props();
@@ -104,6 +107,7 @@
 
 <section
   bind:this={root}
+  bind:offsetHeight={height}
   aria-labelledby="nav-preview-title"
   class="space-y-2 rounded-xl border border-border-strong bg-surface p-3 shadow-brand-sm md:sticky md:top-2 md:z-20"
 >
@@ -177,7 +181,7 @@
                         if (sub.id !== null) onselect(sub.id);
                       }}
                     >
-                      <span class="truncate">{sub.label}</span>
+                      <span class="break-words">{sub.label}</span>
                       {#if sub.ghost}<span class="shrink-0 rounded bg-white/15 px-1.5 text-xs font-semibold text-white">Hidden</span>{/if}
                     </button>
                   </li>

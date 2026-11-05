@@ -36,7 +36,7 @@ export const departments = {
                 );
 
                 const department = await commitWithFiles({
-                    files: { logo: input.logo && { prefix: 'departments', file: input.logo } },
+                    files: { logo: input.logo && { prefix: 'departments', file: input.logo, variant: true } },
                     run: ({ logo }) =>
                         db.department.create({
                             data: {
@@ -62,7 +62,7 @@ export const departments = {
                 const row = await loadOwnDepartment(actor, input.id);
 
                 await commitWithFiles({
-                    files: { logo: input.logo && { prefix: 'departments', file: input.logo } },
+                    files: { logo: input.logo && { prefix: 'departments', file: input.logo, variant: true } },
                     run: ({ logo }) =>
                         db.department.update({
                             where: { id: row.id },

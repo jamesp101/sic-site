@@ -187,7 +187,10 @@ const columns = [
                                                 </div>
                                             )}
                                             <div class="min-w-0">
-                                                <span class="block max-w-60 truncate font-semibold text-foreground" title={post.title}>
+                                                <span
+                                                    class="block max-w-60 truncate font-semibold text-foreground"
+                                                    title={post.title}
+                                                >
                                                     {post.title}
                                                 </span>
                                                 <span
@@ -200,15 +203,16 @@ const columns = [
                                         </div>
                                     </td>
                                     <td class="px-4 py-3">
-                                        <span
-                                            class={`${pillClass} capitalize ${typeClass[post.type] ?? ''}`}
-                                        >
+                                        <span class={`${pillClass} capitalize ${typeClass[post.type] ?? ''}`}>
                                             {post.type}
                                         </span>
                                     </td>
                                     {showDepartment && (
                                         <td class="px-4 py-3 text-muted-foreground">
-                                            <span class="block max-w-40 truncate" title={post.department?.name ?? 'General (all departments)'}>
+                                            <span
+                                                class="block max-w-40 truncate"
+                                                title={post.department?.name ?? 'General (all departments)'}
+                                            >
                                                 {post.department?.name ?? 'General (all departments)'}
                                             </span>
                                         </td>

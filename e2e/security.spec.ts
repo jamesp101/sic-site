@@ -196,12 +196,17 @@ test.describe('uploaded images', () => {
         expect(await response.json()).toMatchObject({ message: expect.stringContaining('could not be read') });
     });
 
-    test('a signed-out upload is refused', async ({ playwright, baseURL }) => {
+    test('a signed-out upload is refused, and a large signed-out body is cut off before it is read', async ({
+        playwright,
+        baseURL,
+    }) => {
         const anonymous = await playwright.request.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
-        const response = await anonymous.post('/api/admin/uploads/image', {
-            multipart: { kind: 'content', image: { name: 'seal.png', mimeType: 'image/png', buffer: SEAL_BYTES } },
-        });
-        expect(response.status()).toBe(401);
+        const upload = (buffer: Buffer) =>
+            anonymous.post('/api/admin/uploads/image', {
+                multipart: { kind: 'content', image: { name: 'seal.png', mimeType: 'image/png', buffer } },
+            });
+        expect((await upload(SEAL_BYTES.subarray(0, 100))).status()).toBe(401);
+        expect((await upload(Buffer.alloc(100 * 1024))).status()).toBe(413);
         await anonymous.dispose();
     });
 });

@@ -5,7 +5,7 @@
 import type { CarouselItem, Prisma } from '@/generated/prisma/client';
 import type { CarouselSlide, SlideVideoView } from '@/lib/content-types';
 import { parseVideoUrl } from '@/lib/blocks/urls';
-import type { Layer, SlideMobile } from '@/lib/carousel-overlay';
+import type { DesignerSlide } from '@/lib/designer-slide';
 import { slideDocument } from '@/lib/carousel-overlay-schema';
 import { db } from './db';
 import { publicUrl, variantUrl } from './storage';
@@ -48,7 +48,7 @@ export async function findSlides(where: Prisma.CarouselItemWhereInput): Promise<
         const doc = slideDocument(row);
         return {
             id: row.id,
-            imageUrl: publicUrl(row.imagePath) ?? row.imagePath,
+            imageUrl: slideImageUrl(row.imagePath),
             imageMediumUrl: variantUrl(row.imagePath, SLIDE_WIDTH),
             layers: doc.layers,
             mobile: doc.mobile,
@@ -57,23 +57,9 @@ export async function findSlides(where: Prisma.CarouselItemWhereInput): Promise<
     });
 }
 
-/** Slide as the admin designer sees it. */
-export interface DesignerSlide {
-    id: number;
-    imageUrl: string;
-    title: string | null;
-    subtitle: string | null;
-    linkUrl: string | null;
-    order: number;
-    departmentId: number | null;
-    showOnMain: boolean;
-    /** A legacy slide (title / subtitle / link only) arrives already converted to layers. */
-    layers: Layer[];
-    /** Slide-level phone settings (photo focal point); null = centred. */
-    mobile: SlideMobile | null;
-    /** Public URL of the uploaded background video, or the YouTube link; '' = none. */
-    video: string;
-    videoKind: 'file' | 'youtube' | null;
+/** The one Slide image rule for the public Carousel and the designer: stored key → URL; an unmappable value stays as stored. */
+export function slideImageUrl(imagePath: string): string {
+    return publicUrl(imagePath) ?? imagePath;
 }
 
 export function toDesignerSlide(row: CarouselItem): DesignerSlide {
@@ -81,7 +67,7 @@ export function toDesignerSlide(row: CarouselItem): DesignerSlide {
     const video = slideVideoView(row);
     return {
         id: row.id,
-        imageUrl: publicUrl(row.imagePath) ?? '',
+        imageUrl: slideImageUrl(row.imagePath),
         title: row.title,
         subtitle: row.subtitle,
         linkUrl: row.linkUrl,

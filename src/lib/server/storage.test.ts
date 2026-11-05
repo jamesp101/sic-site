@@ -105,6 +105,33 @@ describe('local driver (default)', () => {
         expect(await driver.get('downloads/broken.bin')).toBeNull();
         expect(readdirSync(path.join(dir, 'downloads')).sort()).toEqual(['big.bin']);
     });
+
+    it('serves the original of a missing variant, only for kinds that have variants, with a bounded number of lookups', async () => {
+        const storage = await loadStorage({ UPLOAD_DIR: dir });
+        const put = (key: string) => storage.driver.put(key, new Blob(['x']), 'image/webp');
+        await put('posts/vo.webp');
+        await put('members/vm.jpg');
+        await put('members/vm.w128.webp');
+        await put('downloads/vd.webp');
+        const head = vi.spyOn(storage.driver, 'head');
+
+        expect(await storage.servedKey('posts/vo.w640.webp')).toBe('posts/vo.webp');
+        expect(await storage.servedKey('members/vm.w128.webp')).toBe('members/vm.w128.webp');
+        expect(await storage.servedKey('posts/vo.webp')).toBe('posts/vo.webp');
+
+        // Not a variant of its kind: no lookup at all, the route answers 404.
+        head.mockClear();
+        for (const key of ['downloads/vd.w640.webp', 'posts/vo.w960.webp', 'posts/inline/vo.w640.webp']) {
+            expect(await storage.servedKey(key)).toBe(key);
+        }
+        expect(head).not.toHaveBeenCalled();
+
+        // Nothing behind a missing variant: the variant plus a few originals, never every extension.
+        expect(await storage.servedKey('posts/none.w640.webp')).toBe('posts/none.w640.webp');
+        expect(head.mock.calls.length).toBeGreaterThan(1);
+        expect(head.mock.calls.length).toBeLessThanOrEqual(5);
+        head.mockRestore();
+    });
 });
 
 describe('driver selection', () => {

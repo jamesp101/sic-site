@@ -31,7 +31,7 @@ import {
 } from './carousel-overlay';
 import { resetMobile, setMobile } from './carousel-overlay-mobile';
 import { LAYER_LIMITS, parseOverlayStrict } from './carousel-overlay-schema';
-import type { DesignerSlide } from './server/slides';
+import type { DesignerSlide } from './designer-slide';
 
 export interface Draft {
     /** String(id) for saved slides, "new" for the one unsaved slide. */

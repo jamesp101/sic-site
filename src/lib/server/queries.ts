@@ -19,7 +19,7 @@ import { db } from './db';
 import { findSlides } from './slides';
 import { textContains } from './search';
 import { publicUrl, variantUrl } from './storage';
-import { CARD_WIDTH } from './storage/variants';
+import { CARD_WIDTH, THUMB_WIDTH } from './storage/variants';
 import { getWelcomeHero } from './welcome-hero';
 
 const DEPARTMENT_PAGE_POSTS = 6;
@@ -96,6 +96,7 @@ function toDepartmentSummary(row: DepartmentRow): DepartmentSummary {
         slug: row.slug,
         description: row.description,
         logoUrl: publicUrl(row.logoPath),
+        logoSmallUrl: variantUrl(row.logoPath, THUMB_WIDTH),
         updatedAt: row.updatedAt,
     };
 }
@@ -106,6 +107,16 @@ function heroSections(departmentId: number | null): Promise<HeroSectionView[]> {
         orderBy: [{ order: 'asc' }, { id: 'asc' }],
         select: { id: true, title: true, content: true },
     });
+}
+
+/**
+ * Starts a query the layout needs (`getNavLinks()`, `getDepartments()`) before the page's own queries, so they run
+ * side by side instead of one after the other. A page that returns early (404, redirect) never awaits it, so the
+ * promise is marked handled: a failing query then cannot become an unhandled rejection.
+ */
+export function startQuery<T>(query: Promise<T>): Promise<T> {
+    query.catch(() => {});
+    return query;
 }
 
 /** Active Navigation links with their active children: one flat query, nested in memory. */
@@ -203,6 +214,7 @@ export async function getDepartmentPage(
         name: member.name,
         role: member.role,
         imageUrl: publicUrl(member.imagePath),
+        imageSmallUrl: variantUrl(member.imagePath, THUMB_WIDTH),
         children: children.map(toNode),
     });
     const members = buildOrgTree(memberRows).map(toNode);

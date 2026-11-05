@@ -3,8 +3,8 @@
  * select / create / rename transitions. The component owns the DOM, focus and `matchMedia`, and applies the results.
  */
 
-import type { DropPosition, KeyboardMove, OrgLinked, OrgMember } from './org-tree';
-import { nextOrder, siblingsOf } from './org-tree';
+import type { DropPosition, KeyboardMove, OrgLinked, OrgMember, OrgPlacement } from './org-tree';
+import { canDrop, moveRelative, moveToRoot, nextOrder, siblingsOf } from './org-tree';
 
 // ---------------------------------------------------------------- viewport
 
@@ -260,4 +260,136 @@ export function afterDelete(
     if (ui.selectedId !== target.id) return ui;
     const manager = target.parentId;
     return { ...ui, selectedId: manager !== null && members.some((m) => m.id === manager) ? manager : null };
+}
+
+// ------------------------------------------------------------ pan lifecycle
+
+interface PanGesture {
+    x: number;
+    y: number;
+    tx: number;
+    ty: number;
+    moved: boolean;
+}
+
+/** `autoFit` keeps the chart fitted while its layout settles, until the user first interacts; `gesture` is a press on the canvas. */
+export interface PanState {
+    autoFit: boolean;
+    gesture: PanGesture | null;
+}
+
+export const initialPan: PanState = { autoFit: true, gesture: null };
+
+/** The user touched the canvas (wheel, key, zoom, fit, press): stop auto-fitting. */
+export function takeControl(pan: PanState): PanState {
+    return pan.autoFit ? { ...pan, autoFit: false } : pan;
+}
+
+/** A press on empty canvas at `pointer` while the view is at `view`. */
+export function beginPan(pan: PanState, pointer: { x: number; y: number }, view: Viewport): PanState {
+    return { ...pan, gesture: { x: pointer.x, y: pointer.y, tx: view.tx, ty: view.ty, moved: false } };
+}
+
+/** Pointer travel: past the threshold the press becomes a pan and drags the view with it. */
+export function movePan(
+    pan: PanState,
+    view: Viewport,
+    pointer: { x: number; y: number },
+): { pan: PanState; view: Viewport } {
+    const gesture = pan.gesture;
+    if (!gesture) return { pan, view };
+    const dx = pointer.x - gesture.x;
+    const dy = pointer.y - gesture.y;
+    const moved = gesture.moved || isPanGesture(dx, dy);
+    const next = moved === gesture.moved ? pan : { ...pan, gesture: { ...gesture, moved } };
+    return { pan: next, view: moved ? { ...view, tx: gesture.tx + dx, ty: gesture.ty + dy } : view };
+}
+
+/** True while a press has become a pan (drives the grabbing cursor). */
+export const isPanning = (pan: PanState) => pan.gesture?.moved === true;
+
+/** Ends the press; `moved` tells whether it was a pan (so the click that follows must not deselect). Null without a press. */
+export function endPan(pan: PanState): { pan: PanState; moved: boolean } | null {
+    if (!pan.gesture) return null;
+    return { pan: { ...pan, gesture: null }, moved: pan.gesture.moved };
+}
+
+// ---------------------------------------------------------- drag and drop
+
+/** What a drag is hovering: a card (`id`) at a zone, or the top-level lane (`position: 'root'`). `ok` is false for forbidden drops. */
+export interface DropState {
+    id: number | null;
+    position: DropPosition | 'root';
+    ok: boolean;
+}
+
+export interface DragState {
+    dragId: number | null;
+    drop: DropState | null;
+}
+
+export const initialDrag: DragState = { dragId: null, drop: null };
+
+export const dragStart = (id: number): DragState => ({ dragId: id, drop: null });
+
+export const dragEnd = (): DragState => initialDrag;
+
+function hovering(drag: DragState, drop: DropState | null): DragState {
+    const old = drag.drop;
+    return old?.id === drop?.id && old?.position === drop?.position && old?.ok === drop?.ok ? drag : { ...drag, drop };
+}
+
+/** A drag moves over card `targetId`; `allowed` tells whether to accept the drop. Null when nothing is being dragged. */
+export function dragOverCard(
+    drag: DragState,
+    members: OrgLinked[],
+    targetId: number,
+    position: DropPosition,
+): { drag: DragState; allowed: boolean } | null {
+    if (drag.dragId === null) return null;
+    const ok = canDrop(members, drag.dragId, targetId);
+    return { drag: hovering(drag, { id: targetId, position, ok }), allowed: ok };
+}
+
+/** A drag moves over the top-level lane, which always accepts. Null when nothing is being dragged. */
+export function dragOverLane(drag: DragState): DragState | null {
+    return drag.dragId === null ? null : hovering(drag, { id: null, position: 'root', ok: true });
+}
+
+/** The pointer left card `id` for somewhere outside it; a newer target already entered is left alone. */
+export function dragLeaveCard(drag: DragState, id: number, stillInside: boolean): DragState {
+    return drag.drop?.id === id && !stillInside ? { ...drag, drop: null } : drag;
+}
+
+export function dragLeaveLane(drag: DragState): DragState {
+    return drag.drop?.position === 'root' ? { ...drag, drop: null } : drag;
+}
+
+export interface DropResult {
+    drag: DragState;
+    /** The dragged member. */
+    moving: number;
+    /** The moves to make; null or empty when nothing changes. */
+    placements: OrgPlacement[] | null;
+}
+
+/** The drag is released on card `targetId` at `position`. Null when nothing is being dragged. */
+export function dropOnCard(
+    drag: DragState,
+    members: OrgLinked[],
+    targetId: number,
+    position: DropPosition,
+): DropResult | null {
+    if (drag.dragId === null) return null;
+    return {
+        drag: initialDrag,
+        moving: drag.dragId,
+        placements: moveRelative(members, drag.dragId, targetId, position),
+    };
+}
+
+/** The drag is released on the top-level lane. Null when nothing is being dragged. */
+export function dropOnLane(drag: DragState, members: OrgLinked[]): DropResult | null {
+    if (drag.dragId === null) return null;
+    return { drag: initialDrag, moving: drag.dragId, placements: moveToRoot(members, drag.dragId) };
 }

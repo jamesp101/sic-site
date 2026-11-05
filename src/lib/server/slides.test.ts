@@ -55,3 +55,16 @@ describe('slide video views', () => {
         expect(pub.map((s) => s.video?.kind ?? null)).toEqual(designer.map((s) => s.videoKind));
     });
 });
+
+describe('slide image URLs', () => {
+    test('stored keys, site paths and external URLs map the same in the designer and the public Carousel', async () => {
+        const keys = ['carousels/a.webp', '/images/hero.jpg', 'https://cdn.example.org/a.webp'];
+        const rows = [];
+        for (const imagePath of keys) rows.push(await db.carouselItem.create({ data: { imagePath } }));
+
+        const expected = ['/storage/carousels/a.webp', '/images/hero.jpg', 'https://cdn.example.org/a.webp'];
+        expect(rows.map((row) => slides.toDesignerSlide(row).imageUrl)).toEqual(expected);
+        const pub = await slides.findSlides({ id: { in: rows.map((row) => row.id) } });
+        expect(pub.map((s) => s.imageUrl)).toEqual(expected);
+    });
+});

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { MAX_LAYERS, defaultLayer, type Layer } from './carousel-overlay';
 import { LAYER_LIMITS } from './carousel-overlay-schema';
-import type { DesignerSlide } from './server/slides';
+import type { DesignerSlide } from './designer-slide';
 import {
     SlideDesignerSession,
     type DesignerPort,

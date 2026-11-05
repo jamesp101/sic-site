@@ -56,6 +56,8 @@
   });
 
   const saved = $derived(slides.filter((slide) => slide.id !== null));
+  const departmentNameOf = (slide: StripSlide) =>
+    departments.find((department) => department.id === slide.departmentId)?.name ?? 'Department';
   const draft = $derived(slides.find((slide) => slide.id === null) ?? null);
   const byKey = $derived(Object.fromEntries(saved.map((slide) => [slide.key, slide])));
   const duration = $derived(reducedMotion ? 0 : 160);
@@ -116,7 +118,7 @@
         type="button"
         class="min-w-0 flex-1 rounded-md text-left"
         data-slide-id={slide.id ?? undefined}
-        aria-label="Edit slide {position} of {count}{slide.title ? `: ${slide.title}` : ''}{slide.dirty ? ' (unsaved changes)' : ''}"
+        aria-label="Edit slide {position} of {count}{slide.title ? `: ${slide.title}` : ''}{slide.departmentId !== null ? `, ${departmentNameOf(slide)} department page` : ''}{slide.dirty ? ' (unsaved changes)' : ''}"
         aria-current={active ? 'true' : undefined}
         onclick={() => onselect(slide.key)}
       >
@@ -181,9 +183,11 @@
       <span class="text-muted-foreground">{position}</span>
       {#if slide.dirty}<span class="rounded-full bg-status-event-bg px-2 py-0.5 text-status-event-fg">{slide.id === null ? 'New' : 'Unsaved'}</span>{/if}
       {#if slide.departmentId !== null}
-        {@const departmentName = departments.find((department) => department.id === slide.departmentId)?.name ?? 'Department'}
-        <span class="max-w-full truncate rounded-full bg-status-announcement-bg px-2 py-0.5 text-status-announcement-fg" title={departmentName}>
-          {departmentName}
+        <span
+          class="max-w-full truncate rounded-full bg-status-announcement-bg px-2 py-0.5 text-status-announcement-fg group-focus-within:overflow-visible group-focus-within:break-words group-focus-within:whitespace-normal"
+          title={departmentNameOf(slide)}
+        >
+          {departmentNameOf(slide)}
         </span>
       {/if}
       {#if slide.showOnMain}

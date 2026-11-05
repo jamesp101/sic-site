@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
     anonymousActionResponse,
-    guardRequest,
     isPublicPage,
+    isScopedPath,
+    loginRedirect,
+    payloadTooLargeResponse,
     rejectsAnonymousAction,
+    rejectsLargeAnonymousBody,
     responseHeaders,
 } from './request-policy';
 
@@ -99,26 +102,31 @@ describe('responseHeaders', () => {
     });
 });
 
-describe('guardRequest', () => {
-    const guard = (path: string, signedIn: boolean) => guardRequest(new URL(path, 'http://localhost'), signedIn);
+describe('loginRedirect', () => {
+    const redirect = (path: string, signedIn: boolean) => loginRedirect(new URL(path, 'http://localhost'), signedIn);
 
-    it('redirects anonymous visitors of protected routes to login, keeping the target', () => {
-        expect(guard('/admin/posts?page=2', false)).toEqual({
-            redirect: `/login?redirect=${encodeURIComponent('/admin/posts?page=2')}`,
-        });
-        expect(guard('/verify-email', false)).toMatchObject({ redirect: expect.stringContaining('/login?') });
+    it('sends anonymous visitors of protected routes to login, keeping the target', () => {
+        expect(redirect('/admin/posts?page=2', false)).toBe(
+            `/login?redirect=${encodeURIComponent('/admin/posts?page=2')}`,
+        );
+        expect(redirect('/verify-email', false)).toContain('/login?');
     });
 
-    it('lets anonymous visitors reach public and login routes', () => {
-        expect(guard('/', false)).toEqual({ redirect: null, scoped: false });
-        expect(guard('/login', false)).toEqual({ redirect: null, scoped: false });
+    it('lets anonymous visitors reach public and login routes, and signed-in users everywhere', () => {
+        expect(redirect('/', false)).toBeNull();
+        expect(redirect('/login', false)).toBeNull();
+        expect(redirect('/admin', true)).toBeNull();
     });
+});
 
-    it('flags Admin-scoped routes only for signed-in users', () => {
-        expect(guard('/admin', true)).toEqual({ redirect: null, scoped: true });
-        expect(guard('/dashboard/x', true)).toEqual({ redirect: null, scoped: true });
-        expect(guard('/confirm-password', true)).toEqual({ redirect: null, scoped: false });
-        expect(guard('/posts', true)).toEqual({ redirect: null, scoped: false });
+describe('isScopedPath', () => {
+    it('is true for the dashboard, admin and settings routes only', () => {
+        for (const path of ['/admin', '/admin/posts', '/dashboard', '/dashboard/x', '/settings/profile']) {
+            expect(isScopedPath(path), path).toBe(true);
+        }
+        for (const path of ['/', '/posts', '/confirm-password', '/administrators', '/api/admin/uploads/image']) {
+            expect(isScopedPath(path), path).toBe(false);
+        }
     });
 });
 
@@ -164,6 +172,34 @@ describe('anonymousActionResponse', () => {
             status: 401,
             message: 'Sign in required.',
         });
+    });
+});
+
+describe('rejectsLargeAnonymousBody', () => {
+    it.each([
+        // [method, signedIn, content-length, rejected]
+        ['POST', false, '0', false],
+        ['POST', false, '512', false],
+        ['POST', false, '65536', false],
+        ['POST', false, '65537', true],
+        ['POST', false, '104857600', true],
+        ['POST', false, null, true],
+        ['POST', false, '', true],
+        ['POST', false, '-1', true],
+        ['POST', false, '12abc', true],
+        ['PUT', false, null, true],
+        ['PATCH', false, '70000', true],
+        ['DELETE', false, null, true],
+        ['GET', false, null, false],
+        ['HEAD', false, null, false],
+        ['POST', true, null, false],
+        ['POST', true, '104857600', false],
+    ] as const)('%s signedIn=%s content-length=%j -> %s', (method, signedIn, contentLength, rejected) => {
+        expect(rejectsLargeAnonymousBody(method, signedIn, contentLength)).toBe(rejected);
+    });
+
+    it('is answered with a 413', () => {
+        expect(payloadTooLargeResponse().status).toBe(413);
     });
 });
 

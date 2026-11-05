@@ -2,15 +2,27 @@ import 'dotenv/config';
 import { waitUntil } from '@vercel/functions';
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
-import { APIError, createAuthMiddleware } from 'better-auth/api';
+import { APIError, createAuthMiddleware, isAPIError } from 'better-auth/api';
 import { MIN_PASSWORD_LENGTH } from '../password-policy';
 import { db, dbProvider } from './db';
 import { sendMail } from './mail';
 import { resetPasswordMessage, verifyEmailMessage } from './mail-messages';
 import { hashPassword, verifyPassword } from './password';
-import { consumeSignInAttempt } from './rate-limit';
+import { isSignInBlocked, recordSignInFailure } from './rate-limit';
 
 export const CLIENT_IP_HEADER = 'x-sic-client-ip';
+
+/** The email and client address of a password sign-in call; null for any other endpoint. */
+function signInAttempt(ctx: {
+    path: string;
+    body?: unknown;
+    headers?: Headers;
+}): { email: string; clientIp: string } | null {
+    if (ctx.path !== '/sign-in/email') return null;
+    const email = (ctx.body as { email?: unknown } | undefined)?.email;
+    if (typeof email !== 'string') return null;
+    return { email, clientIp: ctx.headers?.get(CLIENT_IP_HEADER) ?? 'unknown' };
+}
 
 /**
  * Better Auth endpoints the app does not use. Account changes (password, email, profile, deletion, sessions)
@@ -56,14 +68,19 @@ export const auth = betterAuth({
     basePath: '/api/auth',
     disabledPaths: DISABLED_PATHS,
     hooks: {
-        // Per-account limit on top of the per-IP rule below: a botnet cannot spread guesses over one email.
-        // Runs for every sign-in, whether posted by the login form's fetch or by `/login` (auth-session.ts).
+        // Only failed sign-ins count (after hook below), so a correct password never adds to a lockout and a
+        // refused attempt adds nothing more. The hard block is per email and client IP, so one address cannot lock
+        // a User out for everyone; a high per-email ceiling backstops guessing spread over many addresses. Runs for
+        // every sign-in, whether posted by the login form's fetch or by `/login` (auth-session.ts).
         before: createAuthMiddleware(async (ctx) => {
-            if (ctx.path !== '/sign-in/email') return;
-            const email = (ctx.body as { email?: unknown } | undefined)?.email;
-            if (typeof email === 'string' && !(await consumeSignInAttempt(email))) {
+            const attempt = signInAttempt(ctx);
+            if (attempt && (await isSignInBlocked(attempt.email, attempt.clientIp))) {
                 throw new APIError('TOO_MANY_REQUESTS', { message: 'Too many attempts. Please try again later.' });
             }
+        }),
+        after: createAuthMiddleware(async (ctx) => {
+            const attempt = signInAttempt(ctx);
+            if (attempt && isAPIError(ctx.context.returned)) await recordSignInFailure(attempt.email, attempt.clientIp);
         }),
     },
     database: prismaAdapter(db, { provider: dbProvider }),

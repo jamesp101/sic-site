@@ -8,8 +8,11 @@ import { hasAlbum } from '@/lib/blocks/content';
 import { formatDate, formatDateRange } from '@/lib/format';
 import { siteUrl } from '@/lib/seo';
 import { departmentHref } from '@/lib/site-nav';
-import { getPostPage } from '@/lib/server/queries';
+import { getDepartments, getNavLinks, getPostPage, startQuery } from '@/lib/server/queries';
 
+// The layout's queries run beside the page's query, not after it.
+const navLinks = startQuery(getNavLinks());
+const departments = startQuery(getDepartments());
 const { slug } = Astro.params;
 const page = slug ? await getPostPage(slug, siteUrl(Astro)) : null;
 if (!page) return new Response(null, { status: 404, statusText: 'Not Found' });
@@ -18,17 +21,14 @@ const { post, related, seo } = page;
 const hasEventDates = post.type === 'event' && post.startDate;
 ---
 
-<PublicLayout {...seo}>
+<PublicLayout {...seo} {navLinks} {departments}>
     <article class="py-12 md:py-20">
         <div class="mx-auto w-full max-w-3xl px-6">
             <header class="space-y-4">
                 <div class="flex flex-wrap items-center gap-3 text-sm">
                     <TypePill type={post.type} />
                     {post.department && (
-                        <a
-                            href={departmentHref(post.department.slug)}
-                            class={textLink}
-                        >
+                        <a href={departmentHref(post.department.slug)} class={textLink}>
                             {post.department.name}
                         </a>
                     )}
@@ -82,7 +82,7 @@ const hasEventDates = post.type === 'event' && post.startDate;
 
             <div class="mt-10 text-base leading-relaxed text-foreground" set:html={post.html} />
 
-            <p class="mt-12 border-t border-border pt-6">
+            <p class="mt-12 border-t border-border pt-6 print:hidden">
                 <a href="/posts" class={textLink}>
                     &larr; Back to News &amp; Events
                 </a>
@@ -92,7 +92,10 @@ const hasEventDates = post.type === 'event' && post.startDate;
     {hasAlbum(post.html) && <AlbumLightbox />}
 
     {related.length > 0 && (
-        <section class="border-t border-border bg-surface py-16 md:py-24" aria-labelledby="related-heading">
+        <section
+            class="border-t border-border bg-surface py-16 print:hidden md:py-24"
+            aria-labelledby="related-heading"
+        >
             <div class="mx-auto w-full max-w-7xl px-6">
                 <h2 id="related-heading" class="text-3xl font-bold text-brand-800 md:text-4xl dark:text-foreground">
                     Related posts

@@ -7,6 +7,7 @@
     CornerDownRight,
     CornerUpLeft,
     Eye,
+    Keyboard,
     Layers,
     Maximize2,
     Minimize2,
@@ -49,6 +50,7 @@
   import Inspector from './Inspector.svelte';
   import LayerList from './LayerList.svelte';
   import Palette from './Palette.svelte';
+  import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
   let {
     value = $bindable(''),
@@ -226,6 +228,12 @@
     }
     if (typing) return;
 
+    if (event.key === '?' && !mod && !event.altKey) {
+      event.preventDefault();
+      helpOpen = true;
+      return;
+    }
+
     if (mod && key === 'd') {
       event.preventDefault();
       duplicate();
@@ -281,6 +289,22 @@
   let fullscreen = $state(false);
   let leftOpen = $state(true);
   let rightOpen = $state(true);
+  let helpOpen = $state(false);
+
+  const SHORTCUTS: [string, string][] = [
+    ['Undo', 'Ctrl+Z'],
+    ['Redo', 'Ctrl+Shift+Z or Ctrl+Y'],
+    ['Duplicate the selected element', 'Ctrl+D'],
+    ['Delete the selected element', 'Del or Backspace'],
+    ['Move up or down', 'Alt+↑ / Alt+↓'],
+    ['Move out of the container', 'Alt+←'],
+    ['Move into the previous container', 'Alt+→'],
+    ['Select the previous or next element', '↑ / ↓'],
+    ['Select the parent or first child', '← / →'],
+    ['Edit the selected text', 'Enter'],
+    ['Deselect, or leave full screen', 'Esc'],
+    ['Show these shortcuts', '?'],
+  ];
   let leftTab = $state<'elements' | 'layers'>('elements');
   let showIssues = $state(false);
 
@@ -374,7 +398,7 @@
       <button type="button" class={btn} aria-label="Undo" title="Undo (Ctrl+Z)" aria-keyshortcuts="Control+Z Meta+Z" disabled={!canUndo} onclick={undo}>
         <Undo2 class="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" class={btn} aria-label="Redo" title="Redo (Ctrl+Shift+Z)" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z" disabled={!canRedo} onclick={redo}>
+      <button type="button" class={btn} aria-label="Redo" title="Redo (Ctrl+Shift+Z)" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y" disabled={!canRedo} onclick={redo}>
         <Redo2 class="h-4 w-4" aria-hidden="true" />
       </button>
       <span class="mx-1 h-5 w-px bg-border-strong" aria-hidden="true"></span>
@@ -441,7 +465,10 @@
         <button type="button" class={toggleBtn(rightOpen && !previewing)} aria-label="Toggle inspector panel" title="Toggle inspector panel" aria-pressed={rightOpen} disabled={previewing} onclick={() => (rightOpen = !rightOpen)}>
           <PanelRight class="h-4 w-4" aria-hidden="true" />
         </button>
-        <button type="button" class={btn} aria-label={fullscreen ? 'Exit full screen' : 'Full screen'} title={fullscreen ? 'Exit full screen' : 'Full screen editor'} onclick={() => (fullscreen = !fullscreen)}>
+        <button type="button" class={btn} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" aria-keyshortcuts="?" aria-haspopup="dialog" onclick={() => (helpOpen = true)}>
+          <Keyboard class="h-4 w-4" aria-hidden="true" />
+        </button>
+        <button type="button" class={btn} aria-label={fullscreen ? 'Exit full screen' : 'Full screen'} title={fullscreen ? 'Exit full screen' : 'Full screen editor'} aria-keyshortcuts={fullscreen ? 'Escape' : undefined} onclick={() => (fullscreen = !fullscreen)}>
           {#if fullscreen}<Minimize2 class="h-4 w-4" aria-hidden="true" />{:else}<Maximize2 class="h-4 w-4" aria-hidden="true" />{/if}
         </button>
       </div>
@@ -575,4 +602,22 @@
   {#if error}
     <p id={`${id}-error`} class="text-xs text-destructive" role="alert">{error}</p>
   {/if}
+
+  <Dialog bind:open={helpOpen}>
+    <DialogContent class="max-w-lg border-border bg-surface shadow-brand-xl">
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div onkeydown={(event) => event.key === 'Escape' && (helpOpen = false)}>
+        <DialogTitle>Keyboard shortcuts</DialogTitle>
+        <dl class="mt-4 grid grid-cols-[1fr_auto] gap-x-6 gap-y-2 text-sm">
+          {#each SHORTCUTS as [action, keys] (action)}
+            <dt class="text-foreground">{action}</dt>
+            <dd class="text-right"><kbd class="font-sans font-semibold">{keys}</kbd></dd>
+          {/each}
+        </dl>
+        <div class="mt-6 flex justify-end">
+          <button type="button" class={btn} onclick={() => (helpOpen = false)}>Close</button>
+        </div>
+      </div>
+    </DialogContent>
+  </Dialog>
 </div>

@@ -19,33 +19,41 @@
   import { getInitials } from '@/lib/initials';
   import {
     buildOrgTree,
-    canDrop,
     keyboardMove,
     matchMembers,
     moveRelative,
-    moveToRoot,
-    orgTreeOps,
     positionOf,
-    removeMember,
     siblingsOf,
     type DropPosition,
     type OrgMember,
     type OrgNode,
-    type OrgChange,
     type OrgPlacement,
   } from '@/lib/org-tree';
   import {
     afterDelete,
+    beginPan,
     cancelRename,
     canvasClick,
     closeInspector as closeInspectorState,
     commitRename,
     createdMember,
+    dragEnd,
+    dragLeaveCard,
+    dragLeaveLane,
+    dragOverCard,
+    dragOverLane,
+    dragStart,
+    dropOnCard,
+    dropOnLane,
     dropZone,
+    endPan,
     fitViewport,
+    initialDrag,
+    initialPan,
     initialUi,
-    isPanGesture,
+    isPanning,
     itemKeyIntent,
+    movePan,
     nextSearchMatch,
     panBy,
     peerAnchor,
@@ -54,15 +62,20 @@
     setRenameValue,
     startCreate,
     startRename,
+    takeControl,
     wheelIntent,
     zoomAt,
     type ChartUi,
+    type DragState,
+    type DropResult,
+    type PanState,
     type Viewport,
   } from '@/lib/org-chart-interaction';
-  import { createTreeEditSession, type EditResult, type TreeEditPort } from '@/lib/tree-edit-session';
+  import { createOrgChartSession, MEMBER_GONE, type MemberValues, type OrgChartPort } from '@/lib/org-chart-session';
+  import type { EditResult } from '@/lib/tree-edit-session';
   import ConfirmDialog from '../ConfirmDialog.svelte';
   import { append, parseActionError, primaryButtonClass, secondaryButtonClass, type FormErrors } from '../shared/form-utils';
-  import MemberInspector, { type MemberValues } from './MemberInspector.svelte';
+  import MemberInspector from './MemberInspector.svelte';
 
   let {
     departmentId,
@@ -76,33 +89,38 @@
     members: OrgMember[];
   } = $props();
 
-  interface DropState {
-    id: number | null;
-    position: DropPosition | 'root';
-    ok: boolean;
-  }
-
   const DESKTOP = '(min-width: 768px)';
 
-  const port: TreeEditPort<OrgMember[], OrgChange> = {
-    async save(change, confirmed) {
-      if (change.kind === 'place') {
-        const { error } = await actions.members.reorder({ departmentId, placements: change.placements });
-        return error ? { ok: false, message: parseActionError(error).message } : { ok: true };
-      }
-      const current = confirmed.find((m) => m.id === change.id);
-      if (!current) return { ok: false, message: 'This member no longer exists.' };
-      const { error } = await actions.members.update(formFor({ ...current, name: change.name }));
+  const port: OrgChartPort = {
+    async reorder(placements) {
+      const { error } = await actions.members.reorder({ departmentId, placements });
+      return error ? { ok: false, message: parseActionError(error).message } : { ok: true };
+    },
+    async rename(current, name) {
+      const { error } = await actions.members.update(formFor({ ...current, name }));
       if (!error) return { ok: true };
       const failure = parseActionError(error);
       return { ok: false, message: failure.fields.name || failure.message };
     },
+    async create(values) {
+      const { data, error } = await actions.members.create(formFor(values));
+      if (error) return { ok: false, failure: parseActionError(error) };
+      return { ok: true, id: data.id, order: data.order, imageUrl: data.imageUrl };
+    },
+    async update(id, values) {
+      const { data, error } = await actions.members.update(formFor({ id, ...values }));
+      if (error) return { ok: false, failure: parseActionError(error) };
+      return { ok: true, imageUrl: data.imageUrl };
+    },
+    async remove(id) {
+      const { error } = await actions.members.delete({ departmentId, id });
+      return error ? { ok: false, message: parseActionError(error).message } : { ok: true };
+    },
   };
   // The session owns the confirmed and drawn (optimistic) member lists, the save queue, rollback and undo history.
-  const session = createTreeEditSession({
-    tree: untrack(() => initialMembers.map((m) => ({ ...m }))),
+  const session = createOrgChartSession({
+    members: untrack(() => initialMembers),
     port,
-    ops: orgTreeOps,
     onChange: (next) => (view = next),
   });
   let view = $state.raw(session.snapshot());
@@ -119,11 +137,12 @@
   let announcement = $state('');
 
   let cam = $state.raw<Viewport>({ scale: 1, tx: 0, ty: 0 });
-  let panning = $state(false);
-  let autoFit = true;
+  let pan = $state.raw<PanState>(initialPan);
+  const panning = $derived(isPanning(pan));
 
-  let dragId = $state<number | null>(null);
-  let drop = $state<DropState | null>(null);
+  let drag = $state.raw<DragState>(initialDrag);
+  const dragId = $derived(drag.dragId);
+  const drop = $derived(drag.drop);
 
   let deleteTarget = $state<OrgMember | null>(null);
   let deleteOpen = $state(false);
@@ -172,7 +191,7 @@
 
   function zoomBy(factor: number, clientX?: number, clientY?: number) {
     if (!viewport) return;
-    autoFit = false;
+    pan = takeControl(pan);
     const rect = viewport.getBoundingClientRect();
     const px = (clientX ?? rect.left + rect.width / 2) - rect.left;
     const py = (clientY ?? rect.top + rect.height / 2) - rect.top;
@@ -180,7 +199,7 @@
   }
 
   function manualFit() {
-    autoFit = false;
+    pan = takeControl(pan);
     fit();
   }
 
@@ -210,7 +229,7 @@
     const onWheel = (event: WheelEvent) => {
       if (!isDesktop()) return;
       event.preventDefault();
-      autoFit = false;
+      pan = takeControl(pan);
       const intent = wheelIntent({ deltaX: event.deltaX, deltaY: event.deltaY, zoomModifier: event.ctrlKey || event.metaKey });
       if (intent.kind === 'zoom') zoomBy(intent.factor, event.clientX, event.clientY);
       else cam = panBy(cam, intent.dx, intent.dy);
@@ -218,7 +237,7 @@
     el.addEventListener('wheel', onWheel, { passive: false });
     // Fit once the first layout (fonts, photos) settles; stops as soon as the user interacts.
     const observer = new ResizeObserver(() => {
-      if (autoFit) fit();
+      if (pan.autoFit) fit();
     });
     observer.observe(content);
     fit();
@@ -228,35 +247,25 @@
     };
   });
 
-  let pan: { x: number; y: number; tx: number; ty: number; moved: boolean } | null = null;
-
   function onPanDown(event: PointerEvent) {
-    autoFit = false;
+    pan = takeControl(pan);
     if (event.button !== 0 || !isDesktop() || !viewport) return;
     if ((event.target as HTMLElement).closest('[data-testid="org-card"], button, input, a')) return;
-    pan = { x: event.clientX, y: event.clientY, tx: cam.tx, ty: cam.ty, moved: false };
+    pan = beginPan(pan, { x: event.clientX, y: event.clientY }, cam);
     viewport.setPointerCapture(event.pointerId);
   }
 
   function onPanMove(event: PointerEvent) {
-    if (!pan) return;
-    const dx = event.clientX - pan.x;
-    const dy = event.clientY - pan.y;
-    if (!pan.moved && isPanGesture(dx, dy)) {
-      pan.moved = true;
-      panning = true;
-    }
-    if (pan.moved) {
-      cam = { ...cam, tx: pan.tx + dx, ty: pan.ty + dy };
-    }
+    const next = movePan(pan, cam, { x: event.clientX, y: event.clientY });
+    pan = next.pan;
+    cam = next.view;
   }
 
   function onPanUp() {
-    if (!pan) return;
-    const moved = pan.moved;
-    pan = null;
-    panning = false;
-    ui = canvasClick(ui, moved);
+    const ended = endPan(pan);
+    if (!ended) return;
+    pan = ended.pan;
+    ui = canvasClick(ui, ended.moved);
   }
 
   /** The browser may scroll the clipped canvas to reveal a focused card; the transform is the only offset. */
@@ -333,16 +342,10 @@
   }
 
   async function saveInspector(values: MemberValues): Promise<FormErrors | null> {
-    await session.settled();
     if (ui.creating) return createMember(values);
-    const current = view.confirmed.find((m) => m.id === selectedId);
-    if (!current) return { fields: {}, message: 'This member no longer exists.' };
-    const { data, error } = await actions.members.update(formFor({ id: current.id, ...values }));
-    if (error) return parseActionError(error);
-    const patch = { name: values.name, role: values.role, parentId: values.parentId, order: values.order, imageUrl: data.imageUrl };
-    session.adopt((list) => list.map((m) => (m.id === current.id ? { ...m, ...patch } : m)), {
-      resetHistory: patch.parentId !== current.parentId || patch.order !== current.order,
-    });
+    if (selectedId === null) return { fields: {}, message: MEMBER_GONE };
+    const result = await session.update(selectedId, values);
+    if (!result.ok) return result.failure;
     toast.success('Member updated.');
     announce(`${values.name} updated.`);
     return null;
@@ -350,17 +353,9 @@
 
   async function createMember(values: MemberValues): Promise<FormErrors | null> {
     const context = ui.creating;
-    const { data, error } = await actions.members.create(formFor(values));
-    if (error) return parseActionError(error);
-    const created: OrgMember = {
-      id: data.id,
-      name: values.name,
-      role: values.role,
-      parentId: values.parentId,
-      order: data.order,
-      imageUrl: data.imageUrl,
-    };
-    session.adopt((list) => [...list, created]);
+    const result = await session.create(values);
+    if (!result.ok) return result.failure;
+    const created = result.member;
     ui = createdMember(ui, created.id);
     toast.success(`${created.name} added.`);
     // "Add peer" slots the new member right after the card it was added beside.
@@ -395,15 +390,13 @@
     const target = deleteTarget;
     if (!target) return;
     deleting = true;
-    await session.settled();
-    const { error } = await actions.members.delete({ departmentId, id: target.id });
+    const result = await session.remove(target.id);
     deleting = false;
     deleteOpen = false;
-    if (error) {
-      toast.error(parseActionError(error).message || 'The member could not be deleted.');
+    if (!result.ok) {
+      toast.error(result.message);
       return;
     }
-    session.adopt((list) => removeMember(list, target.id), { resetHistory: true });
     ui = afterDelete(ui, members, target);
     toast.success(`${target.name} removed.`);
     announce(`${target.name} removed. Direct reports moved up.`);
@@ -456,7 +449,7 @@
   }
 
   function onRootKey(event: KeyboardEvent) {
-    autoFit = false;
+    pan = takeControl(pan);
     if ((event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
     const mod = event.ctrlKey || event.metaKey;
     if (mod && event.key.toLowerCase() === 'z') {
@@ -487,12 +480,8 @@
     return dropZone({ x: event.clientX, y: event.clientY }, rect, isDesktop());
   }
 
-  function setDrop(next: DropState | null) {
-    if (drop?.id !== next?.id || drop?.position !== next?.position || drop?.ok !== next?.ok) drop = next;
-  }
-
   function onCardDragStart(event: DragEvent, id: number) {
-    dragId = id;
+    drag = dragStart(id);
     hoverId = null;
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move';
@@ -501,16 +490,14 @@
   }
 
   function onCardDragEnd() {
-    dragId = null;
-    drop = null;
+    drag = dragEnd();
   }
 
   function onCardDragOver(event: DragEvent, id: number) {
-    if (dragId === null) return;
-    const position = zoneOf(event, event.currentTarget as HTMLElement);
-    const ok = canDrop(members, dragId, id);
-    setDrop({ id, position, ok });
-    if (ok) {
+    const over = dragOverCard(drag, members, id, zoneOf(event, event.currentTarget as HTMLElement));
+    if (!over) return;
+    drag = over.drag;
+    if (over.allowed) {
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
     } else if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
@@ -518,34 +505,34 @@
 
   /** The browser fires `dragenter` on the new target before `dragleave` on the old one: only clear our own state. */
   function onCardDragLeave(event: DragEvent, id: number) {
-    if (drop?.id === id && !(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) drop = null;
+    drag = dragLeaveCard(drag, id, (event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null));
   }
 
   function onCardDrop(event: DragEvent, id: number) {
-    if (dragId === null) return;
+    const dropped = dropOnCard(drag, members, id, zoneOf(event, event.currentTarget as HTMLElement));
+    if (!dropped) return;
     event.preventDefault();
-    const moving = dragId;
-    const position = zoneOf(event, event.currentTarget as HTMLElement);
-    dragId = null;
-    drop = null;
-    restructure(moveRelative(members, moving, id, position), moving);
-    void focusMember(moving);
+    finishDrop(dropped);
   }
 
   function onLaneDragOver(event: DragEvent) {
-    if (dragId === null) return;
+    const next = dragOverLane(drag);
+    if (!next) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-    setDrop({ id: null, position: 'root', ok: true });
+    drag = next;
   }
 
   function onLaneDrop(event: DragEvent) {
-    if (dragId === null) return;
+    const dropped = dropOnLane(drag, members);
+    if (!dropped) return;
     event.preventDefault();
-    const moving = dragId;
-    dragId = null;
-    drop = null;
-    restructure(moveToRoot(members, moving), moving);
+    finishDrop(dropped);
+  }
+
+  function finishDrop({ drag: next, moving, placements }: DropResult) {
+    drag = next;
+    restructure(placements, moving);
     void focusMember(moving);
   }
 
@@ -841,7 +828,7 @@
           data-testid="root-lane"
           ondragenter={onLaneDragOver}
           ondragover={onLaneDragOver}
-          ondragleave={() => drop?.position === 'root' && setDrop(null)}
+          ondragleave={() => (drag = dragLeaveLane(drag))}
           ondrop={onLaneDrop}
         >
           Drop here to make top-level

@@ -78,8 +78,7 @@ const heading = 'mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-gold
                 <h2 class={`${heading} font-sans`}>Contact us</h2>
                 <address class="text-sm not-italic text-white/75">
                     <p class="mb-1">
-                        {address.streetAddress}, {address.addressLocality}, {address.addressRegion}{' '}
-                        {address.postalCode}
+                        {address.streetAddress}, {address.addressLocality}, {address.addressRegion} {address.postalCode}
                     </p>
                     <p>
                         <a href={`mailto:${SITE.email}`} class={linkClass}>

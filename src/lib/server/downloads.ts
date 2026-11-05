@@ -85,6 +85,16 @@ export interface DownloadsPage {
 
 const departmentRefSelect = { id: true, name: true, slug: true } as const;
 
+/** What both Downloads views show of a stored file: its URL, extension (from the stored key, else the name) and kind. */
+export function downloadFacts(row: { filePath: string; fileName: string }): {
+    url: string;
+    extension: string;
+    kind: DownloadView['kind'];
+} {
+    const extension = extensionOf(row.filePath) || extensionOf(row.fileName);
+    return { url: publicUrl(row.filePath) ?? row.filePath, extension, kind: fileKind(extension) };
+}
+
 async function listDownloads(filters: Pick<DownloadFilters, 'search' | 'departmentId'>): Promise<DownloadView[]> {
     const and: Prisma.DownloadWhereInput[] = [];
     if (filters.departmentId) and.push({ departmentId: filters.departmentId });
@@ -115,8 +125,7 @@ async function listDownloads(filters: Pick<DownloadFilters, 'search' | 'departme
     });
 
     return rows.map((row) => {
-        const url = publicUrl(row.filePath) ?? row.filePath;
-        const extension = extensionOf(row.filePath) || extensionOf(row.fileName);
+        const { url, extension, kind } = downloadFacts(row);
         return {
             id: row.id,
             fileName: row.fileName,
@@ -127,7 +136,7 @@ async function listDownloads(filters: Pick<DownloadFilters, 'search' | 'departme
             ),
             size: row.fileSize,
             extension,
-            kind: fileKind(extension),
+            kind,
             tags: parseTags(row.tags),
             directory: directoryOf(row.directory),
             createdAt: row.createdAt,
@@ -224,14 +233,14 @@ export interface AdminFolder {
 export function toAdminDownload(
     row: Prisma.DownloadGetPayload<{ include: { department: { select: { name: true } } } }>,
 ): AdminDownloadRow {
-    const extension = extensionOf(row.filePath);
+    const { url, extension, kind } = downloadFacts(row);
     return {
         id: row.id,
         fileName: row.fileName,
-        url: publicUrl(row.filePath) ?? '',
+        url,
         size: row.fileSize,
         extension,
-        kind: fileKind(extension),
+        kind,
         directory: directoryOf(row.directory),
         tags: parseTags(row.tags),
         departmentId: row.departmentId,

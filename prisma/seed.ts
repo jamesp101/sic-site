@@ -23,6 +23,7 @@ import {
     DEMO_POSTS,
     DEMO_USERS,
     WELCOME_HERO,
+    assertLocalDatabase,
     seedPassword,
     type DemoDepartmentKey,
     type DemoHeroSection,
@@ -55,23 +56,6 @@ async function createUser(data: {
         await setPasswordLogin(tx, user.id, hash);
         return user;
     });
-}
-
-/** Seeding writes demo users with known passwords: only a local database is accepted unless SEED_ALLOW_REMOTE=1. */
-function assertLocalDatabase(): void {
-    const url = process.env.DATABASE_URL ?? '';
-    if (process.env.SEED_ALLOW_REMOTE === '1' || url.startsWith('file:')) return;
-    let host = '';
-    try {
-        host = new URL(url).hostname;
-    } catch {
-        // Unparseable: treated as remote below.
-    }
-    if (['localhost', '127.0.0.1', '[::1]'].includes(host)) return;
-    throw new Error(
-        `Refusing to seed ${host ? `the database on ${host}` : 'a database that is not local'}. ` +
-            'Set SEED_ALLOW_REMOTE=1 if that is really intended.',
-    );
 }
 
 async function main() {

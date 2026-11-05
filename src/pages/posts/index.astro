@@ -9,11 +9,13 @@ import type { PostType } from '@/lib/content-types';
 import { parsePage } from '@/lib/pagination';
 import { hasPostFilters, parsePostFilters, postsHref } from '@/lib/post-filters';
 import { siteUrl } from '@/lib/seo';
-import { getPostsPage } from '@/lib/server/queries';
+import { getNavLinks, getPostsPage, startQuery } from '@/lib/server/queries';
 
 /** Three full rows of the three-column grid. */
 const PER_PAGE = 12;
 
+// The layout's Navigation links run beside the page's queries, not after them.
+const navLinks = startQuery(getNavLinks());
 const params = Astro.url.searchParams;
 const filters = parsePostFilters(params);
 const { type, departmentId, sort } = filters;
@@ -36,7 +38,7 @@ const tabs: { label: string; type?: PostType }[] = [
 ];
 ---
 
-<PublicLayout {...seo} {departments}>
+<PublicLayout {...seo} {navLinks} {departments}>
     <PageBanner
         eyebrow="News & events"
         title="News, Events & Announcements"

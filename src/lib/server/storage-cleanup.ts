@@ -1,6 +1,7 @@
 /**
  * Storage cleanup: deletes stored files that no database row references and that are older than a
- * grace period, plus expired pending-upload rows (never their files directly). Free of `astro:*` imports; the database,
+ * grace period, plus expired pending-upload rows (never their files directly) and expired rate-limit counters.
+ * Free of `astro:*` imports; the database,
  * driver and delete function are injected (wired in `storage-cleanup-run.ts`).
  *
  * "Referenced" is decided generically: a file is kept when its key appears, as a bare key or inside
@@ -47,6 +48,8 @@ export interface CleanupDeps {
     countExpiredPending(): Promise<number>;
     /** Rows that expired at or before this instant are removed by a sweep. */
     pendingSweepCutoff(now: number): Date;
+    /** Deletes the expired `app:` rate-limit counters (`auth_rate_limits`) and returns how many it removed. */
+    sweepRateLimits(now: number): Promise<number>;
 }
 
 export interface CleanupOptions {
@@ -74,6 +77,8 @@ export interface CleanupReport {
     bytesFreed: number;
     /** Expired pending direct uploads swept (dry run: found). */
     pendingUploads: number;
+    /** Expired rate-limit counters swept (never counted in a dry run). */
+    rateLimits: number;
     keys: string[];
 }
 
@@ -188,6 +193,8 @@ export async function cleanupStorage(deps: CleanupDeps, options: CleanupOptions 
         }
     }
 
+    const rateLimits = dryRun ? 0 : await deps.sweepRateLimits(now);
+
     let listed = 0;
     const listedObjects = new Map<string, { size: number; mtime: number }>();
     for await (const object of deps.driver.list()) {
@@ -232,6 +239,7 @@ export async function cleanupStorage(deps: CleanupDeps, options: CleanupOptions 
         deleted: keys.length,
         bytesFreed,
         pendingUploads,
+        rateLimits,
         keys,
     };
 }
@@ -249,6 +257,7 @@ export function formatCleanupReport(report: CleanupReport): string {
         `Stored files: ${report.listed} (${report.candidates} older than the grace period, ${report.referenced} still referenced)`,
         `${verb} ${report.deleted} unreferenced file(s), ${formatBytes(report.bytesFreed)}`,
         `${report.dryRun ? 'Expired pending uploads found' : 'Expired pending uploads swept'}: ${report.pendingUploads}`,
+        ...(report.dryRun ? [] : [`Expired rate-limit counters swept: ${report.rateLimits}`]),
     ];
     if (report.remaining > 0) lines.push(`Left for the next run: ${report.remaining}`);
     if (report.dryRun) lines.push(...report.keys.map((key) => `  ${key}`));

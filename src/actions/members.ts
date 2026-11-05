@@ -30,7 +30,7 @@ export const members = {
                 await assertValidParent(input.departmentId, input.parentId);
 
                 const member = await commitWithFiles({
-                    files: { image: input.image && { prefix: 'members', file: input.image } },
+                    files: { image: input.image && { prefix: 'members', file: input.image, variant: true } },
                     run: ({ image }) =>
                         db.member.create({
                             data: {
@@ -57,7 +57,7 @@ export const members = {
                 await assertValidParent(member.departmentId, input.parentId, member.id);
 
                 const saved = await commitWithFiles({
-                    files: { image: input.image && { prefix: 'members', file: input.image } },
+                    files: { image: input.image && { prefix: 'members', file: input.image, variant: true } },
                     run: ({ image }) =>
                         db.member.update({
                             where: { id: member.id },

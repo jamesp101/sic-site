@@ -10,11 +10,21 @@ import { providerFromUrl } from '../../../prisma/provider.mjs';
  */
 const MYSQL_POOL_SIZE = 5;
 
+/**
+ * Connections per process in the PostgreSQL pool (`pg` defaults to 10): few, because every serverless instance
+ * holds its own pool and the server is normally behind a pooler (Neon, PgBouncer). Overridden by `DATABASE_POOL_SIZE`.
+ */
+const POSTGRES_POOL_SIZE = 3;
+
+/** `DATABASE_POOL_SIZE` when it is a positive integer, else `fallback`. */
+function poolSize(fallback: number): number {
+    return Number.parseInt(process.env.DATABASE_POOL_SIZE ?? '', 10) || fallback;
+}
+
 function mariadbUrl(url: string): string {
     const base = url.replace(/^mysql:/, 'mariadb:');
     if (/[?&]connectionLimit=/.test(base)) return base;
-    const size = Number.parseInt(process.env.DATABASE_POOL_SIZE ?? '', 10) || MYSQL_POOL_SIZE;
-    return `${base}${base.includes('?') ? '&' : '?'}connectionLimit=${size}`;
+    return `${base}${base.includes('?') ? '&' : '?'}connectionLimit=${poolSize(MYSQL_POOL_SIZE)}`;
 }
 
 /** Driver adapter for the provider implied by DATABASE_URL; only the matching driver is loaded. */
@@ -30,7 +40,7 @@ async function createAdapter(url: string): Promise<SqlDriverAdapterFactory> {
         }
         case 'postgresql': {
             const { PrismaPg } = await import('@prisma/adapter-pg');
-            return new PrismaPg({ connectionString: url });
+            return new PrismaPg({ connectionString: url, max: poolSize(POSTGRES_POOL_SIZE) });
         }
     }
 }

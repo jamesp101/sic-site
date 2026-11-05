@@ -5,9 +5,9 @@ import { VIDEO_MAX_BYTES, VIDEO_TYPES } from '../../video-types';
 import { storedType } from '../file-types';
 import { createLocalDriver, type LocalDriver } from './local';
 import type { ByteRange } from './range';
-import { createS3Driver, type S3Driver } from './s3';
+import type { S3Config, S3Driver } from './s3';
 import type { StorageDriver, StoredObject } from './types';
-import { isVariantKey, originalCandidates, variantKeyOf } from './variants';
+import { originalCandidates, variantKeyOf } from './variants';
 
 export type { StorageDriver, StoredObject };
 
@@ -78,10 +78,31 @@ export const directBaseUrl: string | null =
         ? process.env.S3_PUBLIC_URL.trim().replace(/\/+$/, '')
         : null;
 
+/**
+ * The S3 driver, loaded on its first call: the AWS SDK is the slowest module to start and only `STORAGE_DRIVER=s3`
+ * needs it (a dynamic import, because the choice is made at run time).
+ */
+function createLazyS3Driver(config: S3Config): S3Driver {
+    let loaded: Promise<S3Driver> | undefined;
+    const load = () => (loaded ??= import('./s3').then(({ createS3Driver }) => createS3Driver(config)));
+    return {
+        name: 's3',
+        put: async (key, body, contentType) => (await load()).put(key, body, contentType),
+        delete: async (key) => (await load()).delete(key),
+        get: async (key, range) => (await load()).get(key, range),
+        head: async (key) => (await load()).head(key),
+        async *list(prefix) {
+            yield* (await load()).list(prefix);
+        },
+        presignPut: async (key, contentType, size, expiresIn) =>
+            (await load()).presignPut(key, contentType, size, expiresIn),
+    };
+}
+
 function createDriver(): StorageDriver {
     if (driverName === 'local') return createLocalDriver(process.env.UPLOAD_DIR ?? './storage/uploads');
     const prefix = cleanPrefix('S3_PREFIX');
-    return createS3Driver({
+    return createLazyS3Driver({
         bucket: required('S3_BUCKET'),
         region: process.env.S3_REGION?.trim() || 'us-east-1',
         endpoint: process.env.S3_ENDPOINT?.trim() || undefined,
@@ -183,14 +204,17 @@ export async function remove(value: string | null | undefined): Promise<void> {
 }
 
 /**
- * The key to serve for a request: `key` itself, except for a variant that is missing, which is served by its
- * original. When neither exists (or the key is invalid) it returns `key`, so the route answers 404.
+ * The key to serve for a request: `key` itself, except for a variant of an image kind that has variants
+ * (`variants.ts`) that is missing, which is served by its original. Any other key, and a variant whose original is
+ * gone too (or invalid), returns `key` untouched, so the route answers 404 after at most one `HEAD` per
+ * candidate original.
  */
 export async function servedKey(key: string): Promise<string> {
-    if (!isVariantKey(key)) return key;
+    const candidates = originalCandidates(key);
+    if (candidates.length === 0) return key;
     try {
         if (await driver.head(toKey(key))) return key;
-        for (const candidate of originalCandidates(key)) if (await driver.head(candidate)) return candidate;
+        for (const candidate of candidates) if (await driver.head(candidate)) return candidate;
     } catch {
         // invalid key: let the route answer 404
     }

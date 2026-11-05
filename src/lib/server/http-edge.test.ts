@@ -134,6 +134,49 @@ describe('finishResponse', () => {
         expect(await finishResponse(image, get('/x', { 'accept-encoding': 'gzip' }))).toBe(image);
     });
 
+    it('streams a non-cacheable body through the compressor: it arrives compressed, complete and without a length', async () => {
+        const chunks = Array.from({ length: 50 }, (_, i) => `<p>chunk ${i} of the San Isidro College page</p>\n`);
+        const expected = chunks.join('');
+        const encoder = new TextEncoder();
+        const stream = () => {
+            let next = 0;
+            return new ReadableStream<Uint8Array>({
+                pull(controller) {
+                    if (next < chunks.length) controller.enqueue(encoder.encode(chunks[next++]));
+                    else controller.close();
+                },
+            });
+        };
+        const priv = () =>
+            new Response(stream(), { headers: { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' } });
+
+        const br = await finishResponse(priv(), get('/admin', { 'accept-encoding': 'br' }));
+        expect(br.headers.get('content-encoding')).toBe('br');
+        expect(br.headers.get('content-length')).toBeNull();
+        expect(br.headers.get('vary')).toBe('Accept-Encoding');
+        expect(br.headers.get('etag')).toBeNull();
+        const brBytes = new Uint8Array(await br.arrayBuffer());
+        expect(brBytes.byteLength).toBeLessThan(expected.length);
+        expect(brotliDecompressSync(brBytes).toString()).toBe(expected);
+
+        const gz = await finishResponse(priv(), get('/admin', { 'accept-encoding': 'gzip' }));
+        expect(gunzipSync(new Uint8Array(await gz.arrayBuffer())).toString()).toBe(expected);
+
+        const plain = await finishResponse(priv(), get('/admin'));
+        expect(plain.headers.get('content-encoding')).toBeNull();
+        expect(await plain.text()).toBe(expected);
+
+        const tiny = await finishResponse(
+            new Response(new Blob(['<p>hi</p>']).stream(), {
+                headers: { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' },
+            }),
+            get('/admin', { 'accept-encoding': 'gzip' }),
+        );
+        expect(tiny.headers.get('content-encoding')).toBeNull();
+        expect(tiny.headers.get('vary')).toBeNull();
+        expect(await tiny.text()).toBe('<p>hi</p>');
+    });
+
     it('leaves small bodies, /storage, encoded responses, non-200 and non-GET alone', async () => {
         const accept = { 'accept-encoding': 'gzip' };
         const small = await finishResponse(page('<p>hi</p>'), get('/', accept));

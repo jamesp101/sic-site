@@ -9,13 +9,15 @@ import PostCard from '@/components/site/PostCard.astro';
 import { textLink } from '@/components/site/classes';
 import PublicLayout from '@/layouts/PublicLayout.astro';
 import { homePageSeo, siteUrl } from '@/lib/seo';
-import { getHomeData } from '@/lib/server/queries';
+import { getHomeData, getNavLinks, startQuery } from '@/lib/server/queries';
 import { SITE } from '@/lib/site';
 
+// The layout's Navigation links run beside the page's queries, not after them.
+const navLinks = startQuery(getNavLinks());
 const { carousel, departments, latestPosts, welcomeHero, heroSections } = await getHomeData();
 ---
 
-<PublicLayout {...homePageSeo(siteUrl(Astro))} {departments}>
+<PublicLayout {...homePageSeo(siteUrl(Astro))} {navLinks} {departments}>
     {carousel.length > 0 ? (
         <HeroCarousel client:visible slides={carousel} pageTitle={`${SITE.name} — ${SITE.motto}`} />
     ) : (
