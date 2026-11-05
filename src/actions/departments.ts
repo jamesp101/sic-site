@@ -2,15 +2,18 @@ import { ActionError, defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
 import { db } from '@/lib/server/db';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
-import { requireSuperAdmin, scopeDepartment, AuthzError } from '@/lib/server/authz';
+import { requireSuperAdmin, AuthzError } from '@/lib/server/authz';
+import { contentField } from '@/lib/server/content-field';
+import { loadOwnDepartment } from '@/lib/server/department-access';
 import { imageFile } from '@/lib/server/image-file';
 import { slugify, uniqueSlug } from '@/lib/server/slug';
-import { LIMITS, put, remove } from '@/lib/server/storage';
+import { LIMITS } from '@/lib/server/storage';
+import { commitWithFiles, deleteWithFiles } from '@/lib/server/stored-files';
 
 const fields = {
     name: z.string({ error: 'The name is required.' }).trim().min(1, 'The name is required.').max(255),
     description: z.string().nullable().optional(),
-    heroContent: z.string().nullable().optional(),
+    heroContent: contentField({ required: false }).nullable().optional(),
     logo: imageFile(LIMITS.image, 'logo').optional(),
 };
 
@@ -32,23 +35,21 @@ export const departments = {
                         (await db.department.findUnique({ where: { slug: candidate }, select: { id: true } })) !== null,
                 );
 
-                const logoPath = input.logo ? await put('departments', input.logo) : null;
-                try {
-                    const department = await db.department.create({
-                        data: {
-                            name: input.name,
-                            slug,
-                            description: input.description ?? null,
-                            heroContent: input.heroContent ?? null,
-                            logoPath,
-                        },
-                    });
-                    flash(context, 'Department created successfully.');
-                    return { id: department.id };
-                } catch (error) {
-                    await remove(logoPath);
-                    throw error;
-                }
+                const department = await commitWithFiles({
+                    files: { logo: input.logo && { prefix: 'departments', file: input.logo } },
+                    run: ({ logo }) =>
+                        db.department.create({
+                            data: {
+                                name: input.name,
+                                slug,
+                                description: input.description ?? null,
+                                heroContent: input.heroContent ?? null,
+                                logoPath: logo ?? null,
+                            },
+                        }),
+                });
+                flash(context, 'Department created successfully.');
+                return { id: department.id };
             }),
     }),
 
@@ -58,26 +59,22 @@ export const departments = {
         handler: (input, context) =>
             guarded(async () => {
                 const actor = actorOf(context);
-                const row = await db.department.findUnique({ where: { id: input.id } });
-                scopeDepartment(actor, row && { ...row, departmentId: row.id });
-                if (!row) throw new AuthzError('NOT_FOUND');
+                const row = await loadOwnDepartment(actor, input.id);
 
-                const logoPath = input.logo ? await put('departments', input.logo) : row.logoPath;
-                try {
-                    await db.department.update({
-                        where: { id: row.id },
-                        data: {
-                            name: input.name,
-                            description: input.description ?? null,
-                            heroContent: input.heroContent ?? null,
-                            logoPath,
-                        },
-                    });
-                } catch (error) {
-                    if (input.logo) await remove(logoPath);
-                    throw error;
-                }
-                if (input.logo) await remove(row.logoPath);
+                await commitWithFiles({
+                    files: { logo: input.logo && { prefix: 'departments', file: input.logo } },
+                    run: ({ logo }) =>
+                        db.department.update({
+                            where: { id: row.id },
+                            data: {
+                                name: input.name,
+                                description: input.description ?? null,
+                                heroContent: input.heroContent ?? null,
+                                logoPath: logo ?? row.logoPath,
+                            },
+                        }),
+                    stale: [input.logo ? row.logoPath : null],
+                });
 
                 flash(context, 'Department details updated.');
                 return { id: row.id };
@@ -100,15 +97,16 @@ export const departments = {
                 });
                 if (!row) throw new AuthzError('NOT_FOUND');
 
-                await db.department.delete({ where: { id } });
-
-                await Promise.all([
-                    remove(row.logoPath),
-                    ...row.members.map((member) => remove(member.imagePath)),
-                    ...row.carouselItems.map((item) => remove(item.imagePath)),
-                    ...row.posts.map((post) => remove(post.highlightImagePath)),
-                    ...row.downloads.map((download) => remove(download.filePath)),
-                ]);
+                await deleteWithFiles(
+                    () => db.department.delete({ where: { id } }),
+                    [
+                        row.logoPath,
+                        ...row.members.map((member) => member.imagePath),
+                        ...row.carouselItems.map((item) => item.imagePath),
+                        ...row.posts.map((post) => post.highlightImagePath),
+                        ...row.downloads.map((download) => download.filePath),
+                    ],
+                );
 
                 flash(context, 'Department deleted successfully.');
                 return { id };

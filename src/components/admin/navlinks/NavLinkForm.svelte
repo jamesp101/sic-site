@@ -3,10 +3,11 @@
   import { untrack } from 'svelte';
   import { reloadView } from '@/lib/navigation';
   import { navUrlError, type LinkSuggestion } from '@/lib/nav-tree';
+  import { actionForm } from '../shared/action-form.svelte';
   import Field from '../shared/Field.svelte';
   import NavKindBadge from './NavKindBadge.svelte';
   import NavLinkPicker from './NavLinkPicker.svelte';
-  import { inputClass, parseActionError, primaryButtonClass, secondaryButtonClass } from '../shared/form-utils';
+  import { inputClass, primaryButtonClass, secondaryButtonClass } from '../shared/form-utils';
 
   export interface NavLinkFormValues {
     id: number;
@@ -43,9 +44,6 @@
   let label = $state(initial?.label ?? '');
   let url = $state(initial?.url ?? '');
   let isActive = $state(initial?.isActive ?? true);
-  let processing = $state(false);
-  let errors = $state<Record<string, string>>({});
-  let message = $state('');
   let labelInput = $state<HTMLInputElement | null>(null);
 
   $effect(() => {
@@ -56,36 +54,24 @@
     if (!label.trim()) label = suggestion.label;
   }
 
-  async function submit(event: SubmitEvent) {
-    event.preventDefault();
-    errors = {};
-    message = '';
-    const urlProblem = navUrlError(url);
-    if (urlProblem || !label.trim()) {
-      if (urlProblem) errors.url = urlProblem;
-      if (!label.trim()) errors.label = 'The label is required.';
-      return;
-    }
-    processing = true;
-    const payload = {
-      label,
-      url,
-      isActive,
-      order: initial?.order ?? untrack(() => nextOrder),
-      parentId: initial ? initial.parentId : untrack(() => parentId),
-    };
-    const { error } = initial
-      ? await actions.navlinks.update({ id: initial.id, ...payload })
-      : await actions.navlinks.create(payload);
-    if (error) {
-      const parsed = parseActionError(error);
-      errors = parsed.fields;
-      message = parsed.message;
-      processing = false;
-      return;
-    }
-    await reloadView();
-  }
+  const form = actionForm({
+    run() {
+      const fields: Record<string, string> = {};
+      const urlProblem = navUrlError(url);
+      if (urlProblem) fields.url = urlProblem;
+      if (!label.trim()) fields.label = 'The label is required.';
+      if (Object.keys(fields).length > 0) return Promise.resolve({ failure: { fields } });
+      const payload = {
+        label,
+        url,
+        isActive,
+        order: initial?.order ?? untrack(() => nextOrder),
+        parentId: initial ? initial.parentId : untrack(() => parentId),
+      };
+      return initial ? actions.navlinks.update({ id: initial.id, ...payload }) : actions.navlinks.create(payload);
+    },
+    onSuccess: () => reloadView(),
+  });
 
   function onKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
@@ -97,7 +83,7 @@
 
 <form
   method="post"
-  onsubmit={submit}
+  onsubmit={form.submit}
   onkeydown={onKeydown}
   aria-label={initial ? `Edit ${initial.label}` : parentLabel ? `Add link under ${parentLabel}` : 'Add link'}
   class="space-y-4 rounded-lg border border-border-strong bg-surface-alt p-4"
@@ -106,7 +92,7 @@
     {#if initial}Edit link{:else if parentLabel}New link under “{parentLabel}”{:else}New top-level link{/if}
   </p>
   <div class="grid gap-4 md:grid-cols-2">
-    <Field id={`${prefix}-label`} label="Label" required error={errors.label}>
+    <Field id={`${prefix}-label`} label="Label" required error={form.errors.label}>
       <input
         id={`${prefix}-label`}
         bind:this={labelInput}
@@ -122,7 +108,7 @@
       id={`${prefix}-url`}
       label="URL"
       required
-      error={errors.url}
+      error={form.errors.url}
       hint="Pick a page, department or post, or type a path such as /posts or a full https:// URL."
     >
       <div class="flex items-start gap-2">
@@ -131,8 +117,8 @@
             id={`${prefix}-url`}
             bind:value={url}
             {suggestions}
-            invalid={Boolean(errors.url)}
-            describedBy={errors.url ? `${prefix}-url-error` : undefined}
+            invalid={Boolean(form.errors.url)}
+            describedBy={form.errors.url ? `${prefix}-url-error` : undefined}
             {onpick}
           />
         </div>
@@ -146,14 +132,14 @@
     <span>Visible in navigation</span>
   </label>
 
-  {#if message}
-    <p class="text-sm font-medium text-destructive" role="alert">{message}</p>
+  {#if form.message}
+    <p class="text-sm font-medium text-destructive" role="alert">{form.message}</p>
   {/if}
 
   <div class="flex flex-wrap gap-2">
-    <button type="submit" class={primaryButtonClass} disabled={processing}>
-      {processing ? 'Saving…' : initial ? 'Save changes' : 'Add link'}
+    <button type="submit" class={primaryButtonClass} disabled={form.processing}>
+      {form.processing ? 'Saving…' : initial ? 'Save changes' : 'Add link'}
     </button>
-    <button type="button" class={secondaryButtonClass} onclick={oncancel} disabled={processing}>Cancel</button>
+    <button type="button" class={secondaryButtonClass} onclick={oncancel} disabled={form.processing}>Cancel</button>
   </div>
 </form>

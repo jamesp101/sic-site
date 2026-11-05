@@ -2,7 +2,7 @@ import type { CarouselItem } from '@/generated/prisma/client';
 import type { Layer } from '@/lib/carousel-overlay';
 import { parseOverlay } from '@/lib/carousel-overlay-schema';
 import { db } from './db';
-import { directBaseUrl, publicUrl, remove } from './storage';
+import { directBaseUrl, publicUrl } from './storage';
 
 /** Slide as the admin designer sees it. */
 export interface DesignerSlide {
@@ -47,16 +47,18 @@ export function ownedImageKey(src: string): string | null {
 }
 
 /**
- * Deletes layer images that no slide references any more (as layer or as slide photo).
- * Call after the row that referenced them was updated or deleted.
+ * Keys of the given layer images that no slide references any more (as layer or as slide photo).
+ * Call after the row that referenced them was updated or deleted; pass the result to the stored-files cleanup.
  */
-export async function removeUnusedLayerImages(srcs: string[]): Promise<void> {
+export async function unusedLayerImageKeys(srcs: string[]): Promise<string[]> {
+    const unused: string[] = [];
     for (const src of srcs) {
         const key = ownedImageKey(src);
         if (!key) continue;
         const used = await db.carouselItem.count({
             where: { OR: [{ overlay: { contains: src } }, { imagePath: key }] },
         });
-        if (used === 0) await remove(key);
+        if (used === 0) unused.push(key);
     }
+    return unused;
 }

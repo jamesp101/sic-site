@@ -6,30 +6,17 @@ import OrgChart from '@/components/site/OrgChart.astro';
 import PageBanner from '@/components/site/PageBanner.astro';
 import PostCard from '@/components/site/PostCard.astro';
 import PublicLayout from '@/layouts/PublicLayout.astro';
-import { departmentJsonLd, oneLine } from '@/lib/seo';
+import { siteUrl } from '@/lib/seo';
 import { getDepartmentPage } from '@/lib/server/queries';
-import { SITE } from '@/lib/site';
 
 const { slug } = Astro.params;
-const page = slug ? await getDepartmentPage(slug) : null;
+const page = slug ? await getDepartmentPage(slug, siteUrl(Astro)) : null;
 if (!page) return new Response(null, { status: 404, statusText: 'Not Found' });
 
-const { department, carousel, posts, members, heroSections } = page;
-const site = Astro.site ?? new URL(Astro.url.origin);
-const canonical = `/departments/${department.slug}`;
-const description = oneLine(department.description) || `${department.name} at ${SITE.name}, Malaybalay City, Bukidnon.`;
+const { department, carousel, posts, members, heroSections, seo } = page;
 ---
 
-<PublicLayout
-    title={department.name}
-    description={description}
-    {canonical}
-    image={department.logoUrl ?? carousel[0]?.imageUrl}
-    imageAlt={department.name}
-    modifiedTime={department.updatedAt}
-    breadcrumbs={[{ label: 'Home', href: '/' }, { label: department.name }]}
-    jsonLd={departmentJsonLd(department, members, site, new URL(canonical, site).href)}
->
+<PublicLayout {...seo}>
     {carousel.length > 0 && (
         <HeroCarousel
             client:visible

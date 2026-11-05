@@ -2,11 +2,12 @@
   import { actions } from 'astro:actions';
   import { navigate } from 'astro:transitions/client';
   import { untrack } from 'svelte';
+  import { actionForm } from '@/components/admin/shared/action-form.svelte';
   import BlockEditor from '@/components/admin/editor/BlockEditor.svelte';
   import Field from '@/components/admin/shared/Field.svelte';
   import FormActions from '@/components/admin/shared/FormActions.svelte';
   import ImageField from '@/components/admin/shared/ImageField.svelte';
-  import { append, inputClass, parseActionError } from '@/components/admin/shared/form-utils';
+  import { append, inputClass } from '@/components/admin/shared/form-utils';
   import { cardClass, selectClass } from '@/components/admin/ui';
   import { slugify } from '@/lib/server/slug';
 
@@ -56,9 +57,6 @@
   let highlightImage = $state<File | null>(null);
   let slugEdited = $state(initial !== null);
 
-  let processing = $state(false);
-  let errors = $state<Record<string, string>>({});
-  let message = $state('');
 
   $effect(() => {
     if (!slugEdited) slug = slugify(title);
@@ -66,47 +64,36 @@
 
   const isoOrEmpty = (local: string) => (local ? new Date(local).toISOString() : '');
 
-  async function submit(event: SubmitEvent) {
-    event.preventDefault();
-    processing = true;
-    errors = {};
-    message = '';
-
-    const form = new FormData();
-    if (post) form.append('id', String(post.id));
-    append(form, 'title', title);
-    append(form, 'slug', slug);
-    append(form, 'content', content);
-    append(form, 'type', type);
-    append(form, 'startDate', type === 'event' ? isoOrEmpty(startDate) : '');
-    append(form, 'endDate', type === 'event' ? isoOrEmpty(endDate) : '');
-    append(form, 'departmentId', departmentId);
-    append(form, 'isFeatured', isFeatured);
-    append(form, 'highlightImage', highlightImage);
-
-    const { error } = await (post ? actions.posts.update(form) : actions.posts.create(form));
-    if (error) {
-      const parsed = parseActionError(error);
-      errors = parsed.fields;
-      message = parsed.message;
-      processing = false;
-      return;
-    }
-    await navigate('/admin/posts');
-  }
+  const form = actionForm({
+    run() {
+      const data = new FormData();
+      if (post) data.append('id', String(post.id));
+      append(data, 'title', title);
+      append(data, 'slug', slug);
+      append(data, 'content', content);
+      append(data, 'type', type);
+      append(data, 'startDate', type === 'event' ? isoOrEmpty(startDate) : '');
+      append(data, 'endDate', type === 'event' ? isoOrEmpty(endDate) : '');
+      append(data, 'departmentId', departmentId);
+      append(data, 'isFeatured', isFeatured);
+      append(data, 'highlightImage', highlightImage);
+      return post ? actions.posts.update(data) : actions.posts.create(data);
+    },
+    onSuccess: () => navigate('/admin/posts'),
+  });
 </script>
 
-<form method="post" onsubmit={submit} class="space-y-6">
+<form method="post" onsubmit={form.submit} class="space-y-6">
   <div class="{cardClass} grid gap-8 p-6 lg:grid-cols-3">
     <div class="space-y-5 lg:col-span-2">
-      <Field label="Post title" id="title" error={errors.title} required>
-        <input id="title" type="text" required bind:value={title} class={inputClass} placeholder="e.g. Enrollment details for first semester" aria-invalid={errors.title ? 'true' : undefined} />
+      <Field label="Post title" id="title" error={form.errors.title} required>
+        <input id="title" type="text" required bind:value={title} class={inputClass} placeholder="e.g. Enrollment details for first semester" aria-invalid={form.errors.title ? 'true' : undefined} />
       </Field>
 
       <Field
         label="Post slug (URL path)"
         id="slug"
-        error={errors.slug}
+        error={form.errors.slug}
         hint={post ? 'Leave empty to regenerate from the title.' : 'Generated from the title. Edit to customise.'}
       >
         <input
@@ -116,12 +103,12 @@
           oninput={() => (slugEdited = true)}
           class={inputClass}
           placeholder="e.g. enrollment-details"
-          aria-invalid={errors.slug ? 'true' : undefined}
+          aria-invalid={form.errors.slug ? 'true' : undefined}
         />
       </Field>
 
       <div class="grid gap-5 md:grid-cols-2">
-        <Field label="Post type" id="type" error={errors.type}>
+        <Field label="Post type" id="type" error={form.errors.type}>
           <select id="type" bind:value={type} class="{selectClass} w-full">
             <option value="article">Article / Story</option>
             <option value="event">Campus Event</option>
@@ -129,7 +116,7 @@
           </select>
         </Field>
 
-        <Field label="Department" id="departmentId" error={errors.departmentId}>
+        <Field label="Department" id="departmentId" error={form.errors.departmentId}>
           <select id="departmentId" bind:value={departmentId} class="{selectClass} w-full">
             {#if isSuperAdmin}<option value="">General landing page</option>{/if}
             {#each departments as dept (dept.id)}
@@ -141,10 +128,10 @@
 
       {#if type === 'event'}
         <div class="grid gap-5 border-t border-border pt-4 md:grid-cols-2">
-          <Field label="Event start" id="startDate" error={errors.startDate}>
+          <Field label="Event start" id="startDate" error={form.errors.startDate}>
             <input id="startDate" type="datetime-local" bind:value={startDate} class={inputClass} />
           </Field>
-          <Field label="Event end" id="endDate" error={errors.endDate}>
+          <Field label="Event end" id="endDate" error={form.errors.endDate}>
             <input id="endDate" type="datetime-local" bind:value={endDate} class={inputClass} />
           </Field>
         </div>
@@ -160,7 +147,7 @@
         existingUrl={initial?.highlightImageUrl ?? null}
         cropTitle="Crop highlight image"
         hint="PNG, JPG, WebP or GIF, up to 5 MB"
-        error={errors.highlightImage}
+        error={form.errors.highlightImage}
         fit="cover"
       />
 
@@ -171,7 +158,7 @@
     </div>
   </div>
 
-  <BlockEditor bind:value={content} id="content" label="Post content" error={errors.content} context="post" />
+  <BlockEditor bind:value={content} id="content" label="Post content" error={form.errors.content} context="post" />
 
-  <FormActions cancelHref="/admin/posts" {processing} {message} submitLabel={post ? 'Save changes' : 'Publish post'} />
+  <FormActions cancelHref="/admin/posts" processing={form.processing} message={form.message} submitLabel={post ? 'Save changes' : 'Publish post'} />
 </form>

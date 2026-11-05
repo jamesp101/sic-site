@@ -1,5 +1,5 @@
 import { z } from 'astro/zod';
-import { checkContent } from '@/lib/blocks/schema';
+import { checkContent } from '@/lib/blocks/content';
 
 /**
  * Zod field for a content column that holds either a block document or legacy Markdown. Block

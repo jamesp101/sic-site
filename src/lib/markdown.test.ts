@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { parseMarkdown, toPlainText } from './markdown';
+import { parseMarkdown } from './markdown';
 
 describe('parseMarkdown', () => {
     it('returns an empty string for empty input', () => {
@@ -151,19 +151,5 @@ describe('parseMarkdown', () => {
         expect(html).not.toMatch(/prose/);
         expect(html).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
         expect(html).not.toMatch(/neutral-|amber-|dark:/);
-    });
-});
-
-describe('toPlainText', () => {
-    it('strips markdown, MDX-lite tags and collapses whitespace', () => {
-        const text = toPlainText(
-            '# Title\n\n<Card title="X">\n**Bold** [link](https://a.b) text\n</Card>\n\n- item one\n1. item two\n> quote\n\n`code`',
-        );
-        expect(text).toBe('Title Bold link text item one item two quote code');
-    });
-
-    it('drops images, keeps badge attribute text and handles empty input', () => {
-        expect(toPlainText('![alt](/a.png) hi <Badges tags="a, b" />')).toBe('hi a, b');
-        expect(toPlainText(null)).toBe('');
     });
 });

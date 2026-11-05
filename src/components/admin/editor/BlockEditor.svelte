@@ -80,9 +80,14 @@
       const parsed = parseBlockDocument(raw);
       if (parsed.ok) return parsed.document.blocks;
       // Stored document no longer validates (hand-edited?): open it as-is so nothing is lost; issues are listed.
-      const loose: unknown = JSON.parse(raw);
-      if (typeof loose === 'object' && loose !== null && 'blocks' in loose && Array.isArray(loose.blocks)) {
-        return loose.blocks as Block[];
+      // One that does not even parse falls through and opens as raw text in a Markdown block.
+      try {
+        const loose: unknown = JSON.parse(raw);
+        if (typeof loose === 'object' && loose !== null && 'blocks' in loose && Array.isArray(loose.blocks)) {
+          return loose.blocks as Block[];
+        }
+      } catch {
+        // not JSON
       }
     }
     // Legacy Markdown / MDX-lite opens as a single Markdown block.

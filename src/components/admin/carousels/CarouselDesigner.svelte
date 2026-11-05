@@ -1,6 +1,5 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
-  import { compressImage } from '@/lib/image-compress';
   import {
     Eye,
     EyeOff,
@@ -47,6 +46,7 @@
   import { parseOverlayStrict } from '@/lib/carousel-overlay-schema';
   import type { DesignerSlide } from '@/lib/server/carousel-admin';
   import ConfirmDialog from '../ConfirmDialog.svelte';
+  import { postImage } from '../editor/upload';
   import { append, inputClass, parseActionError, primaryButtonClass, secondaryButtonClass } from '../shared/form-utils';
   import LayerInspector from './LayerInspector.svelte';
   import SlideCanvas from './SlideCanvas.svelte';
@@ -239,15 +239,15 @@
     if (!file) return;
     uploading = true;
     try {
-      const body = new FormData();
-      body.append('image', await compressImage(file, 'layer'));
-      const { data: result, error } = await actions.carousels.uploadImage(body);
-      if (error || !result) {
-        toast.error(parseActionError(error).message || 'The image could not be uploaded.');
+      let uploaded: { url: string };
+      try {
+        uploaded = await postImage(file, 'layer');
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'The image could not be uploaded.');
         return;
       }
-      const ratio = await naturalRatio(result.url);
-      const layer = { ...defaultLayer('image'), src: result.url, alt: '' } as Extract<Layer, { type: 'image' }>;
+      const ratio = await naturalRatio(uploaded.url);
+      const layer = { ...defaultLayer('image'), src: uploaded.url, alt: '' } as Extract<Layer, { type: 'image' }>;
       // Snap the box to the file's natural aspect ratio (slide percentages are of a 16:9 box).
       const height = IMAGE_PRESETS[1].h;
       layer.h = height;

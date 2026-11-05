@@ -50,14 +50,16 @@ export function scopeDepartment<R extends { departmentId: number | null }>(actor
     return row;
 }
 
+/** Like `scopeDepartment` for a Department row itself: department users may only touch their own department. */
+export function scopeOwnDepartment<R extends { id: number }>(actor: Actor, row: R | null | undefined): R {
+    if (!row) throw new AuthzError('NOT_FOUND');
+    scopeDepartment(actor, { departmentId: row.id });
+    return row;
+}
+
 /** Department id to store on create: forced to the actor's own department for non-superadmins. */
 export function departmentForWrite(actor: Actor, requested: number | null | undefined): number | null {
     if (isSuperAdmin(actor)) return requested ?? null;
     if (actor.departmentId === null) throw new AuthzError('FORBIDDEN');
     return actor.departmentId;
-}
-
-/** Prisma `where` fragment that limits list queries to the actor's department. */
-export function departmentFilter(actor: Actor): { departmentId?: number } {
-    return isSuperAdmin(actor) ? {} : { departmentId: actor.departmentId ?? -1 };
 }

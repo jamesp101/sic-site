@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vite-plus/test';
 import {
     AuthzError,
-    departmentFilter,
     departmentForWrite,
     requireSuperAdmin,
     requireUser,
     scopeDepartment,
+    scopeOwnDepartment,
 } from './authz';
 
 const admin = { id: 1, role: 'superadmin', departmentId: null };
@@ -54,7 +54,16 @@ describe('scopeDepartment', () => {
     });
 });
 
-describe('departmentForWrite / departmentFilter', () => {
+describe('scopeOwnDepartment', () => {
+    it('lets department users reach only their own department row', () => {
+        expect(scopeOwnDepartment(cit, { id: 10 })).toEqual({ id: 10 });
+        expect(codeOf(() => scopeOwnDepartment(cit, { id: 11 }))).toBe('FORBIDDEN');
+        expect(scopeOwnDepartment(admin, { id: 11 })).toEqual({ id: 11 });
+        expect(codeOf(() => scopeOwnDepartment(admin, null))).toBe('NOT_FOUND');
+    });
+});
+
+describe('departmentForWrite', () => {
     it('forces the actor department for department users', () => {
         expect(departmentForWrite(cit, 11)).toBe(10);
         expect(departmentForWrite(cit, null)).toBe(10);
@@ -66,9 +75,7 @@ describe('departmentForWrite / departmentFilter', () => {
         expect(departmentForWrite(admin, undefined)).toBeNull();
     });
 
-    it('never matches any row for department users without a department', () => {
-        expect(departmentFilter(admin)).toEqual({});
-        expect(departmentFilter(cit)).toEqual({ departmentId: 10 });
-        expect(departmentFilter(orphan)).toEqual({ departmentId: -1 });
+    it('keeps null for superadmin when nothing is requested', () => {
+        expect(departmentForWrite(admin, null)).toBeNull();
     });
 });

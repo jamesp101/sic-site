@@ -1,13 +1,14 @@
-import { ActionError, defineAction } from 'astro:actions';
+import { defineAction } from 'astro:actions';
 import { z } from 'astro/zod';
 import { POST_TYPES } from '@/lib/content-types';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { contentField } from '@/lib/server/content-field';
-import { departmentForWrite, scopeDepartment, type Actor } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
+import { loadScoped, resolveWriteDepartment } from '@/lib/server/department-access';
 import { imageFile } from '@/lib/server/image-file';
 import { uniqueSlug } from '@/lib/server/slug';
-import { LIMITS, put, remove } from '@/lib/server/storage';
+import { LIMITS } from '@/lib/server/storage';
+import { commitWithFiles, deleteWithFiles } from '@/lib/server/stored-files';
 
 const dateString = z
     .string()
@@ -33,15 +34,6 @@ const endAfterStart = {
     options: { path: ['endDate'], message: 'The end date must be on or after the start date.' },
 };
 
-async function resolveDepartment(actor: Actor, requested: number | null | undefined) {
-    const departmentId = departmentForWrite(actor, requested);
-    if (departmentId !== null) {
-        const exists = await db.department.findUnique({ where: { id: departmentId }, select: { id: true } });
-        if (!exists) throw new ActionError({ code: 'BAD_REQUEST', message: 'The selected department does not exist.' });
-    }
-    return departmentId;
-}
-
 /** `slugify(slug ?? title)`; empty becomes `post`; `-1`, `-2`, … until unique (excluding the post itself). */
 function resolveSlug(input: { slug?: string | null; title: string }, excludeId?: number) {
     return uniqueSlug(
@@ -65,31 +57,29 @@ export const posts = {
         handler: (input, context) =>
             guarded(async () => {
                 const actor = actorOf(context);
-                const departmentId = await resolveDepartment(actor, input.departmentId);
+                const departmentId = await resolveWriteDepartment(actor, input.departmentId);
                 const slug = await resolveSlug(input);
 
-                const highlightImagePath = input.highlightImage ? await put('posts', input.highlightImage) : null;
-                try {
-                    const post = await db.post.create({
-                        data: {
-                            title: input.title,
-                            slug,
-                            content: input.content,
-                            type: input.type,
-                            startDate: toDate(input.startDate),
-                            endDate: toDate(input.endDate),
-                            highlightImagePath,
-                            departmentId,
-                            userId: actor.id,
-                            isFeatured: input.isFeatured,
-                        },
-                    });
-                    flash(context, 'Post created successfully.');
-                    return { id: post.id };
-                } catch (error) {
-                    await remove(highlightImagePath);
-                    throw error;
-                }
+                const post = await commitWithFiles({
+                    files: { highlight: input.highlightImage && { prefix: 'posts', file: input.highlightImage } },
+                    run: ({ highlight }) =>
+                        db.post.create({
+                            data: {
+                                title: input.title,
+                                slug,
+                                content: input.content,
+                                type: input.type,
+                                startDate: toDate(input.startDate),
+                                endDate: toDate(input.endDate),
+                                highlightImagePath: highlight ?? null,
+                                departmentId,
+                                userId: actor.id,
+                                isFeatured: input.isFeatured,
+                            },
+                        }),
+                });
+                flash(context, 'Post created successfully.');
+                return { id: post.id };
             }),
     }),
 
@@ -101,31 +91,29 @@ export const posts = {
         handler: (input, context) =>
             guarded(async () => {
                 const actor = actorOf(context);
-                const post = scopeDepartment(actor, await db.post.findUnique({ where: { id: input.id } }));
-                const departmentId = await resolveDepartment(actor, input.departmentId);
+                const post = await loadScoped(actor, 'post', input.id);
+                const departmentId = await resolveWriteDepartment(actor, input.departmentId);
                 const slug = await resolveSlug(input, post.id);
 
-                const newImage = input.highlightImage ? await put('posts', input.highlightImage) : null;
-                try {
-                    await db.post.update({
-                        where: { id: post.id },
-                        data: {
-                            title: input.title,
-                            slug,
-                            content: input.content,
-                            type: input.type,
-                            startDate: toDate(input.startDate),
-                            endDate: toDate(input.endDate),
-                            departmentId,
-                            isFeatured: input.isFeatured,
-                            ...(newImage ? { highlightImagePath: newImage } : {}),
-                        },
-                    });
-                } catch (error) {
-                    await remove(newImage);
-                    throw error;
-                }
-                if (newImage) await remove(post.highlightImagePath);
+                await commitWithFiles({
+                    files: { highlight: input.highlightImage && { prefix: 'posts', file: input.highlightImage } },
+                    run: ({ highlight }) =>
+                        db.post.update({
+                            where: { id: post.id },
+                            data: {
+                                title: input.title,
+                                slug,
+                                content: input.content,
+                                type: input.type,
+                                startDate: toDate(input.startDate),
+                                endDate: toDate(input.endDate),
+                                departmentId,
+                                isFeatured: input.isFeatured,
+                                ...(highlight ? { highlightImagePath: highlight } : {}),
+                            },
+                        }),
+                    stale: [input.highlightImage ? post.highlightImagePath : null],
+                });
 
                 flash(context, 'Post updated successfully.');
                 return { id: post.id };
@@ -137,9 +125,8 @@ export const posts = {
         handler: ({ id }, context) =>
             guarded(async () => {
                 const actor = actorOf(context);
-                const post = scopeDepartment(actor, await db.post.findUnique({ where: { id } }));
-                await db.post.delete({ where: { id: post.id } });
-                await remove(post.highlightImagePath);
+                const post = await loadScoped(actor, 'post', id);
+                await deleteWithFiles(() => db.post.delete({ where: { id: post.id } }), [post.highlightImagePath]);
                 flash(context, 'Post deleted successfully.');
                 return { id };
             }),

@@ -44,7 +44,7 @@ const [departments, directories] = await Promise.all([
             {departments}
             directories={[...new Set(directories.map((d) => d.name))]}
             isSuperAdmin={isSuperAdmin(actor)}
-            defaultDepartmentId={scopeDefaultDepartment(Astro.locals.adminScope) ?? null}
+            defaultDepartmentId={scopeDefaultDepartment(Astro.locals.adminScope)}
             maxMb={LIMITS.download / MB}
             directUpload={directUploads}
         />

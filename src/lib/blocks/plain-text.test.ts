@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { toPlainText } from '../markdown';
+import { toPlainText } from './content';
 import { createBlock, createDocument, serializeDocument } from './document';
 import { blocksToPlainText } from './plain-text';
 import type { Block } from './types';
@@ -116,6 +116,18 @@ describe('toPlainText: block documents', () => {
 });
 
 describe('toPlainText: legacy Markdown', () => {
+    it('strips markdown, MDX-lite tags and collapses whitespace', () => {
+        expect(
+            toPlainText(
+                '# Title\n\n<Card title="X">\n**Bold** [link](https://a.b) text\n</Card>\n\n- item one\n1. item two\n> quote\n\n`code`',
+            ),
+        ).toBe('Title Bold link text item one item two quote code');
+    });
+
+    it('drops images and keeps badge attribute text', () => {
+        expect(toPlainText('![alt](/a.png) hi <Badges tags="a, b" />')).toBe('hi a, b');
+    });
+
     it('keeps its behaviour for Markdown input', () => {
         expect(toPlainText(null)).toBe('');
         expect(toPlainText(undefined)).toBe('');

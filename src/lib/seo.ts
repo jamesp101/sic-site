@@ -1,5 +1,6 @@
-import type { DepartmentDetail, MemberNode, PostDetail, PostSummary } from '@/lib/content-types';
-import { SITE } from '@/lib/site';
+import type { DepartmentDetail, MemberNode, PostDetail, PostFilters, PostSummary } from './content-types';
+import { hasPostFilters, postsHref } from './post-filters';
+import { SITE } from './site';
 
 type JsonLd = Record<string, unknown>;
 type Site = URL | string;
@@ -9,9 +10,19 @@ export interface Crumb {
     href?: string;
 }
 
+/** Where the app lives: the configured `site`, else the origin of the current request. */
+export function siteUrl(context: { site?: URL; url: URL }): URL {
+    return context.site ?? new URL(context.url.origin);
+}
+
 /** Absolute URL for a site-relative path (or pass-through for absolute URLs). */
 export function absoluteUrl(path: string, site: Site): string {
     return new URL(path, site).href;
+}
+
+/** Absolute canonical URL of a page: its explicit `canonical`, else the request path (query-free). */
+export function canonicalHref(canonical: string | undefined, context: { site?: URL; url: URL }): string {
+    return absoluteUrl(canonical ?? context.url.pathname, siteUrl(context));
 }
 
 const orgId = (site: Site) => `${absoluteUrl('/', site)}#organization`;
@@ -162,10 +173,86 @@ export function departmentJsonLd(
     };
 }
 
-/** Collapses whitespace so descriptions are always one clean line. */
-export function oneLine(text: string | null | undefined, max = 160): string {
+/** Longest meta / Open Graph description. The one clamp every public description goes through. */
+export const META_DESCRIPTION_MAX = 160;
+
+/** Collapses whitespace and clamps to `META_DESCRIPTION_MAX`; `''` when there is nothing to say. */
+export function metaDescription(text: string | null | undefined): string {
     const clean = (text ?? '').replace(/\s+/g, ' ').trim();
-    return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}…` : clean;
+    return clean.length > META_DESCRIPTION_MAX ? `${clean.slice(0, META_DESCRIPTION_MAX - 1).trimEnd()}…` : clean;
+}
+
+/** The head metadata of one public page, as consumed by `components/seo/Seo.astro` and `PublicLayout`. */
+export interface PageSeo {
+    title?: string;
+    /** Raw text; `Seo.astro` applies `metaDescription`. */
+    description?: string;
+    /** Site-relative path (or absolute URL); defaults to the request path. */
+    canonical?: string;
+    image?: string | null;
+    imageAlt?: string;
+    type?: 'website' | 'article';
+    noindex?: boolean;
+    /** With `noindex`: still let crawlers follow links (`noindex, follow`). */
+    follow?: boolean;
+    publishedTime?: Date | null;
+    modifiedTime?: Date | null;
+    jsonLd?: JsonLd | JsonLd[];
+    breadcrumbs?: Crumb[];
+}
+
+export function postPageSeo(post: PostDetail, site: Site): PageSeo {
+    const canonical = `/posts/${post.slug}`;
+    return {
+        title: post.title,
+        description: post.excerpt || post.title,
+        canonical,
+        type: 'article',
+        image: post.imageUrl,
+        imageAlt: post.title,
+        publishedTime: post.createdAt,
+        modifiedTime: post.updatedAt,
+        breadcrumbs: [{ label: 'Home', href: '/' }, { label: 'News & Events', href: '/posts' }, { label: post.title }],
+        jsonLd: postJsonLd(post, site, absoluteUrl(canonical, site)),
+    };
+}
+
+export function departmentPageSeo(
+    department: DepartmentDetail,
+    members: MemberNode[],
+    fallbackImage: string | null | undefined,
+    site: Site,
+): PageSeo {
+    const canonical = `/departments/${department.slug}`;
+    return {
+        title: department.name,
+        description: department.description?.trim() || `${department.name} at ${SITE.name}, Malaybalay City, Bukidnon.`,
+        canonical,
+        image: department.logoUrl ?? fallbackImage,
+        imageAlt: department.name,
+        modifiedTime: department.updatedAt,
+        breadcrumbs: [{ label: 'Home', href: '/' }, { label: department.name }],
+        jsonLd: departmentJsonLd(department, members, site, absoluteUrl(canonical, site)),
+    };
+}
+
+/** `/posts` listing: filtered views are `noindex, follow`; the canonical keeps only the page number. */
+export function postsListSeo(posts: PostSummary[], filters: PostFilters, page: number, site: Site): PageSeo {
+    const title = page > 1 ? `News, Events & Announcements (page ${page})` : 'News, Events & Announcements';
+    return {
+        title,
+        description:
+            'Latest news, campus events and official announcements from San Isidro College in Malaybalay City, Bukidnon.',
+        canonical: postsHref({}, page),
+        noindex: hasPostFilters(filters),
+        follow: true,
+        breadcrumbs: [{ label: 'Home', href: '/' }, { label: 'News & Events' }],
+        jsonLd: postsItemList(posts, site, title),
+    };
+}
+
+export function homePageSeo(site: Site): PageSeo {
+    return { description: SITE.description, canonical: '/', jsonLd: collegeOrganization(site) };
 }
 
 export function escapeXml(value: string): string {

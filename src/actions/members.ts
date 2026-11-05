@@ -3,8 +3,10 @@ import { z } from 'astro/zod';
 import { db } from '@/lib/server/db';
 import { actorOf, guarded } from '@/lib/server/action-guard';
 import { AuthzError, scopeDepartment, type Actor } from '@/lib/server/authz';
+import { loadOwnDepartment } from '@/lib/server/department-access';
 import { imageFile } from '@/lib/server/image-file';
-import { LIMITS, publicUrl, put, remove } from '@/lib/server/storage';
+import { LIMITS, publicUrl } from '@/lib/server/storage';
+import { commitWithFiles, deleteWithFiles } from '@/lib/server/stored-files';
 import { placementsError, reparentOnDelete, wouldCycle } from '@/lib/org-tree';
 
 const fields = {
@@ -37,15 +39,8 @@ async function assertValidParent(departmentId: number, parentId: number | null |
     }
 }
 
-async function departmentFor(actor: Actor, departmentId: number) {
-    const department = await db.department.findUnique({ where: { id: departmentId }, select: { id: true } });
-    if (!department) throw new AuthzError('NOT_FOUND');
-    scopeDepartment(actor, { departmentId: department.id });
-    return department;
-}
-
 async function memberFor(actor: Actor, departmentId: number, id: number) {
-    await departmentFor(actor, departmentId);
+    await loadOwnDepartment(actor, departmentId);
     const member = await db.member.findUnique({ where: { id } });
     if (!member || member.departmentId !== departmentId) throw new AuthzError('NOT_FOUND');
     return scopeDepartment(actor, member);
@@ -58,26 +53,24 @@ export const members = {
         handler: (input, context) =>
             guarded(async () => {
                 const actor = actorOf(context);
-                await departmentFor(actor, input.departmentId);
+                await loadOwnDepartment(actor, input.departmentId);
                 await assertValidParent(input.departmentId, input.parentId);
 
-                const imagePath = input.image ? await put('members', input.image) : null;
-                try {
-                    const member = await db.member.create({
-                        data: {
-                            name: input.name,
-                            role: input.role,
-                            departmentId: input.departmentId,
-                            parentId: input.parentId ?? null,
-                            order: input.order,
-                            imagePath,
-                        },
-                    });
-                    return { id: member.id, order: member.order, imageUrl: publicUrl(member.imagePath) };
-                } catch (error) {
-                    await remove(imagePath);
-                    throw error;
-                }
+                const member = await commitWithFiles({
+                    files: { image: input.image && { prefix: 'members', file: input.image } },
+                    run: ({ image }) =>
+                        db.member.create({
+                            data: {
+                                name: input.name,
+                                role: input.role,
+                                departmentId: input.departmentId,
+                                parentId: input.parentId ?? null,
+                                order: input.order,
+                                imagePath: image ?? null,
+                            },
+                        }),
+                });
+                return { id: member.id, order: member.order, imageUrl: publicUrl(member.imagePath) };
             }),
     }),
 
@@ -90,25 +83,23 @@ export const members = {
                 const member = await memberFor(actor, input.departmentId, input.id);
                 await assertValidParent(member.departmentId, input.parentId, member.id);
 
-                const imagePath = input.image ? await put('members', input.image) : member.imagePath;
-                try {
-                    await db.member.update({
-                        where: { id: member.id },
-                        data: {
-                            name: input.name,
-                            role: input.role,
-                            parentId: input.parentId ?? null,
-                            order: input.order,
-                            imagePath,
-                        },
-                    });
-                } catch (error) {
-                    if (input.image) await remove(imagePath);
-                    throw error;
-                }
-                if (input.image) await remove(member.imagePath);
+                const saved = await commitWithFiles({
+                    files: { image: input.image && { prefix: 'members', file: input.image } },
+                    run: ({ image }) =>
+                        db.member.update({
+                            where: { id: member.id },
+                            data: {
+                                name: input.name,
+                                role: input.role,
+                                parentId: input.parentId ?? null,
+                                order: input.order,
+                                imagePath: image ?? member.imagePath,
+                            },
+                        }),
+                    stale: [input.image ? member.imagePath : null],
+                });
 
-                return { id: member.id, order: input.order, imageUrl: publicUrl(imagePath) };
+                return { id: member.id, order: input.order, imageUrl: publicUrl(saved.imagePath) };
             }),
     }),
 
@@ -129,7 +120,7 @@ export const members = {
         }),
         handler: ({ departmentId, placements }, context) =>
             guarded(async () => {
-                await departmentFor(actorOf(context), departmentId);
+                await loadOwnDepartment(actorOf(context), departmentId);
                 await db.$transaction(async (tx) => {
                     const existing = await tx.member.findMany({
                         where: { departmentId },
@@ -152,17 +143,20 @@ export const members = {
             guarded(async () => {
                 const actor = actorOf(context);
                 const member = await memberFor(actor, departmentId, id);
-                await db.$transaction(async (tx) => {
-                    const existing = await tx.member.findMany({
-                        where: { departmentId },
-                        select: { id: true, parentId: true, order: true },
-                    });
-                    for (const { id: childId, parentId, order } of reparentOnDelete(existing, member.id)) {
-                        await tx.member.update({ where: { id: childId }, data: { parentId, order } });
-                    }
-                    await tx.member.delete({ where: { id: member.id } });
-                });
-                await remove(member.imagePath);
+                await deleteWithFiles(
+                    () =>
+                        db.$transaction(async (tx) => {
+                            const existing = await tx.member.findMany({
+                                where: { departmentId },
+                                select: { id: true, parentId: true, order: true },
+                            });
+                            for (const { id: childId, parentId, order } of reparentOnDelete(existing, member.id)) {
+                                await tx.member.update({ where: { id: childId }, data: { parentId, order } });
+                            }
+                            await tx.member.delete({ where: { id: member.id } });
+                        }),
+                    [member.imagePath],
+                );
                 return { id };
             }),
     }),

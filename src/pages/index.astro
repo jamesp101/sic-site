@@ -7,15 +7,14 @@ import HeroCarousel from '@/components/site/HeroCarousel.svelte';
 import MarkdownSection from '@/components/site/MarkdownSection.astro';
 import PostCard from '@/components/site/PostCard.astro';
 import PublicLayout from '@/layouts/PublicLayout.astro';
-import { collegeOrganization } from '@/lib/seo';
+import { homePageSeo, siteUrl } from '@/lib/seo';
 import { getHomeData } from '@/lib/server/queries';
 import { SITE } from '@/lib/site';
 
 const { carousel, departments, latestPosts, welcomeHero, heroSections } = await getHomeData();
-const site = Astro.site ?? new URL(Astro.url.origin);
 ---
 
-<PublicLayout description={SITE.description} canonical="/" jsonLd={collegeOrganization(site)}>
+<PublicLayout {...homePageSeo(siteUrl(Astro))} {departments}>
     {carousel.length > 0 ? (
         <HeroCarousel client:visible slides={carousel} pageTitle={`${SITE.name} — ${SITE.motto}`} />
     ) : (

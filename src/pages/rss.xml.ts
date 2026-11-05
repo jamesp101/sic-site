@@ -1,10 +1,10 @@
 import type { APIRoute } from 'astro';
-import { absoluteUrl, escapeXml } from '@/lib/seo';
+import { absoluteUrl, escapeXml, siteUrl } from '@/lib/seo';
 import { listPosts } from '@/lib/server/queries';
 import { SITE } from '@/lib/site';
 
-export const GET: APIRoute = async ({ site, url }) => {
-    const origin = site ?? new URL(url.origin);
+export const GET: APIRoute = async (context) => {
+    const origin = siteUrl(context);
     const posts = (await listPosts({ sort: 'newest' }, { perPage: 20 })).items;
     const feedUrl = absoluteUrl('/rss.xml', origin);
 

@@ -3,8 +3,9 @@ import { z } from 'astro/zod';
 import { db } from '@/lib/server/db';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { AuthzError, requireSuperAdmin } from '@/lib/server/authz';
+import { assertDepartmentExists } from '@/lib/server/department-access';
 import { hashPassword } from '@/lib/server/password';
-import { remove } from '@/lib/server/storage';
+import { deleteWithFiles } from '@/lib/server/stored-files';
 
 const base = {
     name: z.string({ error: 'The name is required.' }).trim().min(1, 'The name is required.').max(255),
@@ -25,14 +26,12 @@ function requireDepartmentForRole(value: Draft, ctx: z.RefinementCtx) {
     }
 }
 
-async function resolveDepartment(value: Draft): Promise<number | null> {
+/** Department to store for the role: only department users have one, and it must exist. */
+async function departmentFor(value: Draft): Promise<number | null> {
     if (value.role !== 'department_user') return null;
-    const department = await db.department.findUnique({
-        where: { id: value.departmentId as number },
-        select: { id: true },
-    });
-    if (!department) throw new ActionError({ code: 'BAD_REQUEST', message: 'The selected department does not exist.' });
-    return department.id;
+    const departmentId = value.departmentId as number;
+    await assertDepartmentExists(departmentId);
+    return departmentId;
 }
 
 async function assertEmailFree(email: string, exceptId?: number) {
@@ -51,7 +50,7 @@ export const users = {
             guarded(async () => {
                 requireSuperAdmin(actorOf(context));
                 await assertEmailFree(input.email);
-                const departmentId = await resolveDepartment(input);
+                const departmentId = await departmentFor(input);
                 const hash = await hashPassword(input.password);
 
                 const user = await db.$transaction(async (tx) => {
@@ -84,7 +83,7 @@ export const users = {
                 const existing = await db.user.findUnique({ where: { id: input.id }, select: { id: true } });
                 if (!existing) throw new AuthzError('NOT_FOUND');
                 await assertEmailFree(input.email, existing.id);
-                const departmentId = await resolveDepartment(input);
+                const departmentId = await departmentFor(input);
                 const hash = input.password ? await hashPassword(input.password) : null;
 
                 await db.$transaction(async (tx) => {
@@ -152,11 +151,13 @@ export const users = {
                 });
                 if (!existing) throw new AuthzError('NOT_FOUND');
                 // Sessions and accounts are removed by the ON DELETE CASCADE relations.
-                await db.user.delete({ where: { id } });
-                await Promise.all([
-                    ...existing.posts.map((post) => remove(post.highlightImagePath)),
-                    ...existing.downloads.map((download) => remove(download.filePath)),
-                ]);
+                await deleteWithFiles(
+                    () => db.user.delete({ where: { id } }),
+                    [
+                        ...existing.posts.map((post) => post.highlightImagePath),
+                        ...existing.downloads.map((download) => download.filePath),
+                    ],
+                );
                 flash(context, 'User deleted successfully.');
                 return { id };
             }),

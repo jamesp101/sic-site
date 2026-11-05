@@ -1,15 +1,16 @@
 import { ActionError, type ActionAPIContext } from 'astro:actions';
 import { AuthzError, type Actor } from './authz';
 import { setFlash } from './flash';
+import { RequestError } from './request-error';
 
 type ActionCode = ConstructorParameters<typeof ActionError>[0]['code'];
 
-/** Runs `fn` and maps AuthzError to ActionError so clients get 401/403/404. */
+/** Runs `fn` and maps AuthzError / RequestError to ActionError so clients get 401/403/404/400/429. */
 export async function guarded<T>(fn: () => Promise<T>): Promise<T> {
     try {
         return await fn();
     } catch (error) {
-        if (error instanceof AuthzError)
+        if (error instanceof AuthzError || error instanceof RequestError)
             throw new ActionError({ code: error.code as ActionCode, message: error.message });
         throw error;
     }

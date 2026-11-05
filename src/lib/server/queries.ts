@@ -14,21 +14,16 @@ import type {
     PostSummary,
     PostType,
 } from '@/lib/content-types';
+import { excerptOf, parseContent } from '@/lib/blocks/content';
 import { parseOverlay } from '@/lib/carousel-overlay-schema';
 import { extensionOf, fileKind } from '@/lib/files';
-import { toPlainText } from '@/lib/markdown';
+import { buildOrgTree, type OrgNode } from '@/lib/org-tree';
+import { departmentPageSeo, postPageSeo, postsListSeo, type PageSeo } from '@/lib/seo';
 import { db } from './db';
 import { textContains } from './search';
 import { downloadUrl, publicUrl } from './storage';
 
-const EXCERPT_LENGTH = 200;
 const DEFAULT_DIRECTORY = 'General';
-
-function excerptOf(content: string): string {
-    const text = toPlainText(content);
-    if (text.length <= EXCERPT_LENGTH) return text;
-    return `${text.slice(0, EXCERPT_LENGTH - 1).trimEnd()}…`;
-}
 
 const departmentRefSelect = { id: true, name: true, slug: true } as const;
 
@@ -50,12 +45,16 @@ const postSelect = {
 type PostRow = Prisma.PostGetPayload<{ select: typeof postSelect }>;
 
 function toPostSummary(row: PostRow): PostSummary {
+    return summaryWithExcerpt(row, excerptOf(row.content));
+}
+
+function summaryWithExcerpt(row: PostRow, excerpt: string): PostSummary {
     return {
         id: row.id,
         title: row.title,
         slug: row.slug,
         type: row.type as PostType,
-        excerpt: excerptOf(row.content),
+        excerpt,
         imageUrl: publicUrl(row.highlightImagePath),
         startDate: row.startDate,
         endDate: row.endDate,
@@ -171,35 +170,16 @@ export async function getHomeData(): Promise<{
     };
 }
 
-/** Builds an unlimited-depth tree from a flat, already ordered member list. */
-function buildMemberTree(
-    rows: { id: number; name: string; role: string; imagePath: string | null; parentId: number | null }[],
-): MemberNode[] {
-    const nodes = new Map<number, MemberNode>();
-    for (const row of rows) {
-        nodes.set(row.id, {
-            id: row.id,
-            name: row.name,
-            role: row.role,
-            imageUrl: publicUrl(row.imagePath),
-            children: [],
-        });
-    }
-    const roots: MemberNode[] = [];
-    for (const row of rows) {
-        const node = nodes.get(row.id)!;
-        const parent = row.parentId === null ? undefined : nodes.get(row.parentId);
-        (parent ? parent.children : roots).push(node);
-    }
-    return roots;
-}
-
-export async function getDepartmentPage(slug: string): Promise<{
+export async function getDepartmentPage(
+    slug: string,
+    site: URL,
+): Promise<{
     department: DepartmentDetail;
     carousel: CarouselSlide[];
     posts: PostSummary[];
     members: MemberNode[];
     heroSections: HeroSectionView[];
+    seo: PageSeo;
 } | null> {
     const row = await db.department.findUnique({
         where: { slug },
@@ -207,7 +187,7 @@ export async function getDepartmentPage(slug: string): Promise<{
     });
     if (!row) return null;
 
-    const [carousel, posts, members, heroes] = await Promise.all([
+    const [carousel, posts, memberRows, heroes] = await Promise.all([
         db.carouselItem.findMany({
             where: { departmentId: row.id },
             orderBy: [{ order: 'asc' }, { id: 'asc' }],
@@ -216,18 +196,29 @@ export async function getDepartmentPage(slug: string): Promise<{
         db.post.findMany({ where: { departmentId: row.id }, orderBy: { createdAt: 'desc' }, select: postSelect }),
         db.member.findMany({
             where: { departmentId: row.id },
-            orderBy: [{ order: 'asc' }, { id: 'asc' }],
-            select: { id: true, name: true, role: true, imagePath: true, parentId: true },
+            select: { id: true, name: true, role: true, imagePath: true, parentId: true, order: true },
         }),
         heroSections(row.id),
     ]);
 
+    const toNode = ({ member, children }: OrgNode<(typeof memberRows)[number]>): MemberNode => ({
+        id: member.id,
+        name: member.name,
+        role: member.role,
+        imageUrl: publicUrl(member.imagePath),
+        children: children.map(toNode),
+    });
+    const members = buildOrgTree(memberRows).map(toNode);
+    const department: DepartmentDetail = { ...toDepartmentSummary(row), heroContent: row.heroContent };
+    const slides = carousel.map(toSlide);
+
     return {
-        department: { ...toDepartmentSummary(row), heroContent: row.heroContent },
-        carousel: carousel.map(toSlide),
+        department,
+        carousel: slides,
         posts: posts.map(toPostSummary),
-        members: buildMemberTree(members),
+        members,
         heroSections: heroes,
+        seo: departmentPageSeo(department, members, slides[0]?.imageUrl, site),
     };
 }
 
@@ -261,16 +252,37 @@ export async function listPosts(
     };
 }
 
-export async function getPostBySlug(slug: string): Promise<PostDetail | null> {
+/** One page of the public `/posts` list with the departments for its filter bar; `null` when `page` is past the end. */
+export async function getPostsPage(
+    filters: PostFilters,
+    page: number,
+    perPage: number,
+    site: URL,
+): Promise<{ result: Paginated<PostSummary>; departments: DepartmentSummary[]; seo: PageSeo } | null> {
+    const [departments, result] = await Promise.all([getDepartments(), listPosts(filters, { page, perPage })]);
+    if (page > result.pageCount) return null;
+    return { result, departments, seo: postsListSeo(result.items, filters, page, site) };
+}
+
+export async function getPostPage(
+    slug: string,
+    site: URL,
+): Promise<{ post: PostDetail; related: PostSummary[]; seo: PageSeo } | null> {
     const row = await db.post.findUnique({
         where: { slug },
         select: { ...postSelect, user: { select: { name: true } } },
     });
     if (!row) return null;
-    return { ...toPostSummary(row), content: row.content, authorName: row.user.name };
+    const content = parseContent(row.content);
+    const post: PostDetail = {
+        ...summaryWithExcerpt(row, content.excerpt()),
+        html: content.html(),
+        authorName: row.user.name,
+    };
+    return { post, related: await getRelatedPosts(post), seo: postPageSeo(post, site) };
 }
 
-export async function getRelatedPosts(post: PostSummary, limit = 3): Promise<PostSummary[]> {
+async function getRelatedPosts(post: PostSummary, limit = 3): Promise<PostSummary[]> {
     const sameDepartment = post.department
         ? await db.post.findMany({
               where: { departmentId: post.department.id, id: { not: post.id } },

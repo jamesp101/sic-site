@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { parseScope, resolveScope, scopeDefaultDepartment, scopeLabel, scopeWhere } from './admin-scope';
+import { departmentWhere, parseScope, resolveScope, scopeDefaultDepartment, scopeLabel } from './admin-scope';
 
 const admin = { id: 1, role: 'superadmin', departmentId: null };
 const cit = { id: 2, role: 'department_user', departmentId: 10 };
@@ -53,14 +53,44 @@ describe('resolveScope', () => {
     });
 });
 
-describe('scopeWhere / helpers', () => {
-    const citScope = { kind: 'department', id: 10, name: 'College of IT', slug: 'cit' } as const;
+describe('departmentWhere', () => {
+    const scopes = [
+        { kind: 'all' },
+        { kind: 'main' },
+        { kind: 'department', id: 10, name: 'College of IT', slug: 'cit' },
+        { kind: 'department', id: 11, name: 'College of Business', slug: 'cba' },
+    ] as const;
 
-    it('builds the Prisma fragment', () => {
-        expect(scopeWhere({ kind: 'all' })).toEqual({});
-        expect(scopeWhere({ kind: 'main' })).toEqual({ departmentId: null });
-        expect(scopeWhere(citScope)).toEqual({ departmentId: 10 });
+    it('lets a superadmin pick the scope', () => {
+        expect(departmentWhere(admin, scopes[0])).toEqual({});
+        expect(departmentWhere(admin, scopes[1])).toEqual({ departmentId: null });
+        expect(departmentWhere(admin, scopes[2])).toEqual({ departmentId: 10 });
     });
+
+    it('never lets any scope move a department user out of their own department', () => {
+        for (const scope of scopes) {
+            expect(departmentWhere(cit, scope)).toEqual({ departmentId: 10 });
+            expect(departmentWhere(cit, scope, { includeGeneral: true })).toEqual({
+                OR: [{ departmentId: 10 }, { departmentId: null }],
+            });
+        }
+    });
+
+    it('matches nothing for a department user without a department', () => {
+        for (const scope of scopes) expect(departmentWhere(orphan, scope)).toEqual({ departmentId: -1 });
+    });
+
+    it('includes general rows only on request, for department scopes and department users', () => {
+        expect(departmentWhere(admin, scopes[3], { includeGeneral: true })).toEqual({
+            OR: [{ departmentId: 11 }, { departmentId: null }],
+        });
+        expect(departmentWhere(admin, scopes[1], { includeGeneral: true })).toEqual({ departmentId: null });
+        expect(departmentWhere(admin, scopes[0], { includeGeneral: true })).toEqual({});
+    });
+});
+
+describe('helpers', () => {
+    const citScope = { kind: 'department', id: 10, name: 'College of IT', slug: 'cit' } as const;
 
     it('labels scopes', () => {
         expect(scopeLabel({ kind: 'all' })).toBe('All departments');
@@ -69,7 +99,7 @@ describe('scopeWhere / helpers', () => {
     });
 
     it('suggests the create-form department', () => {
-        expect(scopeDefaultDepartment({ kind: 'all' })).toBeUndefined();
+        expect(scopeDefaultDepartment({ kind: 'all' })).toBeNull();
         expect(scopeDefaultDepartment({ kind: 'main' })).toBeNull();
         expect(scopeDefaultDepartment(citScope)).toBe(10);
     });

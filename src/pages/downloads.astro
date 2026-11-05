@@ -3,12 +3,12 @@ import DownloadBrowser from '@/components/site/DownloadBrowser.astro';
 import FilterBar from '@/components/site/FilterBar.svelte';
 import PageBanner from '@/components/site/PageBanner.astro';
 import PublicLayout from '@/layouts/PublicLayout.astro';
+import { parseDepartmentId, parseSearch } from '@/lib/post-filters';
 import { getDepartments, getDownloadDirectories, listDownloads } from '@/lib/server/queries';
 
 const params = Astro.url.searchParams;
-const search = params.get('search')?.trim().slice(0, 100) ?? '';
-const departmentParam = Number(params.get('department_id'));
-const departmentId = Number.isInteger(departmentParam) && departmentParam > 0 ? departmentParam : undefined;
+const search = parseSearch(params.get('search'));
+const departmentId = parseDepartmentId(params.get('department_id'));
 const directory = params.get('directory')?.trim().slice(0, 255) ?? '';
 
 const [departments, all, directoryNames] = await Promise.all([
@@ -26,6 +26,7 @@ const filtered = Boolean(search || departmentId || directory);
 ---
 
 <PublicLayout
+    {departments}
     title="Downloads"
     description="Official forms, academic guides, curriculum checklists and schedules from San Isidro College, organised by folder and department."
     canonical="/downloads"

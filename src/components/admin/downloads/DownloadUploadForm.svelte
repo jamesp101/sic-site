@@ -3,9 +3,10 @@
   import { navigate } from 'astro:transitions/client';
   import { untrack } from 'svelte';
   import { Folder, Tag, Upload } from '@lucide/svelte';
+  import { actionForm } from '@/components/admin/shared/action-form.svelte';
   import Field from '@/components/admin/shared/Field.svelte';
   import FormActions from '@/components/admin/shared/FormActions.svelte';
-  import { append, formatFileSize, inputClass, parseActionError } from '@/components/admin/shared/form-utils';
+  import { append, formatFileSize, inputClass } from '@/components/admin/shared/form-utils';
   import { cardClass, selectClass } from '@/components/admin/ui';
 
   let {
@@ -31,9 +32,6 @@
   let directory = $state('');
   let tags = $state('');
   let departmentId = $state(isSuperAdmin ? String(untrack(() => defaultDepartmentId) ?? '') : String(departments[0]?.id ?? ''));
-  let processing = $state(false);
-  let errors = $state<Record<string, string>>({});
-  let message = $state('');
   let progress = $state<number | null>(null);
   /** Already uploaded file, reused when the form is resubmitted after a validation error. */
   let uploaded: { file: File; key: string } | null = null;
@@ -72,50 +70,35 @@
     }
   }
 
-  async function submit(event: SubmitEvent) {
-    event.preventDefault();
-    processing = true;
-    errors = {};
-    message = '';
-
-    const form = new FormData();
-    append(form, 'fileName', fileName);
-    if (directUpload && file) {
-      if (file.size > maxMb * 1024 * 1024) {
-        errors = { file: `The file must not be larger than ${maxMb} MB.` };
-        processing = false;
-        return;
+  const form = actionForm({
+    async run() {
+      const data = new FormData();
+      append(data, 'fileName', fileName);
+      if (directUpload && file) {
+        if (file.size > maxMb * 1024 * 1024) return { failure: { fields: { file: `The file must not be larger than ${maxMb} MB.` } } };
+        try {
+          if (uploaded?.file !== file) uploaded = { file, key: await uploadDirect(file) };
+        } catch (error) {
+          progress = null;
+          return { failure: { message: error instanceof Error ? error.message : 'The upload failed.' } };
+        }
+        append(data, 'uploadedKey', uploaded.key);
+      } else {
+        append(data, 'file', file);
       }
-      try {
-        if (uploaded?.file !== file) uploaded = { file, key: await uploadDirect(file) };
-        append(form, 'uploadedKey', uploaded.key);
-      } catch (error) {
-        message = error instanceof Error ? error.message : 'The upload failed.';
-        processing = false;
-        progress = null;
-        return;
-      }
-    } else {
-      append(form, 'file', file);
-    }
-    append(form, 'directory', directory);
-    append(form, 'tags', tags);
-    append(form, 'departmentId', departmentId);
+      append(data, 'directory', directory);
+      append(data, 'tags', tags);
+      append(data, 'departmentId', departmentId);
 
-    const { error } = await actions.downloads.create(form);
-    progress = null;
-    if (error) {
-      const parsed = parseActionError(error);
-      errors = parsed.fields;
-      message = parsed.message;
-      processing = false;
-      return;
-    }
-    await navigate('/admin/downloads');
-  }
+      const result = await actions.downloads.create(data);
+      progress = null;
+      return result;
+    },
+    onSuccess: () => navigate('/admin/downloads'),
+  });
 </script>
 
-<form method="post" onsubmit={submit} class="{cardClass} space-y-6 p-6">
+<form method="post" onsubmit={form.submit} class="{cardClass} space-y-6 p-6">
   <div class="space-y-1.5">
     <span class="block text-sm font-semibold text-foreground">Select document file</span>
     <label for="file" class="flex h-40 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border-strong px-4 text-center transition-colors hover:border-gold-500 hover:bg-gold-500/5">
@@ -123,7 +106,7 @@
       <span class="mb-1 text-sm font-medium"><span class="font-bold text-link">Click to choose a file</span> or drag and drop</span>
       <span class="text-xs text-muted-foreground">PDF, DOCX, XLSX, images, ZIP (max {maxMb} MB)</span>
     </label>
-    <input id="file" type="file" required class="sr-only" onchange={onFile} aria-invalid={errors.file ? 'true' : undefined} />
+    <input id="file" type="file" required class="sr-only" onchange={onFile} aria-invalid={form.errors.file ? 'true' : undefined} />
     {#if file}
       <p class="flex items-center gap-2 rounded-lg border border-gold-500/30 bg-gold-500/10 px-3 py-2 text-xs font-semibold text-foreground">
         <Upload class="h-4 w-4 shrink-0" aria-hidden="true" /> Ready to upload: {file.name} ({formatFileSize(file.size)})
@@ -132,15 +115,15 @@
     {#if progress !== null}
       <p class="text-xs font-semibold text-muted-foreground" role="status">Uploading… {progress}%</p>
     {/if}
-    {#if errors.file}<p class="text-xs text-destructive" role="alert">{errors.file}</p>{/if}
+    {#if form.errors.file}<p class="text-xs text-destructive" role="alert">{form.errors.file}</p>{/if}
   </div>
 
-  <Field label="Display name" id="fileName" error={errors.fileName} required>
+  <Field label="Display name" id="fileName" error={form.errors.fileName} required>
     <input id="fileName" type="text" required bind:value={fileName} class={inputClass} placeholder="e.g. Student Handbook 2026" />
   </Field>
 
   <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-    <Field label="Category / folder" id="directory" error={errors.directory} hint="Defaults to General.">
+    <Field label="Category / folder" id="directory" error={form.errors.directory} hint="Defaults to General.">
       <div class="relative">
         <Folder class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <input id="directory" type="text" list="directory-list" bind:value={directory} class="{inputClass} pl-10" placeholder="e.g. Handbook, Enrollment" />
@@ -148,7 +131,7 @@
       </div>
     </Field>
 
-    <Field label="Owning department" id="departmentId" error={errors.departmentId}>
+    <Field label="Owning department" id="departmentId" error={form.errors.departmentId}>
       <select id="departmentId" bind:value={departmentId} class="{selectClass} w-full">
         {#if isSuperAdmin}<option value="">General (no specific department)</option>{/if}
         {#each departments as dept (dept.id)}<option value={String(dept.id)}>{dept.name}</option>{/each}
@@ -156,12 +139,12 @@
     </Field>
   </div>
 
-  <Field label="Tags (comma-separated)" id="tags" error={errors.tags}>
+  <Field label="Tags (comma-separated)" id="tags" error={form.errors.tags}>
     <div class="relative">
       <Tag class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
       <input id="tags" type="text" bind:value={tags} class="{inputClass} pl-10" placeholder="e.g. freshman, manual, 2026" />
     </div>
   </Field>
 
-  <FormActions cancelHref="/admin/downloads" {processing} {message} submitLabel="Upload and publish" />
+  <FormActions cancelHref="/admin/downloads" processing={form.processing} message={form.message} submitLabel="Upload and publish" />
 </form>

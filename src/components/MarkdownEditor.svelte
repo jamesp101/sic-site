@@ -1,7 +1,7 @@
 <script lang="ts">
     import { untrack } from 'svelte';
     import { parseMarkdown } from '@/lib/markdown';
-    import { compressImage } from '@/lib/image-compress';
+    import { postImage } from '@/components/admin/editor/upload';
     import { themeState } from '@/lib/theme.svelte';
     import { EditorView, basicSetup } from 'codemirror';
     import { EditorState, Compartment } from '@codemirror/state';
@@ -152,25 +152,11 @@
 
         const file = files[0];
         isUploading = true;
-        const formData = new FormData();
-        formData.append('image', await compressImage(file, 'content'));
-
         try {
-            const response = await fetch('/api/admin/uploads/image', {
-                method: 'POST',
-                body: formData,
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                insertAtCursor(`![${file.name}](${data.url})`, '');
-            } else {
-                const data = await response.json().catch(() => null);
-                alert(data?.message ?? 'Failed to upload image. Max size 5MB.');
-            }
+            const { url } = await postImage(file, 'content');
+            insertAtCursor(`![${file.name}](${url})`, '');
         } catch (error) {
-            console.error(error);
-            alert('An error occurred during image upload.');
+            alert(error instanceof Error ? error.message : 'An error occurred during image upload.');
         } finally {
             isUploading = false;
             target.value = '';

@@ -70,16 +70,19 @@ function collect(blocks: unknown[], out: string[]): void {
     }
 }
 
-/** Joins every readable text of the document with single spaces. */
-export function blocksToPlainText(content: string): string {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(content);
-    } catch {
-        return '';
-    }
+/** Joins every readable text of an already parsed document with single spaces; `''` when it is not an object. */
+export function documentToPlainText(parsed: unknown): string {
     if (!isObject(parsed)) return '';
     const parts: string[] = [];
     collect(items(parsed.blocks), parts);
     return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Joins every readable text of a stored document string; `''` when it does not parse. */
+export function blocksToPlainText(content: string): string {
+    try {
+        return documentToPlainText(JSON.parse(content));
+    } catch {
+        return '';
+    }
 }

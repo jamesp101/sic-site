@@ -2,8 +2,8 @@
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DownloadsManager from '@/components/admin/downloads/DownloadsManager.svelte';
 import AppLayout from '@/layouts/AppLayout.astro';
-import { scopeWhere } from '@/lib/server/admin-scope';
-import { departmentFilter, isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { departmentWhere } from '@/lib/server/admin-scope';
+import { isSuperAdmin, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
 import { db } from '@/lib/server/db';
 import { extensionOf, fileKind } from '@/lib/files';
@@ -33,7 +33,7 @@ function parseTags(raw: string | null): string[] {
 
 const [rows, departments, directories] = await Promise.all([
     db.download.findMany({
-        where: { ...departmentFilter(actor), ...scopeWhere(Astro.locals.adminScope) },
+        where: departmentWhere(actor, Astro.locals.adminScope),
         orderBy: { createdAt: 'desc' },
         include: { department: { select: { name: true } } },
     }),
@@ -44,10 +44,7 @@ const [rows, departments, directories] = await Promise.all([
     }),
     // General folders (no department) are shared, so a department scope still lists them.
     db.downloadDirectory.findMany({
-        where:
-            Astro.locals.adminScope.kind === 'department'
-                ? { OR: [{ departmentId: Astro.locals.adminScope.id }, { departmentId: null }] }
-                : scopeWhere(Astro.locals.adminScope),
+        where: departmentWhere(actor, Astro.locals.adminScope, { includeGeneral: true }),
         orderBy: { name: 'asc' },
     }),
 ]);

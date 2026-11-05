@@ -63,7 +63,8 @@ export interface PostSummary {
 }
 
 export interface PostDetail extends PostSummary {
-    content: string;
+    /** Public HTML of the post's Rich content. */
+    html: string;
     authorName: string;
 }
 

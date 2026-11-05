@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { createBlock, createDocument, serializeDocument } from './document';
-import { checkContent, parseBlockDocument, validateDocument, type ValidationResult } from './schema';
+import { checkContent } from './content';
+import { parseBlockDocument, validateDocument, type ValidationResult } from './schema';
 import { LIMITS, type Block } from './types';
 
 const raw = (blocks: unknown[]) => ({ type: 'sic-blocks', version: 1, blocks });

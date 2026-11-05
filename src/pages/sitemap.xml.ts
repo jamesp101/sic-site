@@ -1,9 +1,9 @@
 import type { APIRoute } from 'astro';
-import { absoluteUrl, escapeXml } from '@/lib/seo';
+import { absoluteUrl, escapeXml, siteUrl } from '@/lib/seo';
 import { getSitemapData } from '@/lib/server/queries';
 
-export const GET: APIRoute = async ({ site, url }) => {
-    const origin = site ?? new URL(url.origin);
+export const GET: APIRoute = async (context) => {
+    const origin = siteUrl(context);
     const { departments, posts } = await getSitemapData();
     const latestPost = posts.reduce<Date | null>(
         (latest, p) => (!latest || p.updatedAt > latest ? p.updatedAt : latest),

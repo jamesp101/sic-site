@@ -1,7 +1,7 @@
 /**
  * Admin scope: the department context chosen in the sidebar switcher.
- * Free of `astro:*` imports so it is unit-testable. The scope only narrows lists; it is always
- * combined with `departmentFilter(actor)` from authz, which stays authoritative.
+ * Free of `astro:*` imports so it is unit-testable. `departmentWhere` is the only way to turn
+ * (actor, scope) into a list filter: the actor's restriction always wins over the scope.
  */
 import { isSuperAdmin, type Actor } from './authz';
 
@@ -44,10 +44,28 @@ export function resolveScope(actor: Actor, parsed: ParsedScope, departments: rea
     return parsed;
 }
 
-/** Prisma `where` fragment for rows having a nullable `departmentId`. */
-export function scopeWhere(scope: AdminScope): { departmentId?: number | null } {
+/** Prisma `where` fragment for rows having a nullable `departmentId`; spread it into a list query. */
+export interface DepartmentWhere {
+    departmentId?: number | null;
+    OR?: { departmentId: number | null }[];
+}
+
+/**
+ * The one list filter for (actor, admin scope). Department users always get their own department
+ * (the scope is ignored for them, so no scope value can widen or move it); superadmins get what the
+ * scope selects (`main` = rows with no department). `includeGeneral` also matches rows with no
+ * department (shared download folders); it adds an `OR`, so do not spread another `OR` over it.
+ */
+export function departmentWhere(
+    actor: Actor,
+    scope: AdminScope,
+    { includeGeneral = false }: { includeGeneral?: boolean } = {},
+): DepartmentWhere {
+    const only = (departmentId: number): DepartmentWhere =>
+        includeGeneral ? { OR: [{ departmentId }, { departmentId: null }] } : { departmentId };
+    if (!isSuperAdmin(actor)) return only(actor.departmentId ?? -1);
     if (scope.kind === 'main') return { departmentId: null };
-    if (scope.kind === 'department') return { departmentId: scope.id };
+    if (scope.kind === 'department') return only(scope.id);
     return {};
 }
 
@@ -56,7 +74,7 @@ export function scopeLabel(scope: AdminScope): string {
     return scope.kind === 'all' ? 'All departments' : scope.kind === 'main' ? 'Main page' : scope.name;
 }
 
-/** Department id a create form should preselect (null = General / main page, undefined = no preference). */
-export function scopeDefaultDepartment(scope: AdminScope): number | null | undefined {
-    return scope.kind === 'department' ? scope.id : scope.kind === 'main' ? null : undefined;
+/** Department id a create form should preselect: the scoped department, otherwise null (General / main page). */
+export function scopeDefaultDepartment(scope: AdminScope): number | null {
+    return scope.kind === 'department' ? scope.id : null;
 }

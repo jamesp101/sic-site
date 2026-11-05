@@ -9,10 +9,7 @@
  */
 
 import { escapeHtml } from './escape-html';
-import { isBlockDocument } from './blocks/document';
-import { blocksToPlainText } from './blocks/plain-text';
 import { safeHref, safeImageSrc } from './blocks/urls';
-import { stripMarkdown } from './markdown-strip';
 
 const OPEN = '\uE000';
 const CLOSE = '\uE001';
@@ -246,12 +243,4 @@ export function parseMarkdown(markdown: string | null | undefined): string {
     flushParagraph();
 
     return restore(html.join('\n'), stash);
-}
-
-/** Plain-text rendition (markup stripped, whitespace collapsed) of Markdown / MDX-lite or a block document, for excerpts and meta descriptions. */
-export function toPlainText(content: string | null | undefined): string {
-    if (!content) return '';
-    // A truncated block document must never leak its JSON into an excerpt.
-    const blockDocument = isBlockDocument(content) || content.trimStart().startsWith('{"type":"sic-blocks"');
-    return blockDocument ? blocksToPlainText(content) : stripMarkdown(content);
 }

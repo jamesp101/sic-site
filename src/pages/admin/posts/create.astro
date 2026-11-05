@@ -39,7 +39,7 @@ const departments = await db.department.findMany({
             client:load
             {departments}
             isSuperAdmin={isSuperAdmin(actor)}
-            defaultDepartmentId={scopeDefaultDepartment(Astro.locals.adminScope) ?? null}
+            defaultDepartmentId={scopeDefaultDepartment(Astro.locals.adminScope)}
         />
     </div>
 </AppLayout>

@@ -1,34 +1,20 @@
 ---
-import { renderContent } from '@/lib/blocks/content';
 import PostCard from '@/components/site/PostCard.astro';
 import TypePill from '@/components/site/TypePill.astro';
 import PublicLayout from '@/layouts/PublicLayout.astro';
 import { formatDate, formatDateRange } from '@/lib/format';
-import { oneLine, postJsonLd } from '@/lib/seo';
-import { getPostBySlug, getRelatedPosts } from '@/lib/server/queries';
+import { siteUrl } from '@/lib/seo';
+import { getPostPage } from '@/lib/server/queries';
 
 const { slug } = Astro.params;
-const post = slug ? await getPostBySlug(slug) : null;
-if (!post) return new Response(null, { status: 404, statusText: 'Not Found' });
+const page = slug ? await getPostPage(slug, siteUrl(Astro)) : null;
+if (!page) return new Response(null, { status: 404, statusText: 'Not Found' });
 
-const related = await getRelatedPosts(post, 3);
-const site = Astro.site ?? new URL(Astro.url.origin);
-const canonical = `/posts/${post.slug}`;
+const { post, related, seo } = page;
 const hasEventDates = post.type === 'event' && post.startDate;
 ---
 
-<PublicLayout
-    title={post.title}
-    description={oneLine(post.excerpt) || post.title}
-    {canonical}
-    type="article"
-    image={post.imageUrl}
-    imageAlt={post.title}
-    publishedTime={post.createdAt}
-    modifiedTime={post.updatedAt}
-    breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'News & Events', href: '/posts' }, { label: post.title }]}
-    jsonLd={postJsonLd(post, site, new URL(canonical, site).href)}
->
+<PublicLayout {...seo}>
     <article class="py-12 md:py-20">
         <div class="mx-auto w-full max-w-3xl px-6">
             <header class="space-y-4">
@@ -88,7 +74,7 @@ const hasEventDates = post.type === 'event' && post.startDate;
                 />
             )}
 
-            <div class="mt-10 text-base leading-relaxed text-foreground" set:html={renderContent(post.content)} />
+            <div class="mt-10 text-base leading-relaxed text-foreground" set:html={post.html} />
 
             <p class="mt-12 border-t border-border pt-6">
                 <a href="/posts" class="rounded text-sm font-semibold text-link underline-offset-4 hover:underline">

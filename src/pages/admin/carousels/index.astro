@@ -3,8 +3,8 @@ import AppLayout from '@/layouts/AppLayout.astro';
 import CarouselDesigner from '@/components/admin/carousels/CarouselDesigner.svelte';
 import { db } from '@/lib/server/db';
 import { toDesignerSlide } from '@/lib/server/carousel-admin';
-import { scopeDefaultDepartment, scopeLabel, scopeWhere } from '@/lib/server/admin-scope';
-import { departmentFilter, isSuperAdmin, requireUser } from '@/lib/server/authz';
+import { departmentWhere, scopeDefaultDepartment, scopeLabel } from '@/lib/server/admin-scope';
+import { isSuperAdmin, requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
 
 let actor;
@@ -19,7 +19,7 @@ const superadmin = isSuperAdmin(actor);
 const scope = Astro.locals.adminScope;
 const [rows, departments] = await Promise.all([
     db.carouselItem.findMany({
-        where: { ...departmentFilter(actor), ...scopeWhere(scope) },
+        where: departmentWhere(actor, scope),
         orderBy: [{ order: 'asc' }, { id: 'asc' }],
     }),
     db.department.findMany({
@@ -40,7 +40,7 @@ const initialId = slides.some((slide) => slide.id === requested) ? requested : (
         {departments}
         {initialId}
         scopeName={superadmin ? scopeLabel(scope) : null}
-        defaultDepartmentId={scopeDefaultDepartment(scope) ?? null}
+        defaultDepartmentId={scopeDefaultDepartment(scope)}
         superadmin={superadmin}
         lockedDepartmentId={superadmin ? null : (actor.departmentId ?? null)}
     />

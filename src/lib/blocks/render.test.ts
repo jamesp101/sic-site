@@ -485,9 +485,14 @@ describe('renderContent', () => {
         expect(renderContent('# A')).not.toContain('<h3');
     });
 
-    it('treats brace-prefixed text without the marker as Markdown', () => {
-        expect(renderContent('{"type":"sic-blocks"')).toContain('<p ');
+    it('treats brace-prefixed text that does not claim to be a block document as Markdown', () => {
         expect(renderContent('{"hello":1}')).toContain('<p ');
+        expect(renderContent('{curly} notes on sic-blocks')).toContain('<p ');
+    });
+
+    it('renders a truncated block document as nothing instead of leaking its JSON', () => {
+        expect(renderContent('{"type":"sic-blocks"')).toBe('');
+        expect(renderContent('  \n{"type":"sic-blocks","version":1,"blocks":[{"type":"paragraph"')).toBe('');
     });
 
     it('renders valid block documents with the block renderer', () => {

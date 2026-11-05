@@ -73,6 +73,12 @@ describe('isBlockDocument', () => {
     it('detects the marker even when blocks are malformed (validation happens elsewhere)', () => {
         expect(isBlockDocument('{"type":"sic-blocks","version":1,"blocks":"nope"}')).toBe(true);
     });
+
+    it('counts a truncated or whitespace-spaced opening as a claim', () => {
+        expect(isBlockDocument('{"type":"sic-blocks"')).toBe(true);
+        expect(isBlockDocument('  {"type":"sic-blocks","version":1,"blocks":[{"type":"para')).toBe(true);
+        expect(isBlockDocument('{ "type": "sic-blocks" }')).toBe(true);
+    });
 });
 
 describe('document factories', () => {

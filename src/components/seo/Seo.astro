@@ -4,26 +4,14 @@
  * Twitter card and JSON-LD. Canonical is absolute and query-free unless
  * `canonical` is passed explicitly.
  */
+import { canonicalHref, metaDescription as clampDescription, siteUrl, type PageSeo } from '@/lib/seo';
 import { SITE } from '@/lib/site';
 
-export interface SeoProps {
-    title?: string;
-    description?: string;
-    canonical?: string;
-    image?: string | null;
-    imageAlt?: string;
-    type?: 'website' | 'article';
-    noindex?: boolean;
-    /** With `noindex`: still let crawlers follow links (`noindex, follow`). */
-    follow?: boolean;
-    publishedTime?: Date | null;
-    modifiedTime?: Date | null;
-    jsonLd?: Record<string, unknown> | Record<string, unknown>[];
-}
+export type SeoProps = Omit<PageSeo, 'breadcrumbs'>;
 
 const {
     title,
-    description = SITE.description,
+    description,
     canonical,
     image,
     imageAlt,
@@ -35,11 +23,10 @@ const {
     jsonLd,
 } = Astro.props as SeoProps;
 
-const site = Astro.site ?? new URL(Astro.url.origin);
 const fullTitle = title ? `${title} | ${SITE.name}` : `${SITE.name} — Malaybalay City, Bukidnon`;
-const canonicalUrl = new URL(canonical ?? Astro.url.pathname, site).href;
-const ogImage = new URL(image ?? SITE.defaultOgImage, site).href;
-const metaDescription = description.length > 160 ? `${description.slice(0, 157).trimEnd()}…` : description;
+const canonicalUrl = canonicalHref(canonical, Astro);
+const ogImage = new URL(image ?? SITE.defaultOgImage, siteUrl(Astro)).href;
+const metaDescription = clampDescription(description) || clampDescription(SITE.description);
 const ld = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 // Escape `<` so content cannot close the script element.
 const ldJson = ld.map((item) => JSON.stringify(item).replace(/</g, '\\u003c'));

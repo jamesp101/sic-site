@@ -7,7 +7,6 @@ import { z } from 'zod';
 import { eventDateKey, parseEventDate } from './event-date';
 import { DOCUMENT_TYPE, DOCUMENT_VERSION, BLOCK_META, BLOCK_TYPES, LIMITS, isContainerType } from './types';
 import type { Block, BlockDocument, BlockType, PropsByType } from './types';
-import { isBlockDocument } from './document';
 import { parseVideoUrl, safeHref, safeImageSrc } from './urls';
 
 const str = (max: number) => z.string().max(max, `Keep this under ${max} characters.`).default('');
@@ -227,28 +226,23 @@ export function validateDocument(input: unknown): ValidationResult {
     return { ok: true, document: { type: DOCUMENT_TYPE, version: DOCUMENT_VERSION, blocks } };
 }
 
-/** Parses a stored JSON string and validates it. */
-export function parseBlockDocument(json: string): ValidationResult {
+/** A stored JSON string, parsed once: the raw value (when it parses and fits) plus its validation. */
+export function parseBlockJson(json: string): { raw: unknown; result: ValidationResult } {
     if (json.length > LIMITS.documentChars) {
-        return { ok: false, issues: [{ message: 'This content is too large. Remove some elements.' }] };
+        return {
+            raw: undefined,
+            result: { ok: false, issues: [{ message: 'This content is too large. Remove some elements.' }] },
+        };
     }
     try {
-        return validateDocument(JSON.parse(json));
+        const raw: unknown = JSON.parse(json);
+        return { raw, result: validateDocument(raw) };
     } catch {
-        return { ok: false, issues: [{ message: 'This content is not valid JSON.' }] };
+        return { raw: undefined, result: { ok: false, issues: [{ message: 'This content is not valid JSON.' }] } };
     }
 }
 
-export type ContentCheck = { ok: true; value: string } | { ok: false; message: string };
-
-/**
- * Save-time gate for a content column: block documents are validated and re-serialised in
- * normalised form (empty ones become `''`), anything else is legacy Markdown and passes through.
- */
-export function checkContent(content: string): ContentCheck {
-    if (!isBlockDocument(content)) return { ok: true, value: content };
-    const result = parseBlockDocument(content);
-    if (!result.ok) return { ok: false, message: result.issues[0]?.message ?? 'Invalid content.' };
-    if (result.document.blocks.length === 0) return { ok: true, value: '' };
-    return { ok: true, value: JSON.stringify(result.document) };
+/** Parses a stored JSON string and validates it. */
+export function parseBlockDocument(json: string): ValidationResult {
+    return parseBlockJson(json).result;
 }

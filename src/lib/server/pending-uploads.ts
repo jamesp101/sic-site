@@ -33,3 +33,9 @@ export async function sweepPendingUploads(now = Date.now()): Promise<void> {
     for (const row of expired) await remove(row.key);
     await db.pendingUpload.deleteMany({ where: { id: { in: expired.map((row) => row.id) } } });
 }
+
+/** True when `key` is an unexpired, unclaimed upload issued to `userId`; does not consume it. */
+export async function ownsPendingUpload(key: string, userId: number, now = Date.now()): Promise<boolean> {
+    const count = await db.pendingUpload.count({ where: { key, userId, expiresAt: { gt: new Date(now) } } });
+    return count > 0;
+}

@@ -21,25 +21,33 @@ function measure(file: File): Promise<{ width: number | null; height: number | n
     return promise;
 }
 
+/** Image kinds the upload API accepts; each is also the `compressImage` target. */
+export type UploadKind = 'content' | 'layer';
+
 /**
- * Compresses to WebP in the browser (content box, 1600 px) before uploading.
- * Throws an `Error` with a user-presentable message when the upload fails.
+ * Compresses `original` to WebP for `kind` (`compressImage(file, kind)`), posts it to the image upload
+ * API and returns the stored URL together with the compressed file. Throws an `Error` with a
+ * user-presentable message when the upload fails.
  */
-export async function uploadImage(original: File): Promise<UploadedImage> {
-    const file = await compressImage(original, 'content');
+export async function postImage(original: File, kind: UploadKind): Promise<{ url: string; file: File }> {
+    const file = await compressImage(original, kind);
     const form = new FormData();
     form.append('image', file);
-    const [response, size] = await Promise.all([
-        fetch('/api/admin/uploads/image', { method: 'POST', body: form }),
-        measure(file),
-    ]);
-    const body: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
+    form.append('kind', kind);
+    const response = await fetch('/api/admin/uploads/image', { method: 'POST', body: form }).catch(() => null);
+    const body: unknown = await response?.json().catch(() => null);
+    if (!response?.ok) {
         const message = body && typeof body === 'object' && 'message' in body ? String(body.message) : '';
         throw new Error(message || 'Upload failed. Please try again.');
     }
     if (!body || typeof body !== 'object' || !('url' in body) || typeof body.url !== 'string') {
         throw new Error('Upload failed. Please try again.');
     }
-    return { url: body.url, ...size };
+    return { url: body.url, file };
+}
+
+/** Uploads a content image (1600 px box) and reads its natural size (for width/height attributes). */
+export async function uploadImage(original: File): Promise<UploadedImage> {
+    const { url, file } = await postImage(original, 'content');
+    return { url, ...(await measure(file)) };
 }

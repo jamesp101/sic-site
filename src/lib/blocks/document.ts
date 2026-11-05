@@ -18,17 +18,15 @@ export function newId(): string {
     return `b${counter.toString(36)}${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/** A stored value is a block document only when it is a JSON object carrying the `sic-blocks` marker. */
+const BLOCK_DOCUMENT_CLAIM = new RegExp(`^\\{\\s*"type"\\s*:\\s*"${DOCUMENT_TYPE}"`);
+
+/**
+ * Whether stored content claims to be a block document: after trimming leading whitespace it opens
+ * with `{"type":"sic-blocks"`. This is a claim, not validation: a truncated or malformed document
+ * still counts, so it can never be mistaken for Markdown and leak its JSON. See `blocks/content.ts`.
+ */
 export function isBlockDocument(content: string | null | undefined): boolean {
-    if (!content) return false;
-    const trimmed = content.trimStart();
-    if (!trimmed.startsWith('{') || !trimmed.includes(DOCUMENT_TYPE)) return false;
-    try {
-        const parsed: unknown = JSON.parse(trimmed);
-        return typeof parsed === 'object' && parsed !== null && 'type' in parsed && parsed.type === DOCUMENT_TYPE;
-    } catch {
-        return false;
-    }
+    return !!content && BLOCK_DOCUMENT_CLAIM.test(content.trimStart());
 }
 
 export function emptyDocument(): BlockDocument {

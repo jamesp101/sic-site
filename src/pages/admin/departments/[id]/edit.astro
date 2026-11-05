@@ -2,8 +2,8 @@
 import AppLayout from '@/layouts/AppLayout.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DepartmentForm from '@/components/admin/departments/DepartmentForm.svelte';
-import { db } from '@/lib/server/db';
-import { AuthzError, requireUser, scopeDepartment } from '@/lib/server/authz';
+import { requireUser } from '@/lib/server/authz';
+import { loadOwnDepartment } from '@/lib/server/department-access';
 import { authzResponse, parseId } from '@/lib/server/authz-response';
 import { publicUrl } from '@/lib/server/storage';
 
@@ -11,9 +11,7 @@ let department;
 try {
     const actor = requireUser(Astro.locals.user);
     const id = parseId(Astro.params.id);
-    const row = id === null ? null : await db.department.findUnique({ where: { id } });
-    if (!row) throw new AuthzError('NOT_FOUND');
-    scopeDepartment(actor, { departmentId: row.id });
+    const row = await loadOwnDepartment(actor, id);
     department = {
         id: row.id,
         name: row.name,

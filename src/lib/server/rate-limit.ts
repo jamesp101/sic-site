@@ -1,5 +1,6 @@
 import { Prisma } from '@/generated/prisma/client';
 import { db } from './db';
+import { RequestError } from './request-error';
 
 export interface RateLimitRule {
     /** Attempts allowed per window. */
@@ -40,4 +41,11 @@ export async function consumeRateLimit(key: string, rule: RateLimitRule, now = D
     });
     const row = await db.rateLimit.update({ where: { key: rowKey }, data: { count: { increment: 1 } } });
     return row.count <= rule.max;
+}
+
+/** Counts one upload (inline image, layer image, presigned URL) for the user; throws TOO_MANY_REQUESTS over the limit. */
+export async function assertUploadQuota(userId: number): Promise<void> {
+    if (!(await consumeRateLimit(`upload:${userId}`, RATE_LIMITS.upload))) {
+        throw new RequestError('TOO_MANY_REQUESTS', 'Too many uploads. Try again in a few minutes.');
+    }
 }
