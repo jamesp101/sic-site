@@ -16,7 +16,7 @@
 import type { PrismaClient } from '../../generated/prisma/client';
 import { modelDelegate, prismaModels } from './prisma-models';
 import type { StorageDriver } from './storage/types';
-import { isVariantKey, variantBase, variantKeyOf } from './storage/variants';
+import { isVariantKey, variantBase, variantKeysOf } from './storage/variants';
 
 export const GRACE_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_DELETES = 1000;
@@ -198,12 +198,12 @@ export async function cleanupStorage(deps: CleanupDeps, options: CleanupOptions 
     const originalBases = new Set<string>();
     for (const key of listedObjects.keys()) if (!isVariantKey(key)) originalBases.add(variantBase(key));
     const candidates = new Map<string, { size: number; mtime: number }>();
-    const variantOf = new Map<string, string>();
+    const variantsOf = new Map<string, string[]>();
     for (const [key, info] of listedObjects) {
         if (isVariantKey(key) && originalBases.has(variantBase(key))) continue;
         if (info.mtime <= cutoff) candidates.set(key, info);
-        const variant = variantKeyOf(key);
-        if (variant && listedObjects.has(variant)) variantOf.set(key, variant);
+        const variants = variantKeysOf(key).filter((variant) => listedObjects.has(variant));
+        if (variants.length > 0) variantsOf.set(key, variants);
     }
     const candidateCount = candidates.size;
 
@@ -216,7 +216,7 @@ export async function cleanupStorage(deps: CleanupDeps, options: CleanupOptions 
     for (let i = 0; i < ordered.length && keys.length < maxDeletes; i += DELETE_CHUNK) {
         if (!dryRun && timeLeft() <= 0) break;
         const chunk = ordered.slice(i, Math.min(i + DELETE_CHUNK, i + (maxDeletes - keys.length)));
-        const variants = chunk.flatMap((key) => variantOf.get(key) ?? []);
+        const variants = chunk.flatMap((key) => variantsOf.get(key) ?? []);
         if (!dryRun) await deps.discard([...chunk, ...variants], 'unreferenced file');
         keys.push(...chunk);
         for (const key of chunk) bytesFreed += unreferenced.get(key) ?? 0;

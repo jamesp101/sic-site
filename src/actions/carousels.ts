@@ -11,12 +11,12 @@ import {
     createSlide,
     deleteSlide,
     duplicateSlide,
-    toDesignerSlide,
     updateSlide,
     type SlideVideo,
 } from '@/lib/server/carousel-admin';
 import { departmentIdField, loadScoped, loadScopedMany, resolveWriteDepartment } from '@/lib/server/department-access';
 import { imageFile } from '@/lib/server/image-file';
+import { toDesignerSlide } from '@/lib/server/slides';
 import { LIMITS } from '@/lib/server/storage';
 
 const overlayField = z.string().max(60_000, 'The slide design is too large.');

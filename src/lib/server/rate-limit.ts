@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Prisma } from '@/generated/prisma/client';
 import { db } from './db';
 import { RequestError } from './request-error';
@@ -16,6 +17,8 @@ export const RATE_LIMITS = {
     contact: { max: 5, window: 60 * 60 },
     /** Uploads that are not yet attached to a record (inline images, layer images, presigned URLs), per user. */
     upload: { max: 60, window: 10 * 60 },
+    /** Password sign-ins (`/api/auth/sign-in/email`, `/login`), per normalised email on top of Better Auth's per-IP rule. */
+    signIn: { max: 10, window: 15 * 60 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /**
@@ -48,4 +51,14 @@ export async function assertUploadQuota(userId: number): Promise<void> {
     if (!(await consumeRateLimit(`upload:${userId}`, RATE_LIMITS.upload))) {
         throw new RequestError('TOO_MANY_REQUESTS', 'Too many uploads. Try again in a few minutes.');
     }
+}
+
+/**
+ * Counts one sign-in attempt for `email` (trimmed, lower-cased, so spelling variants share a counter);
+ * false once the account has been tried too often, whatever the client address. The email is hashed so the
+ * key always fits the column and no address is stored.
+ */
+export function consumeSignInAttempt(email: string, now = Date.now()): Promise<boolean> {
+    const digest = createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
+    return consumeRateLimit(`signin:${digest}`, RATE_LIMITS.signIn, now);
 }

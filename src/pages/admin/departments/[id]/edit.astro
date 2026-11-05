@@ -1,5 +1,6 @@
 ---
 import AppLayout from '@/layouts/AppLayout.astro';
+import { formPageClass } from '@/components/admin/ui';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DepartmentForm from '@/components/admin/departments/DepartmentForm.svelte';
 import { loadOwnDepartment } from '@/lib/server/department-access';
@@ -28,7 +29,7 @@ const department = {
         { title: 'Edit' },
     ]}
 >
-    <div class="mx-auto w-full max-w-4xl space-y-6 p-6">
+    <div class={formPageClass}>
         <PageHeader
             title={`Edit ${department.name}`}
             description="Update the department description, logo and hero content."

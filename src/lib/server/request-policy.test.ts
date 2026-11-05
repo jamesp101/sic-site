@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { guardRequest, responseHeaders } from './request-policy';
+import { anonymousActionResponse, guardRequest, rejectsAnonymousAction, responseHeaders } from './request-policy';
 
 const CSP = "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
 const BASE = {
@@ -7,14 +7,19 @@ const BASE = {
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
 };
-const PUBLIC_CACHE = 'public, max-age=60, stale-while-revalidate=600';
+const PUBLIC_CACHE = 'public, max-age=60, s-maxage=60, stale-while-revalidate=600';
+const HSTS = 'max-age=31536000; includeSubDomains';
 const NOINDEX = 'noindex, nofollow';
 
-const headersFor = (path: string, opts: { method?: string; signedIn?: boolean; cc?: boolean; csp?: boolean } = {}) =>
+const headersFor = (
+    path: string,
+    opts: { method?: string; signedIn?: boolean; cc?: boolean; csp?: boolean; siteHttps?: boolean } = {},
+) =>
     responseHeaders({
         method: opts.method ?? 'GET',
         url: new URL(path, 'http://localhost'),
         signedIn: opts.signedIn ?? false,
+        siteIsHttps: opts.siteHttps ?? false,
         hasCacheControl: opts.cc ?? false,
         hasContentSecurityPolicy: opts.csp ?? false,
     });
@@ -62,16 +67,29 @@ describe('responseHeaders', () => {
         expect(actual).toEqual(expected);
     });
 
-    it('adds HSTS only over https', () => {
+    it('adds HSTS (with subdomains) when the request or SITE_URL is https, never for plain http', () => {
         const https = responseHeaders({
             method: 'GET',
             url: new URL('https://example.org/'),
             signedIn: false,
+            siteIsHttps: false,
             hasCacheControl: false,
             hasContentSecurityPolicy: false,
         });
-        expect(https['Strict-Transport-Security']).toBe('max-age=31536000');
+        expect(https['Strict-Transport-Security']).toBe(HSTS);
+        // Behind a TLS-terminating proxy the request URL is http://, but SITE_URL says https.
+        expect(headersFor('/', { siteHttps: true })['Strict-Transport-Security']).toBe(HSTS);
+        expect(headersFor('/storage/x.webp', { siteHttps: true })['Strict-Transport-Security']).toBe(HSTS);
         expect(headersFor('/')['Strict-Transport-Security']).toBeUndefined();
+    });
+
+    it('keeps action calls private and out of search indexes', () => {
+        expect(headersFor('/_actions/posts.create', { method: 'POST' })).toEqual({
+            'Cache-Control': 'no-store',
+            'X-Robots-Tag': NOINDEX,
+            'Content-Security-Policy': CSP,
+            ...BASE,
+        });
     });
 });
 
@@ -95,5 +113,50 @@ describe('guardRequest', () => {
         expect(guard('/dashboard/x', true)).toEqual({ redirect: null, scoped: true });
         expect(guard('/confirm-password', true)).toEqual({ redirect: null, scoped: false });
         expect(guard('/posts', true)).toEqual({ redirect: null, scoped: false });
+    });
+});
+
+describe('rejectsAnonymousAction', () => {
+    const rejects = (method: string, path: string, signedIn = false) =>
+        rejectsAnonymousAction(method, new URL(path, 'http://localhost'), signedIn);
+
+    it('rejects signed-out RPC calls to every action but the public contact form', () => {
+        expect(rejects('POST', '/_actions/posts.create')).toBe(true);
+        expect(rejects('POST', '/_actions/account.deleteUser/')).toBe(true);
+        expect(rejects('GET', '/_actions/users.list')).toBe(true);
+        expect(rejects('POST', '/_actions/')).toBe(true);
+        expect(rejects('POST', '/_actions')).toBe(true);
+        expect(rejects('POST', '/_actions/contact.send')).toBe(false);
+        expect(rejects('POST', '/_actions/contact.send/')).toBe(false);
+        expect(rejects('POST', '/_actions/contact.sendAll')).toBe(true);
+        expect(rejects('POST', '/_actions/contact.send/../posts.create')).toBe(true);
+    });
+
+    it('rejects signed-out form posts that name a private action, whatever the page', () => {
+        expect(rejects('POST', '/contact?_action=posts.create')).toBe(true);
+        expect(rejects('POST', '/login?_action=users.delete')).toBe(true);
+        expect(rejects('POST', '/contact?_action=contact.send')).toBe(false);
+        expect(rejects('POST', '/contact')).toBe(false);
+        // Only POST-like requests run form actions.
+        expect(rejects('GET', '/contact?_action=posts.create')).toBe(false);
+    });
+
+    it('never rejects a signed-in user', () => {
+        expect(rejects('POST', '/_actions/posts.create', true)).toBe(false);
+        expect(rejects('POST', '/contact?_action=posts.create', true)).toBe(false);
+    });
+});
+
+describe('anonymousActionResponse', () => {
+    it('is a 401 in the shape Astro actions use for errors', async () => {
+        const response = anonymousActionResponse();
+        expect(response.status).toBe(401);
+        expect(response.headers.get('Content-Type')).toBe('application/json');
+        expect(await response.json()).toEqual({
+            type: 'AstroActionError',
+            code: 'UNAUTHORIZED',
+            status: 401,
+            message: 'Sign in required.',
+        });
     });
 });

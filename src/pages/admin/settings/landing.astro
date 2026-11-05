@@ -2,24 +2,25 @@
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import LandingSettingsForm from '@/components/admin/settings/LandingSettingsForm.svelte';
 import AppLayout from '@/layouts/AppLayout.astro';
+import { widePageClass } from '@/components/admin/ui';
 import { adminPage } from '@/lib/server/admin-page';
-import { db } from '@/lib/server/db';
+import { getWelcomeHero } from '@/lib/server/welcome-hero';
 
 const page = await adminPage(Astro.locals.user, { superAdmin: true });
 if (page instanceof Response) return page;
 
-const setting = await db.setting.findUnique({ where: { key: 'welcome_hero_content' } });
+const welcomeHero = await getWelcomeHero();
 ---
 
 <AppLayout
     title="Landing Page Settings"
     breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Landing Settings' }]}
 >
-    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+    <div class={widePageClass}>
         <PageHeader
             title="Landing page settings"
             description="Design the main welcome page hero section with the visual editor."
         />
-        <LandingSettingsForm client:load welcomeHeroContent={setting?.value ?? ''} />
+        <LandingSettingsForm client:load welcomeHeroContent={welcomeHero ?? ''} />
     </div>
 </AppLayout>

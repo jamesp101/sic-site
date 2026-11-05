@@ -10,14 +10,16 @@
 
 <Group title="Source">
   <Field label="Markdown source" id={fid('source')}>
-    <textarea
-      id={fid('source')}
-      rows={14}
-      maxlength={LIMITS.markdown}
-      value={block.props.source}
-      class={[inputClass, 'resize-y font-mono']}
-      oninput={(event) => set({ source: event.currentTarget.value })}
-    ></textarea>
+    {#snippet children(props)}
+      <textarea
+        {...props}
+        rows={14}
+        maxlength={LIMITS.markdown}
+        value={block.props.source}
+        class={[inputClass, 'resize-y font-mono']}
+        oninput={(event) => set({ source: event.currentTarget.value })}
+      ></textarea>
+    {/snippet}
   </Field>
 </Group>
 <div class="space-y-2 rounded-lg border-2 border-gold-500 bg-surface-alt p-3" role="group" aria-labelledby={fid('legacy')}>

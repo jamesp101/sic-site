@@ -2,6 +2,7 @@
 import TypePill from './TypePill.astro';
 import type { PostSummary } from '@/lib/content-types';
 import { formatDate, formatDateRange } from '@/lib/format';
+import { postHref } from '@/lib/site-nav';
 
 interface Props {
     post: PostSummary;
@@ -15,7 +16,7 @@ interface Props {
 const { post, variant = 'default', headingLevel = 'h3', priority = false } = Astro.props;
 const Heading = headingLevel;
 const compact = variant === 'compact';
-const href = `/posts/${post.slug}`;
+const href = postHref(post.slug);
 // Cards sit in a 1-, 2- or 3-column grid (see the pages that list them): about 400 px wide on desktop.
 const CARD_IMAGE_SIZES = '(min-width: 1024px) 400px, (min-width: 640px) 50vw, 100vw';
 const showRange = post.type === 'event' && post.startDate;

@@ -1,7 +1,5 @@
-import { isInputError } from 'astro:actions';
-
 export const inputClass =
-    'w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-foreground shadow-brand-sm outline-none placeholder:text-muted-foreground focus:border-brand-600 focus:ring-2 focus:ring-ring/40';
+    'w-full rounded-lg border border-input-border bg-surface px-3 py-2 text-sm text-foreground shadow-brand-sm outline-none placeholder:text-muted-foreground focus:border-brand-600 focus-visible:ring-2 focus-visible:ring-ring';
 
 export const primaryButtonClass =
     'inline-flex items-center justify-center gap-2 rounded-lg bg-brand-800 px-4 py-2 text-sm font-semibold text-white shadow-brand-sm transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gold-500 dark:text-brand-950 dark:hover:bg-gold-400';
@@ -19,13 +17,27 @@ export interface FormErrors {
     message: string;
 }
 
+interface InputIssue {
+    path: (string | number)[];
+    message: string;
+}
+
+/** Astro's `isInputError` (`type: 'AstroActionInputError'`), checked structurally so this module stays free of `astro:*`. */
+function isInputError(error: unknown): error is { issues: InputIssue[] } {
+    const candidate = error as { type?: string; issues?: unknown } | null;
+    return candidate?.type === 'AstroActionInputError' && Array.isArray(candidate.issues);
+}
+
 interface ActionFailure {
     code?: string;
     message?: string;
 }
 
-/** Splits an Astro action error into per-field messages and a general message. `conflictField` receives CONFLICT messages. */
-export function parseActionError(error: unknown, conflictField?: string): FormErrors {
+/** Which field a non-input action error belongs to, by action error code (e.g. `{ CONFLICT: 'email', BAD_REQUEST: 'currentPassword' }`). */
+export type FieldByCode = Record<string, string>;
+
+/** Splits an Astro action error into per-field messages and a general message. Errors whose code is in `fieldByCode` land on that field. */
+export function parseActionError(error: unknown, fieldByCode: FieldByCode = {}): FormErrors {
     const result: FormErrors = { fields: {}, message: '' };
     if (isInputError(error)) {
         for (const issue of error.issues) {
@@ -37,7 +49,8 @@ export function parseActionError(error: unknown, conflictField?: string): FormEr
     }
     const failure = error as ActionFailure;
     const message = failure?.message || 'Something went wrong. Please try again.';
-    if (conflictField && failure?.code === 'CONFLICT') result.fields[conflictField] = message;
+    const field = failure?.code ? fieldByCode[failure.code] : undefined;
+    if (field) result.fields[field] = message;
     else result.message = message;
     return result;
 }

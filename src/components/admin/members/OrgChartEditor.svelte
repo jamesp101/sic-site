@@ -24,18 +24,41 @@
     matchMembers,
     moveRelative,
     moveToRoot,
-    nextOrder,
     orgTreeOps,
     positionOf,
     removeMember,
     siblingsOf,
     type DropPosition,
-    type KeyboardMove,
     type OrgMember,
     type OrgNode,
     type OrgChange,
     type OrgPlacement,
   } from '@/lib/org-tree';
+  import {
+    afterDelete,
+    cancelRename,
+    canvasClick,
+    closeInspector as closeInspectorState,
+    commitRename,
+    createdMember,
+    dropZone,
+    fitViewport,
+    initialUi,
+    isPanGesture,
+    itemKeyIntent,
+    nextSearchMatch,
+    panBy,
+    peerAnchor,
+    revealShift,
+    selectMember,
+    setRenameValue,
+    startCreate,
+    startRename,
+    wheelIntent,
+    zoomAt,
+    type ChartUi,
+    type Viewport,
+  } from '@/lib/org-chart-interaction';
   import { createTreeEditSession, type EditResult, type TreeEditPort } from '@/lib/tree-edit-session';
   import ConfirmDialog from '../ConfirmDialog.svelte';
   import { append, parseActionError, primaryButtonClass, secondaryButtonClass, type FormErrors } from '../shared/form-utils';
@@ -59,8 +82,6 @@
     ok: boolean;
   }
 
-  const MIN_SCALE = 0.25;
-  const MAX_SCALE = 2;
   const DESKTOP = '(min-width: 768px)';
 
   const port: TreeEditPort<OrgMember[], OrgChange> = {
@@ -87,19 +108,17 @@
   let view = $state.raw(session.snapshot());
   const members = $derived(view.tree);
 
-  let selectedId = $state<number | null>(null);
+  let ui = $state.raw<ChartUi>(initialUi);
+  const selectedId = $derived(ui.selectedId);
+  const creating = $derived(ui.creating);
+  const renamingId = $derived(ui.renamingId);
+  const renameValue = $derived(ui.renameValue);
   let focusId = $state<number | null>(null);
   let hoverId = $state<number | null>(null);
-  let creating = $state<{ parentId: number | null; afterId: number | null; order: number; nonce: number } | null>(null);
-  let nonce = 0;
-  let renamingId = $state<number | null>(null);
-  let renameValue = $state('');
   let query = $state('');
   let announcement = $state('');
 
-  let scale = $state(1);
-  let tx = $state(0);
-  let ty = $state(0);
+  let cam = $state.raw<Viewport>({ scale: 1, tx: 0, ty: 0 });
   let panning = $state(false);
   let autoFit = true;
 
@@ -135,7 +154,6 @@
   const deleteManager = $derived(deleteTarget?.parentId == null ? null : (byId.get(deleteTarget.parentId) ?? null));
 
   const isDesktop = () => window.matchMedia(DESKTOP).matches;
-  const clampScale = (value: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
 
   function announce(text: string) {
     announcement = announcement === text ? `${text}\u00a0` : text;
@@ -145,13 +163,11 @@
 
   function fit() {
     if (!viewport || !content || !isDesktop()) return;
-    const width = content.offsetWidth;
-    const height = content.offsetHeight;
-    if (width === 0 || height === 0) return;
-    const next = clampScale(Math.min(1, (viewport.clientWidth - 48) / width, (viewport.clientHeight - 96) / height));
-    scale = next;
-    tx = (viewport.clientWidth - width * next) / 2;
-    ty = Math.max(56, (viewport.clientHeight - height * next) / 2);
+    const next = fitViewport(
+      { width: viewport.clientWidth, height: viewport.clientHeight },
+      { width: content.offsetWidth, height: content.offsetHeight },
+    );
+    if (next) cam = next;
   }
 
   function zoomBy(factor: number, clientX?: number, clientY?: number) {
@@ -160,11 +176,7 @@
     const rect = viewport.getBoundingClientRect();
     const px = (clientX ?? rect.left + rect.width / 2) - rect.left;
     const py = (clientY ?? rect.top + rect.height / 2) - rect.top;
-    const next = clampScale(scale * factor);
-    const k = next / scale;
-    tx = px - (px - tx) * k;
-    ty = py - (py - ty) * k;
-    scale = next;
+    cam = zoomAt(cam, factor, px, py);
   }
 
   function manualFit() {
@@ -179,12 +191,8 @@
       el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       return;
     }
-    const v = viewport.getBoundingClientRect();
-    const r = el.getBoundingClientRect();
-    const inside = r.left >= v.left + 16 && r.right <= v.right - 16 && r.top >= v.top + 56 && r.bottom <= v.bottom - 16;
-    if (inside && !center) return;
-    tx += v.left + v.width / 2 - (r.left + r.width / 2);
-    ty += v.top + v.height / 2 - (r.top + r.height / 2);
+    const shift = revealShift(viewport.getBoundingClientRect(), el.getBoundingClientRect(), center);
+    if (shift) cam = panBy(cam, shift.dx, shift.dy);
   }
 
   async function focusMember(id: number, center = false) {
@@ -203,11 +211,9 @@
       if (!isDesktop()) return;
       event.preventDefault();
       autoFit = false;
-      if (event.ctrlKey || event.metaKey) zoomBy(Math.exp(-event.deltaY * 0.0015), event.clientX, event.clientY);
-      else {
-        tx -= event.deltaX;
-        ty -= event.deltaY;
-      }
+      const intent = wheelIntent({ deltaX: event.deltaX, deltaY: event.deltaY, zoomModifier: event.ctrlKey || event.metaKey });
+      if (intent.kind === 'zoom') zoomBy(intent.factor, event.clientX, event.clientY);
+      else cam = panBy(cam, intent.dx, intent.dy);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     // Fit once the first layout (fonts, photos) settles; stops as soon as the user interacts.
@@ -228,7 +234,7 @@
     autoFit = false;
     if (event.button !== 0 || !isDesktop() || !viewport) return;
     if ((event.target as HTMLElement).closest('[data-testid="org-card"], button, input, a')) return;
-    pan = { x: event.clientX, y: event.clientY, tx, ty, moved: false };
+    pan = { x: event.clientX, y: event.clientY, tx: cam.tx, ty: cam.ty, moved: false };
     viewport.setPointerCapture(event.pointerId);
   }
 
@@ -236,13 +242,12 @@
     if (!pan) return;
     const dx = event.clientX - pan.x;
     const dy = event.clientY - pan.y;
-    if (!pan.moved && Math.abs(dx) + Math.abs(dy) > 3) {
+    if (!pan.moved && isPanGesture(dx, dy)) {
       pan.moved = true;
       panning = true;
     }
     if (pan.moved) {
-      tx = pan.tx + dx;
-      ty = pan.ty + dy;
+      cam = { ...cam, tx: pan.tx + dx, ty: pan.ty + dy };
     }
   }
 
@@ -251,7 +256,7 @@
     const moved = pan.moved;
     pan = null;
     panning = false;
-    if (!moved && !creating) selectedId = null;
+    ui = canvasClick(ui, moved);
   }
 
   /** The browser may scroll the clipped canvas to reveal a focused card; the transform is the only offset. */
@@ -329,7 +334,7 @@
 
   async function saveInspector(values: MemberValues): Promise<FormErrors | null> {
     await session.settled();
-    if (creating) return createMember(values);
+    if (ui.creating) return createMember(values);
     const current = view.confirmed.find((m) => m.id === selectedId);
     if (!current) return { fields: {}, message: 'This member no longer exists.' };
     const { data, error } = await actions.members.update(formFor({ id: current.id, ...values }));
@@ -344,7 +349,7 @@
   }
 
   async function createMember(values: MemberValues): Promise<FormErrors | null> {
-    const context = creating;
+    const context = ui.creating;
     const { data, error } = await actions.members.create(formFor(values));
     if (error) return parseActionError(error);
     const created: OrgMember = {
@@ -356,34 +361,29 @@
       imageUrl: data.imageUrl,
     };
     session.adopt((list) => [...list, created]);
-    creating = null;
-    selectedId = created.id;
+    ui = createdMember(ui, created.id);
     toast.success(`${created.name} added.`);
     // "Add peer" slots the new member right after the card it was added beside.
-    if (context?.afterId != null && values.parentId === context.parentId && values.order === context.order) {
-      restructure(moveRelative(members, created.id, context.afterId, 'after'), created.id);
-    } else announce(`${created.name} added.`);
+    const anchor = peerAnchor(context, values);
+    if (anchor !== null) restructure(moveRelative(members, created.id, anchor, 'after'), created.id);
+    else announce(`${created.name} added.`);
     void focusMember(created.id);
     return null;
   }
 
-  async function commitRename(id: number) {
-    if (renamingId !== id) return;
-    const name = renameValue.trim();
-    renamingId = null;
-    const member = byId.get(id);
-    if (member && name && name !== member.name) {
-      const result = await report(session.edit({ kind: 'rename', id, name }, { record: false }));
-      if (result.status === 'saved') announce(`Renamed to ${name}.`);
+  async function commitRenameOf(id: number) {
+    const done = commitRename(ui, members, id);
+    if (!done) return;
+    ui = done.ui;
+    if (done.name) {
+      const result = await report(session.edit({ kind: 'rename', id, name: done.name }, { record: false }));
+      if (result.status === 'saved') announce(`Renamed to ${done.name}.`);
     }
     void focusMember(id);
   }
 
-  function startRename(id: number) {
-    const member = byId.get(id);
-    if (!member) return;
-    renameValue = member.name;
-    renamingId = id;
+  function beginRename(id: number) {
+    ui = startRename(ui, members, id);
   }
 
   function requestDelete(member: OrgMember) {
@@ -403,9 +403,8 @@
       toast.error(parseActionError(error).message || 'The member could not be deleted.');
       return;
     }
-    const manager = target.parentId;
     session.adopt((list) => removeMember(list, target.id), { resetHistory: true });
-    if (selectedId === target.id) selectedId = manager !== null && byId.has(manager) ? manager : null;
+    ui = afterDelete(ui, members, target);
     toast.success(`${target.name} removed.`);
     announce(`${target.name} removed. Direct reports moved up.`);
     if (selectedId !== null) void focusMember(selectedId);
@@ -413,81 +412,45 @@
 
   // -------------------------------------------------------------- selection
 
-  function selectMember(id: number | null) {
-    creating = null;
-    selectedId = id;
+  function select(id: number | null) {
+    ui = selectMember(ui, id);
   }
 
-  function startCreate(parentId: number | null, afterId: number | null) {
-    creating = { parentId, afterId, order: nextOrder(members, parentId), nonce: ++nonce };
+  function beginCreate(parentId: number | null, afterId: number | null) {
+    ui = startCreate(ui, members, parentId, afterId);
   }
 
   function closeInspector() {
     const id = selectedId;
-    creating = null;
-    selectedId = null;
+    ui = closeInspectorState(ui);
     if (id !== null) void focusMember(id);
   }
 
   // ------------------------------------------------------------- tree input
 
-  const ALT_MOVES: Record<string, { move: KeyboardMove; label: string }> = {
-    ArrowUp: { move: 'up', label: 'earlier among its siblings' },
-    ArrowDown: { move: 'down', label: 'later among its siblings' },
-    ArrowLeft: { move: 'out', label: 'up a level' },
-    ArrowRight: { move: 'in', label: 'under the previous sibling' },
-  };
-
   function onItemKey(event: KeyboardEvent, id: number) {
     if (event.target !== event.currentTarget) return;
     const member = byId.get(id);
-    if (!member) return;
-    if (event.altKey && !event.ctrlKey && !event.metaKey && ALT_MOVES[event.key]) {
-      event.preventDefault();
-      const { move, label } = ALT_MOVES[event.key];
-      if (!restructure(keyboardMove(members, id, move), id)) announce(`${member.name} cannot move ${label}.`);
-      void focusMember(id);
-      return;
-    }
-    if (event.altKey || event.ctrlKey || event.metaKey) return;
-    const index = flat.indexOf(id);
-    const go = (target: number | undefined) => {
-      if (target === undefined) return;
-      event.preventDefault();
-      void focusMember(target);
-    };
-    switch (event.key) {
-      case 'Enter':
-      case ' ':
-        event.preventDefault();
-        selectMember(id);
+    const intent = itemKeyIntent(event, id, members, flat);
+    if (!member || !intent) return;
+    event.preventDefault();
+    switch (intent.kind) {
+      case 'move':
+        if (!restructure(keyboardMove(members, id, intent.move), id)) announce(`${member.name} cannot move ${intent.label}.`);
+        void focusMember(id);
+        break;
+      case 'open':
+        select(id);
         void tick().then(() => document.getElementById('member-name')?.focus());
         break;
-      case 'F2':
-        event.preventDefault();
-        startRename(id);
+      case 'rename':
+        beginRename(id);
         break;
-      case 'Delete':
-        event.preventDefault();
+      case 'delete':
         requestDelete(member);
         break;
-      case 'ArrowDown':
-        go(flat[index + 1]);
-        break;
-      case 'ArrowUp':
-        go(flat[index - 1]);
-        break;
-      case 'ArrowRight':
-        go(siblingsOf(members, id)[0]?.id);
-        break;
-      case 'ArrowLeft':
-        go(member.parentId ?? undefined);
-        break;
-      case 'Home':
-        go(flat[0]);
-        break;
-      case 'End':
-        go(flat.at(-1));
+      case 'focus':
+        void focusMember(intent.id);
         break;
     }
   }
@@ -513,18 +476,15 @@
   function onSearchKey(event: KeyboardEvent) {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    const ids = flat.filter((id) => matches.has(id));
-    if (ids.length === 0) return;
-    const next = ids[(ids.indexOf(focusId ?? -1) + 1) % ids.length];
-    void focusMember(next, true);
+    const next = nextSearchMatch(flat, matches, focusId);
+    if (next !== null) void focusMember(next, true);
   }
 
   // ----------------------------------------------------------- drag and drop
 
   function zoneOf(event: DragEvent, card: HTMLElement): DropPosition {
     const rect = card.getBoundingClientRect();
-    const ratio = isDesktop() ? (event.clientX - rect.left) / rect.width : (event.clientY - rect.top) / rect.height;
-    return ratio < 0.25 ? 'before' : ratio > 0.75 ? 'after' : 'child';
+    return dropZone({ x: event.clientX, y: event.clientY }, rect, isDesktop());
   }
 
   function setDrop(next: DropState | null) {
@@ -664,9 +624,9 @@
           ondragover={(event) => onCardDragOver(event, m.id)}
           ondragleave={(event) => onCardDragLeave(event, m.id)}
           ondrop={(event) => onCardDrop(event, m.id)}
-          onclick={() => selectMember(m.id)}
+          onclick={() => select(m.id)}
           ondblclick={(event) => {
-            if (!(event.target as HTMLElement).closest('button, input')) startRename(m.id);
+            if (!(event.target as HTMLElement).closest('button, input')) beginRename(m.id);
           }}
           onpointerenter={() => (hoverId = m.id)}
           onpointerleave={() => (hoverId = hoverId === m.id ? null : hoverId)}
@@ -692,7 +652,8 @@
             {#if renamingId === m.id}
               <input
                 use:focusSelect
-                bind:value={renameValue}
+                value={renameValue}
+                oninput={(event) => (ui = setRenameValue(ui, event.currentTarget.value))}
                 type="text"
                 maxlength="255"
                 aria-label="Rename {m.name}"
@@ -701,13 +662,13 @@
                   event.stopPropagation();
                   if (event.key === 'Enter') {
                     event.preventDefault();
-                    void commitRename(m.id);
+                    void commitRenameOf(m.id);
                   } else if (event.key === 'Escape') {
-                    renamingId = null;
+                    ui = cancelRename(ui);
                     void focusMember(m.id);
                   }
                 }}
-                onblur={() => void commitRename(m.id)}
+                onblur={() => void commitRenameOf(m.id)}
                 onclick={(event) => event.stopPropagation()}
               />
             {:else}
@@ -732,7 +693,7 @@
                 title="Edit"
                 onclick={(event) => {
                   event.stopPropagation();
-                  selectMember(m.id);
+                  select(m.id);
                   void tick().then(() => document.getElementById('member-name')?.focus());
                 }}
               >
@@ -758,8 +719,8 @@
               title="Add direct report"
               onclick={(event) => {
                 event.stopPropagation();
-                selectedId = m.id;
-                startCreate(m.id, null);
+                ui = { ...ui, selectedId: m.id };
+                beginCreate(m.id, null);
               }}
             >
               <Plus class="h-4 w-4" aria-hidden="true" />
@@ -771,8 +732,8 @@
               title="Add peer"
               onclick={(event) => {
                 event.stopPropagation();
-                selectedId = m.id;
-                startCreate(m.parentId, m.id);
+                ui = { ...ui, selectedId: m.id };
+                beginCreate(m.parentId, m.id);
               }}
             >
               <UserPlus class="h-4 w-4" aria-hidden="true" />
@@ -795,7 +756,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <section class="space-y-3" aria-label="Org chart editor" bind:this={root} onkeydown={onRootKey}>
   <div class="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Org chart tools">
-    <button type="button" class={primaryButtonClass} onclick={() => startCreate(selectedId, null)}>
+    <button type="button" class={primaryButtonClass} onclick={() => beginCreate(selectedId, null)}>
       <Plus class="h-4 w-4" aria-hidden="true" /> Add member
     </button>
 
@@ -832,7 +793,7 @@
         <button type="button" class={toolButton} onclick={() => zoomBy(1 / 1.2)} aria-label="Zoom out" title="Zoom out (-)">
           <ZoomOut class="h-4 w-4" aria-hidden="true" />
         </button>
-        <span class="w-10 text-center text-xs tabular-nums text-muted-foreground" data-testid="zoom-level">{Math.round(scale * 100)}%</span>
+        <span class="w-10 text-center text-xs tabular-nums text-muted-foreground" data-testid="zoom-level">{Math.round(cam.scale * 100)}%</span>
         <button type="button" class={toolButton} onclick={() => zoomBy(1.2)} aria-label="Zoom in" title="Zoom in (+)">
           <ZoomIn class="h-4 w-4" aria-hidden="true" />
         </button>
@@ -865,7 +826,7 @@
       aria-label="Org chart canvas. Drag empty space to pan, Control plus scroll to zoom."
       class="viewport"
       class:panning
-      style="--tx:{tx}px;--ty:{ty}px;--s:{scale}"
+      style="--tx:{cam.tx}px;--ty:{cam.ty}px;--s:{cam.scale}"
       onpointerdown={onPanDown}
       onpointermove={onPanMove}
       onpointerup={onPanUp}
@@ -896,7 +857,7 @@
       {#if members.length === 0 && !creating}
         <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
           <p class="text-sm text-muted-foreground">No one is on the {departmentName} org chart yet.</p>
-          <button type="button" class={primaryButtonClass} onclick={() => startCreate(null, null)}>
+          <button type="button" class={primaryButtonClass} onclick={() => beginCreate(null, null)}>
             <Plus class="h-4 w-4" aria-hidden="true" /> Add the first member
           </button>
         </div>

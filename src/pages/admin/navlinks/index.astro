@@ -1,12 +1,13 @@
 ---
 import AppLayout from '@/layouts/AppLayout.astro';
+import { widePageClass } from '@/components/admin/ui';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import NavLinksEditor from '@/components/admin/navlinks/NavLinksEditor.svelte';
 import { db } from '@/lib/server/db';
 import { getNavDepartments } from '@/lib/server/queries';
 import { adminPage } from '@/lib/server/admin-page';
 import { PAGE_SUGGESTIONS, postSlugsLinked, type LinkSuggestion, type NavNode } from '@/lib/nav-tree';
-import { DEPARTMENTS_MENU_URL, STATIC_PATHS, departmentHref } from '@/lib/site-nav';
+import { DEPARTMENTS_MENU_URL, STATIC_PATHS, departmentHref, postHref } from '@/lib/site-nav';
 
 const page = await adminPage(Astro.locals.user, { superAdmin: true });
 if (page instanceof Response) return page;
@@ -45,22 +46,22 @@ const suggestions: LinkSuggestion[] = [
     ...PAGE_SUGGESTIONS,
     { group: 'Pages', label: 'Departments menu (auto)', url: DEPARTMENTS_MENU_URL },
     ...departments.map((d): LinkSuggestion => ({ group: 'Departments', label: d.name, url: departmentHref(d.slug) })),
-    ...newestPosts.map((p): LinkSuggestion => ({ group: 'Posts', label: p.title, url: `/posts/${p.slug}` })),
+    ...newestPosts.map((p): LinkSuggestion => ({ group: 'Posts', label: p.title, url: postHref(p.slug) })),
 ];
 // Paths the editor may treat as existing. Links only change through actions that reload this page, so the Posts
 // to check are exactly those the stored links point at; no other slug is sent to the client.
 const knownPaths = [
     ...STATIC_PATHS,
     ...departments.map((d) => departmentHref(d.slug)),
-    ...linkedPosts.map((p) => `/posts/${p.slug}`),
+    ...linkedPosts.map((p) => postHref(p.slug)),
 ];
 ---
 
 <AppLayout
-    title="Navigation Links"
+    title="Navigation links"
     breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Navigation links' }]}
 >
-    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+    <div class={widePageClass}>
         <PageHeader
             title="Navigation links"
             description="Arrange the links in the main website navigation bar. Drag to reorder or nest; changes go live as you drop."

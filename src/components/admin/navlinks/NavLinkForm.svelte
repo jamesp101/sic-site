@@ -93,16 +93,18 @@
   </p>
   <div class="grid gap-4 md:grid-cols-2">
     <Field id={`${prefix}-label`} label="Label" required error={form.errors.label}>
-      <input
-        id={`${prefix}-label`}
-        bind:this={labelInput}
-        type="text"
-        required
-        maxlength="255"
-        bind:value={label}
-        class={inputClass}
-        placeholder="e.g. Admissions"
-      />
+      {#snippet children(props)}
+        <input
+          {...props}
+          bind:this={labelInput}
+          type="text"
+          required
+          maxlength="255"
+          bind:value={label}
+          class={inputClass}
+          placeholder="e.g. Admissions"
+        />
+      {/snippet}
     </Field>
     <Field
       id={`${prefix}-url`}
@@ -111,19 +113,21 @@
       error={form.errors.url}
       hint="Pick a page, department or post, or type a path such as /posts or a full https:// URL."
     >
-      <div class="flex items-start gap-2">
-        <div class="min-w-0 flex-1">
-          <NavLinkPicker
-            id={`${prefix}-url`}
-            bind:value={url}
-            {suggestions}
-            invalid={Boolean(form.errors.url)}
-            describedBy={form.errors.url ? `${prefix}-url-error` : undefined}
-            {onpick}
-          />
+      {#snippet children(props)}
+        <div class="flex items-start gap-2">
+          <div class="min-w-0 flex-1">
+            <NavLinkPicker
+              id={props.id}
+              bind:value={url}
+              {suggestions}
+              invalid={props['aria-invalid'] === true}
+              describedBy={props['aria-describedby']}
+              {onpick}
+            />
+          </div>
+          <span class="mt-2"><NavKindBadge {url} /></span>
         </div>
-        <span class="mt-2"><NavKindBadge {url} /></span>
-      </div>
+      {/snippet}
     </Field>
   </div>
 
@@ -133,7 +137,7 @@
   </label>
 
   {#if form.message}
-    <p class="text-sm font-medium text-destructive" role="alert">{form.message}</p>
+    <p class="text-sm font-medium text-destructive" role="alert" tabindex="-1" data-form-message>{form.message}</p>
   {/if}
 
   <div class="flex flex-wrap gap-2">

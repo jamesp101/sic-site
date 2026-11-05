@@ -2,6 +2,7 @@
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import HeroSectionForm from '@/components/admin/hero-sections/HeroSectionForm.svelte';
 import AppLayout from '@/layouts/AppLayout.astro';
+import { widePageClass } from '@/components/admin/ui';
 import { isSuperAdmin } from '@/lib/server/authz';
 import { adminPage, parseId } from '@/lib/server/admin-page';
 import { departmentOptions, loadScoped } from '@/lib/server/department-access';
@@ -24,14 +25,14 @@ const values = {
 ---
 
 <AppLayout
-    title="Edit Hero Section"
+    title="Edit hero section"
     breadcrumbs={[
         { title: 'Dashboard', href: '/dashboard' },
         { title: 'Hero Sections', href: '/admin/hero-sections' },
         { title: 'Edit' },
     ]}
 >
-    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+    <div class={widePageClass}>
         <PageHeader
             title="Edit hero section"
             description={`Make changes to “${section.title || 'Hero section'}”.`}

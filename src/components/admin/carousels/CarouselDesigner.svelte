@@ -19,20 +19,7 @@
   import { navigate } from 'astro:transitions/client';
   import { onMount, tick, untrack } from 'svelte';
   import { toast } from 'svelte-sonner';
-  import {
-    NUDGE,
-    NUDGE_BIG,
-    commit,
-    createHistory,
-    duplicateLayer,
-    moveLayer,
-    patchLayer,
-    redo,
-    undo,
-    type Box,
-    type History,
-    type ZMove,
-  } from '@/lib/carousel-editor';
+  import { NUDGE, NUDGE_BIG, type Box, type ZMove } from '@/lib/carousel-editor';
   import { measureLayerBox } from '@/lib/carousel-layout';
   import {
     IMAGE_PRESETS,
@@ -40,16 +27,13 @@
     TYPE_LABEL,
     defaultLayer,
     layerLabel,
-    newLayerId,
-    serializeOverlay,
     type Layer,
     type LayerType,
     type MobileOverride,
-    type SlideMobile,
   } from '@/lib/carousel-overlay';
-  import { resetMobile, resolveMobile, setMobile, slideFocus } from '@/lib/carousel-overlay-mobile';
-  import { parseOverlayStrict } from '@/lib/carousel-overlay-schema';
-  import type { DesignerSlide } from '@/lib/server/carousel-admin';
+  import { resolveMobile, slideFocus } from '@/lib/carousel-overlay-mobile';
+  import type { DesignerSlide } from '@/lib/server/slides';
+  import { SlideDesignerSession, type DesignerPort, type PortResult, type ReorderResult } from '@/lib/slide-designer-session';
   import ConfirmDialog from '../ConfirmDialog.svelte';
   import { postImage } from '../editor/upload';
   import { append, inputClass, parseActionError, primaryButtonClass, secondaryButtonClass } from '../shared/form-utils';
@@ -57,30 +41,6 @@
   import SlideCanvas from './SlideCanvas.svelte';
   import SlideSettings from './SlideSettings.svelte';
   import SlideStrip from './SlideStrip.svelte';
-  import type { StripSlide } from './types';
-
-  interface Draft {
-    /** String(id) for saved slides, "new" for the one unsaved slide. */
-    key: string;
-    id: number | null;
-    imageUrl: string | null;
-    /** Replacement image chosen in the cropper, not uploaded yet. */
-    file: File | null;
-    previewUrl: string | null;
-    departmentId: number | null;
-    showOnMain: boolean;
-    title: string;
-    history: History<Layer[]>;
-    /** Phone settings of the slide (photo focal point); null = centred. */
-    mobile: SlideMobile | null;
-    /** Background video: an uploaded file's URL or a YouTube link; '' = none. */
-    video: string;
-    /** `video` as last saved. */
-    savedVideo: string;
-    /** Serialized layers as last saved. */
-    baseline: string;
-    imageError: string;
-  }
 
   let {
     slides,
@@ -102,31 +62,52 @@
     defaultDepartmentId?: number | null;
   } = $props();
 
-  function fromSlide(slide: DesignerSlide): Draft {
-    return {
-      key: String(slide.id),
-      id: slide.id,
-      imageUrl: slide.imageUrl,
-      file: null,
-      previewUrl: null,
-      departmentId: slide.departmentId,
-      showOnMain: slide.showOnMain,
-      title: slide.title ?? '',
-      history: createHistory(slide.layers),
-      mobile: slide.mobile,
-      video: slide.video,
-      savedVideo: slide.video,
-      baseline: serializeOverlay(slide.layers, slide.mobile),
-      imageError: '',
-    };
+  /** Runs an action and hands the session its data, or the parsed error. */
+  async function outcome<D, T>(
+    pending: Promise<{ data?: D; error?: unknown }>,
+    pick: (data: D) => T,
+  ): Promise<PortResult<T>> {
+    const { data, error } = await pending;
+    if (error) {
+      const parsed = parseActionError(error);
+      return { ok: false, message: parsed.message, fields: parsed.fields };
+    }
+    return { ok: true, data: pick(data as D) };
   }
 
-  let drafts = $state.raw<Draft[]>(untrack(() => slides.map(fromSlide)));
-  let activeKey = $state<string | null>(untrack(() => (initialId !== null ? String(initialId) : (drafts[0]?.key ?? null))));
-  let selectedId = $state<string | null>(null);
+  const port: DesignerPort = {
+    save(input) {
+      const form = new FormData();
+      append(form, 'overlay', input.overlay);
+      append(form, 'image', input.image);
+      form.set('video', input.video);
+      if (input.id === null) {
+        append(form, 'departmentId', input.departmentId);
+        append(form, 'showOnMain', input.showOnMain);
+        return outcome(actions.carousels.create(form), (data) => data.slide);
+      }
+      append(form, 'id', input.id);
+      return outcome(actions.carousels.update(form), (data) => data.slide);
+    },
+    reorder: (ids) => outcome(actions.carousels.reorder({ ids }), () => undefined),
+    duplicate: (id) => outcome(actions.carousels.duplicate({ id }), (data) => data.slide),
+    placement: (id, patch) => outcome(actions.carousels.placement({ id, ...patch }), (data) => data.slide),
+    remove: (id) => outcome(actions.carousels.delete({ id }), () => undefined),
+  };
+
+  // The session owns drafts, the open slide, the selected layer, undo history and dirty state; this component renders them.
+  const session = new SlideDesignerSession({
+    slides: untrack(() => slides),
+    initialId: untrack(() => initialId),
+    newSlideDepartmentId: untrack(() => lockedDepartmentId ?? defaultDepartmentId),
+    port,
+    objectUrls: { create: (file) => URL.createObjectURL(file), revoke: (url) => URL.revokeObjectURL(url) },
+    onchange: () => (designer = session.view),
+  });
+  let designer = $state.raw(session.view);
+
   let tab = $state<'slide' | 'layer'>('slide');
-  let saving = $state(false);
-  let busy = $state(false);
+  const busy = $derived(designer.busy);
   let uploading = $state(false);
   let errorMessage = $state('');
   let status = $state('');
@@ -140,48 +121,29 @@
   let discarding = false;
   let fileInput = $state<HTMLInputElement | null>(null);
 
-  const active = $derived(drafts.find((draft) => draft.key === activeKey) ?? null);
-  const layers = $derived(active?.history.present ?? []);
-  const selectedIndex = $derived(layers.findIndex((layer) => layer.id === selectedId));
-  const selected = $derived(selectedIndex >= 0 ? layers[selectedIndex] : null);
+  const active = $derived(designer.active);
+  const activeKey = $derived(designer.activeKey);
+  const layers = $derived(designer.layers);
+  const selectedId = $derived(designer.selectedId);
+  const selected = $derived(designer.selected);
+  const selectedIndex = $derived(designer.selectedIndex);
   const mobileBoxes = $derived(resolveMobile(layers));
   const focus = $derived(slideFocus(active?.mobile));
   const canvasImage = $derived(active ? (active.previewUrl ?? active.imageUrl) : null);
 
-  const isDirty = (draft: Draft) =>
-    draft.id === null || draft.file !== null || draft.video !== draft.savedVideo || draft.baseline !== serializeOverlay(draft.history.present, draft.mobile);
-  const activeDirty = $derived(active ? isDirty(active) : false);
-  const anyDirty = $derived(drafts.some((draft) => draft.id !== null && isDirty(draft)) || drafts.some((draft) => draft.id === null && (draft.file || draft.history.present.length > 0)));
-
-  const strip = $derived<StripSlide[]>(
-    drafts.map((draft) => ({
-      key: draft.key,
-      id: draft.id,
-      imageUrl: draft.previewUrl ?? draft.imageUrl,
-      layers: draft.history.present,
-      dirty: isDirty(draft),
-      departmentId: draft.departmentId,
-      showOnMain: draft.showOnMain,
-      title: draft.title,
-    })),
-  );
-
-  // Keep the open slide inside the filtered strip; selecting a slide or layer picks the matching panel.
-  $effect(() => {
-    if (activeKey !== null && !drafts.some((draft) => draft.key === activeKey)) activeKey = drafts[0]?.key ?? null;
-  });
+  // Selecting a layer picks the matching panel.
   $effect(() => {
     tab = selectedId ? 'layer' : 'slide';
   });
 
   onMount(() => {
     const warn = (event: BeforeUnloadEvent) => {
-      if (anyDirty) event.preventDefault();
+      if (designer.anyDirty) event.preventDefault();
     };
     // ClientRouter navigation cannot be cancelled once the router sees it, so unsaved changes are
     // guarded earlier: capture-phase click/submit listeners hold the navigation and ask first.
     const guardClick = (event: MouseEvent) => {
-      if (!anyDirty || discarding || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (!designer.anyDirty || discarding || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href]');
       if (!link || (link.target && link.target !== '_self') || link.hasAttribute('download')) return;
       const url = new URL(link.href, location.href);
@@ -192,7 +154,7 @@
     };
     const guardSubmit = (event: SubmitEvent) => {
       const form = event.target as HTMLFormElement;
-      if (!anyDirty || discarding || form.closest('[data-designer-root]')) return;
+      if (!designer.anyDirty || discarding || form.closest('[data-designer-root]')) return;
       event.preventDefault();
       event.stopPropagation();
       leave = { form, submitter: event.submitter };
@@ -204,75 +166,19 @@
       window.removeEventListener('beforeunload', warn);
       document.removeEventListener('click', guardClick, true);
       document.removeEventListener('submit', guardSubmit, true);
-      for (const draft of drafts) if (draft.previewUrl) URL.revokeObjectURL(draft.previewUrl);
+      session.dispose();
     };
   });
 
-  function update(key: string | null, change: (draft: Draft) => Draft) {
-    drafts = drafts.map((draft) => (draft.key === key ? change(draft) : draft));
-  }
-
   // ---------------------------------------------------------------- layers
 
-  function applyLayers(next: Layer[], coalesceKey?: string) {
-    update(activeKey, (draft) => ({ ...draft, history: commit(draft.history, next, coalesceKey ?? null) }));
-  }
-
-  const LIMITS: Record<string, [number, number]> = { x: [0, 100], y: [0, 100], w: [1, 100], h: [1, 100], rotation: [-180, 180] };
-
-  function patchSelected(patch: Partial<Layer>, coalesceKey?: string) {
-    if (!selected) return;
-    const safe: Record<string, unknown> = { ...patch };
-    for (const [field, [min, max]] of Object.entries(LIMITS)) {
-      if (typeof safe[field] === 'number') safe[field] = Math.min(max, Math.max(min, safe[field] as number));
-    }
-    applyLayers(patchLayer(layers, selected.id, safe as Partial<Layer>), coalesceKey ? `${selected.id}:${coalesceKey}` : undefined);
-  }
-
-  /** Width/height a hand-placed phone layer stores, taken from its rendered box. */
-  function placedSize(layer: Layer, box: Box): MobileOverride {
-    const size: MobileOverride = {};
-    if (layer.type === 'text' || layer.type === 'shape' || layer.type === 'image') size.w = box.w;
-    if (layer.type === 'shape' || layer.type === 'image') size.h = box.h;
-    return size;
-  }
-
-  /** Edits the selected layer's phone overrides (keys set to undefined are removed). */
-  function patchMobile(patch: MobileOverride, coalesceKey?: string) {
-    if (!selected) return;
-    const next = layers.map((layer) => (layer.id === selected.id ? setMobile(layer, patch) : layer));
-    applyLayers(next, coalesceKey ? `${selected.id}:m:${coalesceKey}` : undefined);
-  }
-
-  function resetSelectedMobile() {
-    if (!selected) return;
-    applyLayers(layers.map((layer) => (layer.id === selected.id ? resetMobile(layer) : layer)));
-    status = 'Phone layout of the layer reset to automatic.';
-  }
-
-  /** Clears every phone override and the focal point of the open slide. */
-  function resetSlideMobile() {
-    if (!active) return;
-    update(active.key, (draft) => ({
-      ...draft,
-      mobile: null,
-      history: commit(draft.history, draft.history.present.map(resetMobile)),
-    }));
-    status = 'Phone layout reset to automatic.';
-  }
-
-  function setFocus(next: { x: number; y: number }) {
-    update(activeKey, (draft) => ({ ...draft, mobile: { focus: next } }));
-  }
-
   function addLayer(layer: Layer) {
-    if (!active) return;
-    if (layers.length >= MAX_LAYERS) {
-      toast.error(`A slide can have at most ${MAX_LAYERS} layers.`);
+    const result = session.addLayer(layer);
+    if (result.status === 'full') {
+      toast.error(result.message);
       return;
     }
-    applyLayers([...layers, layer]);
-    selectedId = layer.id;
+    if (result.status !== 'added') return;
     status = `${TYPE_LABEL[layer.type]} added.`;
     tick().then(() => document.querySelector<HTMLElement>(`[data-layer-id="${layer.id}"]`)?.focus());
   }
@@ -324,39 +230,28 @@
   }
 
   function removeSelected() {
-    if (!selected) return;
-    applyLayers(layers.filter((layer) => layer.id !== selected.id));
-    selectedId = null;
+    if (!session.removeSelected()) return;
     status = 'Layer deleted.';
     document.querySelector<HTMLElement>('[data-designer-area] [role="group"]')?.focus();
   }
 
   function duplicateSelected() {
-    if (!selected) return;
-    if (layers.length >= MAX_LAYERS) {
-      toast.error(`A slide can have at most ${MAX_LAYERS} layers.`);
-      return;
-    }
-    const copy = duplicateLayer(selected, newLayerId());
-    const next = layers.slice();
-    next.splice(selectedIndex + 1, 0, copy);
-    applyLayers(next);
-    selectedId = copy.id;
-    status = 'Layer duplicated.';
+    const result = session.duplicateSelected();
+    if (result.status === 'full') toast.error(result.message);
+    else if (result.status === 'added') status = 'Layer duplicated.';
   }
 
-  function moveSelected(move: ZMove) {
-    if (selected) applyLayers(moveLayer(layers, selected.id, move));
+  const patchSelected = (patch: Partial<Layer>, coalesceKey?: string) => session.patchSelected(patch, coalesceKey);
+  const patchMobile = (patch: MobileOverride, coalesceKey?: string) => session.patchMobile(patch, coalesceKey);
+  const moveSelected = (move: ZMove) => session.moveSelected(move);
+
+  function resetSelectedMobile() {
+    if (session.resetSelectedMobile()) status = 'Phone layout of the layer reset to automatic.';
   }
 
-  function history(change: (current: History<Layer[]>) => History<Layer[]>) {
-    if (!active) return;
-    const next = change(active.history);
-    update(active.key, (draft) => ({ ...draft, history: next }));
-    if (selectedId && !next.present.some((layer) => layer.id === selectedId)) selectedId = null;
+  function resetSlideMobile() {
+    if (session.resetSlideMobile()) status = 'Phone layout reset to automatic.';
   }
-  const doUndo = () => history(undo);
-  const doRedo = () => history(redo);
 
   /** Rendered box of the selected layer in percent of the slide, read from the canvas DOM. */
   function measureSelected(): Box | null {
@@ -365,22 +260,12 @@
   }
 
   function nudge(dx: number, dy: number) {
-    if (!selected) return;
-    if (view === 'mobile') {
-      const box = measureSelected();
-      if (!box) return;
-      patchMobile(
-        { x: Math.min(100 - box.w, Math.max(0, box.x + dx)), y: Math.min(100 - box.h, Math.max(0, box.y + dy)), ...placedSize(selected, box) },
-        'nudge',
-      );
+    if (view !== 'mobile') {
+      session.nudge(dx, dy);
       return;
     }
-    const maxX = 'w' in selected ? 100 - selected.w : 100;
-    const maxY = 'h' in selected ? 100 - selected.h : 100;
-    patchSelected(
-      { x: Math.min(maxX, Math.max(0, selected.x + dx)), y: Math.min(maxY, Math.max(0, selected.y + dy)) },
-      'nudge',
-    );
+    const box = measureSelected();
+    if (box) session.nudge(dx, dy, box);
   }
 
   function onKeydown(event: KeyboardEvent) {
@@ -396,13 +281,13 @@
     if (target.closest('input, textarea, select, [contenteditable="true"]')) return; // native editing shortcuts
     if (mod && key === 'z') {
       event.preventDefault();
-      if (event.shiftKey) doRedo();
-      else doUndo();
+      if (event.shiftKey) session.redo();
+      else session.undo();
       return;
     }
     if (mod && key === 'y') {
       event.preventDefault();
-      doRedo();
+      session.redo();
       return;
     }
     if (mod && key === 'd' && selected) {
@@ -416,7 +301,7 @@
       event.preventDefault();
       removeSelected();
     } else if (key === 'escape') {
-      selectedId = null;
+      session.select(null);
     } else if (key === 'arrowleft') {
       event.preventDefault();
       nudge(-step, 0);
@@ -435,196 +320,69 @@
   // ---------------------------------------------------------------- slides
 
   function selectSlide(key: string) {
-    activeKey = key;
-    selectedId = null;
+    session.selectSlide(key);
     errorMessage = '';
   }
 
   function addSlide() {
-    if (drafts.some((draft) => draft.id === null)) return;
-    drafts = [
-      ...drafts,
-      {
-        key: 'new',
-        id: null,
-        imageUrl: null,
-        file: null,
-        previewUrl: null,
-        departmentId: lockedDepartmentId ?? defaultDepartmentId,
-        showOnMain: true,
-        title: '',
-        history: createHistory<Layer[]>([]),
-        mobile: null,
-        video: '',
-        savedVideo: '',
-        baseline: serializeOverlay([]),
-        imageError: '',
-      },
-    ];
-    selectSlide('new');
-  }
-
-  function setFile(file: File | null) {
-    update(activeKey, (draft) => {
-      if (draft.previewUrl) URL.revokeObjectURL(draft.previewUrl);
-      return { ...draft, file, previewUrl: file ? URL.createObjectURL(file) : null, imageError: '' };
-    });
+    if (session.addSlide()) errorMessage = '';
   }
 
   async function save() {
-    const draft = active;
-    if (!draft || saving || (!activeDirty && draft.id !== null)) return;
     errorMessage = '';
-    update(draft.key, (current) => ({ ...current, imageError: '' }));
-    if (draft.id === null && !draft.file) {
-      update(draft.key, (current) => ({ ...current, imageError: 'Choose a slide image.' }));
-      errorMessage = 'Choose a slide image before saving.';
-      selectedId = null;
-      return;
+    const result = await session.save();
+    if (result.status === 'invalid' || result.status === 'failed') errorMessage = result.message;
+    else if (result.status === 'saved') {
+      status = 'Slide saved.';
+      toast.success('Slide saved.');
     }
-    const json = serializeOverlay(draft.history.present, draft.mobile);
-    const check = parseOverlayStrict(json);
-    if (!check.ok) {
-      errorMessage = check.error;
-      return;
-    }
-
-    saving = true;
-    const form = new FormData();
-    append(form, 'overlay', json);
-    append(form, 'image', draft.file);
-    form.set('video', draft.video);
-    let result;
-    if (draft.id === null) {
-      append(form, 'departmentId', draft.departmentId);
-      append(form, 'showOnMain', draft.showOnMain);
-      result = await actions.carousels.create(form);
-    } else {
-      append(form, 'id', draft.id);
-      result = await actions.carousels.update(form);
-    }
-    saving = false;
-
-    if (result.error) {
-      const parsed = parseActionError(result.error);
-      if (parsed.fields.image) update(draft.key, (current) => ({ ...current, imageError: parsed.fields.image }));
-      errorMessage = parsed.fields.overlay || parsed.fields.image || parsed.fields.video || parsed.message || 'The slide could not be saved.';
-      return;
-    }
-
-    const slide = result.data.slide;
-    if (draft.previewUrl) URL.revokeObjectURL(draft.previewUrl);
-    update(draft.key, (current) => ({
-      ...current,
-      key: String(slide.id),
-      id: slide.id,
-      imageUrl: slide.imageUrl,
-      file: null,
-      previewUrl: null,
-      departmentId: slide.departmentId,
-      showOnMain: slide.showOnMain,
-      title: slide.title ?? '',
-      mobile: slide.mobile,
-      video: slide.video,
-      savedVideo: slide.video,
-      baseline: json,
-      imageError: '',
-    }));
-    if (activeKey === draft.key) activeKey = String(slide.id);
-    status = 'Slide saved.';
-    toast.success('Slide saved.');
   }
 
-  async function reorder(ids: number[]) {
-    const previous = drafts;
-    const positions = drafts.flatMap((draft, index) => (draft.id !== null && ids.includes(draft.id) ? [index] : []));
-    const byId = new Map(drafts.map((draft) => [draft.id, draft]));
-    const next = [...drafts];
-    positions.forEach((position, index) => (next[position] = byId.get(ids[index]) as Draft));
-    drafts = next;
-
-    const { error } = await actions.carousels.reorder({ ids });
-    if (error) {
-      drafts = previous;
-      toast.error(parseActionError(error).message);
-      return;
+  function announceReorder(result: ReorderResult) {
+    if (result.status === 'reverted') toast.error(result.message);
+    else if (result.status === 'saved') {
+      status = 'Slide order saved.';
+      toast.success('Slide order saved.');
     }
-    status = 'Slide order saved.';
-    toast.success('Slide order saved.');
   }
 
-  function moveSlide(key: string, direction: -1 | 1) {
-    const ids = drafts.flatMap((draft) => (draft.id === null ? [] : [draft.id]));
-    const from = ids.indexOf(Number(key));
-    const to = from + direction;
-    if (from < 0 || to < 0 || to >= ids.length) return;
-    [ids[from], ids[to]] = [ids[to], ids[from]];
-    reorder(ids).then(() => tick()).then(() => document.querySelector<HTMLElement>(`[data-menu-trigger="${key}"]`)?.focus());
+  const reorder = async (ids: number[]) => announceReorder(await session.reorder(ids));
+
+  async function moveSlide(key: string, direction: -1 | 1) {
+    const result = await session.moveSlide(key, direction);
+    announceReorder(result);
+    if (result.status === 'noop') return;
+    await tick();
+    document.querySelector<HTMLElement>(`[data-menu-trigger="${key}"]`)?.focus();
   }
 
   async function duplicateSlide(key: string) {
-    const draft = drafts.find((item) => item.key === key);
-    if (!draft || draft.id === null || busy) return;
-    busy = true;
-    const { data, error } = await actions.carousels.duplicate({ id: draft.id });
-    busy = false;
-    if (error) {
-      toast.error(parseActionError(error).message);
-      return;
+    const result = await session.duplicateSlide(key);
+    if (result.status === 'failed') toast.error(result.message);
+    else if (result.status === 'duplicated') {
+      errorMessage = '';
+      toast.success(result.savedVersion ? 'Slide duplicated (saved version).' : 'Slide duplicated.');
     }
-    const copy = fromSlide(data.slide);
-    const index = drafts.findIndex((item) => item.key === key);
-    drafts = [...drafts.slice(0, index + 1), copy, ...drafts.slice(index + 1)];
-    selectSlide(copy.key);
-    toast.success(isDirty(draft) ? 'Slide duplicated (saved version).' : 'Slide duplicated.');
   }
 
   async function placement(key: string, patch: { showOnMain?: boolean; departmentId?: number | null }) {
-    const draft = drafts.find((item) => item.key === key);
-    if (!draft) return;
-    if (draft.id === null) {
-      update(key, (current) => ({ ...current, ...patch }));
-      return;
-    }
-    busy = true;
-    const { data, error } = await actions.carousels.placement({ id: draft.id, ...patch });
-    busy = false;
-    if (error) {
-      toast.error(parseActionError(error).message);
-      return;
-    }
-    update(key, (current) => ({ ...current, departmentId: data.slide.departmentId, showOnMain: data.slide.showOnMain }));
-    status = 'Slide placement saved.';
+    const result = await session.placement(key, patch);
+    if (result.status === 'failed') toast.error(result.message);
+    else if (result.status === 'saved') status = 'Slide placement saved.';
   }
 
   async function confirmDelete() {
-    const draft = drafts.find((item) => item.key === deleteKey);
-    if (!draft) {
-      deleteKey = null;
-      return;
-    }
+    if (deleteKey === null) return;
+    const before = activeKey;
     deleting = true;
-    if (draft.id !== null) {
-      const { error } = await actions.carousels.delete({ id: draft.id });
-      if (error) {
-        deleting = false;
-        deleteKey = null;
-        toast.error(parseActionError(error).message || 'The slide could not be deleted.');
-        return;
-      }
-    }
-    if (draft.previewUrl) URL.revokeObjectURL(draft.previewUrl);
-    const index = drafts.findIndex((item) => item.key === draft.key);
-    drafts = drafts.filter((item) => item.key !== draft.key);
-    if (activeKey === draft.key) {
-      const rest = drafts.filter((item) => item.key !== draft.key);
-      const neighbour = rest[Math.min(index, rest.length - 1)];
-      if (neighbour) selectSlide(neighbour.key);
-      else activeKey = null;
-    }
+    const result = await session.deleteSlide(deleteKey);
     deleting = false;
     deleteKey = null;
-    toast.success('Slide deleted.');
+    if (result.status === 'failed') toast.error(result.message || 'The slide could not be deleted.');
+    else if (result.status === 'deleted') {
+      if (designer.activeKey !== before) errorMessage = '';
+      toast.success('Slide deleted.');
+    }
   }
 
   function discardAndLeave() {
@@ -665,7 +423,7 @@
         </p>
       {/if}
       <SlideStrip
-        slides={strip}
+        slides={designer.strip}
         activeKey={activeKey}
         {departments}
         {superadmin}
@@ -693,10 +451,10 @@
           {/each}
           <input bind:this={fileInput} type="file" accept="image/*" class="sr-only" tabindex="-1" aria-label="Choose a logo or image to add" onchange={uploadImageLayer} />
           <span class="mx-1 hidden h-6 w-px bg-border-strong sm:block" aria-hidden="true"></span>
-          <button type="button" class="{secondaryButtonClass} !px-2 !py-1.5" onclick={doUndo} disabled={!active.history.past.length} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)">
+          <button type="button" class="{secondaryButtonClass} !px-2 !py-1.5" onclick={() => session.undo()} disabled={!designer.canUndo} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)">
             <Undo2 class="h-4 w-4" aria-hidden="true" />
           </button>
-          <button type="button" class="{secondaryButtonClass} !px-2 !py-1.5" onclick={doRedo} disabled={!active.history.future.length} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)">
+          <button type="button" class="{secondaryButtonClass} !px-2 !py-1.5" onclick={() => session.redo()} disabled={!designer.canRedo} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)">
             <Redo2 class="h-4 w-4" aria-hidden="true" />
           </button>
           <div role="group" aria-label="Layout" class="flex gap-1">
@@ -730,9 +488,9 @@
           </button>
           {/if}
           <span class="ml-auto"></span>
-          <button type="button" class="{primaryButtonClass} !px-4 !py-1.5 text-xs" onclick={save} disabled={saving || (!activeDirty && active.id !== null)} title="Save (Ctrl/Cmd+S)">
-            {#if saving}<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />{:else}<Save class="h-4 w-4" aria-hidden="true" />{/if}
-            {active.id === null ? 'Create slide' : activeDirty ? 'Save slide' : 'Saved'}
+          <button type="button" class="{primaryButtonClass} !px-4 !py-1.5 text-xs" onclick={save} disabled={designer.saving || (!designer.activeDirty && active.id !== null)} title="Save (Ctrl/Cmd+S)">
+            {#if designer.saving}<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />{:else}<Save class="h-4 w-4" aria-hidden="true" />{/if}
+            {active.id === null ? 'Create slide' : designer.activeDirty ? 'Save slide' : 'Saved'}
           </button>
         </div>
 
@@ -749,10 +507,9 @@
             {view}
             {focus}
             {mobileBoxes}
-            onselect={(id) => (selectedId = id)}
-            onlive={(next) => update(activeKey, (draft) => ({ ...draft, history: { ...draft.history, present: next } }))}
-            oncommit={(base) =>
-              update(activeKey, (draft) => ({ ...draft, history: commit({ ...draft.history, present: base }, draft.history.present) }))}
+            onselect={(id) => session.select(id)}
+            onlive={(next) => session.live(next)}
+            oncommit={(base) => session.commitLive(base)}
           />
         </div>
         <p class="text-xs text-muted-foreground">
@@ -805,7 +562,7 @@
           {:else}
             {#key active.key}
             <SlideSettings
-              bind:file={() => active?.file ?? null, setFile}
+              bind:file={() => active?.file ?? null, (file) => session.setFile(file)}
               savedImageUrl={active.imageUrl}
               imageError={active.imageError}
               showOnMain={active.showOnMain}
@@ -815,9 +572,9 @@
               {busy}
               onplacement={(patch) => placement(active.key, patch)}
               video={active.video}
-              onvideo={(value) => update(activeKey, (draft) => ({ ...draft, video: value }))}
+              onvideo={(value) => session.setVideo(value)}
               {focus}
-              onfocus={setFocus}
+              onfocus={(next) => session.setFocus(next)}
               mobileCustomized={active.mobile !== null || layers.some((layer) => layer.mobile !== undefined)}
               onmobilereset={resetSlideMobile}
             />
@@ -840,7 +597,7 @@
                     type="button"
                     class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent {layer.id === selectedId ? 'bg-accent font-semibold text-accent-foreground ring-1 ring-brand-500' : 'text-foreground'}"
                     aria-pressed={layer.id === selectedId}
-                    onclick={() => (selectedId = layer.id)}
+                    onclick={() => session.select(layer.id)}
                   >
                     <span class="w-14 shrink-0 text-xs text-muted-foreground">{TYPE_LABEL[layer.type].split(' ')[0]}</span>
                     <span class="truncate">{layerLabel(layer) || '(empty)'}</span>

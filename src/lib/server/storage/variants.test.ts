@@ -1,14 +1,24 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { isVariantKey, originalCandidates, variantBase, variantKeyOf } from './variants';
+import { isVariantKey, originalCandidates, variantBase, variantKeyOf, variantKeysOf } from './variants';
 
 describe('variant keys', () => {
     it('derives the variant of a Highlight image only', () => {
-        expect(variantKeyOf('posts/abc.webp')).toBe('posts/abc.w640.webp');
-        expect(variantKeyOf('posts/abc.JPG')).toBe('posts/abc.w640.webp');
-        expect(variantKeyOf('posts/inline/abc.webp')).toBeNull();
-        expect(variantKeyOf('carousels/abc.webp')).toBeNull();
-        expect(variantKeyOf('posts/abc.pdf')).toBeNull();
-        expect(variantKeyOf('posts/abc.w640.webp')).toBeNull();
+        expect(variantKeyOf('posts/abc.webp', 640)).toBe('posts/abc.w640.webp');
+        expect(variantKeyOf('posts/abc.JPG', 640)).toBe('posts/abc.w640.webp');
+        expect(variantKeyOf('posts/abc.webp', 960)).toBeNull();
+        expect(variantKeyOf('posts/inline/abc.webp', 640)).toBeNull();
+        expect(variantKeyOf('posts/abc.pdf', 640)).toBeNull();
+        expect(variantKeyOf('posts/abc.w640.webp', 640)).toBeNull();
+        expect(variantKeysOf('posts/abc.webp')).toEqual(['posts/abc.w640.webp']);
+    });
+
+    it('gives a Slide photo its own width', () => {
+        expect(variantKeyOf('carousels/abc.webp', 960)).toBe('carousels/abc.w960.webp');
+        expect(variantKeyOf('carousels/abc.webp', 640)).toBeNull();
+        expect(variantKeysOf('departments/abc.webp')).toEqual([]);
+        expect(isVariantKey('carousels/abc.w960.webp')).toBe(true);
+        expect(variantBase('carousels/abc.w960.webp')).toBe('carousels/abc');
+        expect(originalCandidates('carousels/abc.w960.webp')[0]).toBe('carousels/abc.webp');
     });
 
     it('recognises variants and finds their originals', () => {

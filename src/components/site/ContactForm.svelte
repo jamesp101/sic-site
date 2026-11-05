@@ -57,15 +57,17 @@
   ];
 
   const input =
-    'block w-full rounded-xl border border-border-strong bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-destructive';
+    'block w-full rounded-xl border border-input-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-destructive';
   const label = 'mb-1.5 block text-sm font-semibold text-foreground';
 </script>
 
 <div
   bind:this={status}
   tabindex="-1"
-  role={error ? 'alert' : 'status'}
-  class="outline-none empty:hidden"
+  role="status"
+  aria-live={error ? 'assertive' : 'polite'}
+  aria-atomic="true"
+  class="outline-none"
 >
   {#if success}
     <p class="rounded-xl bg-status-article-bg p-4 text-sm font-medium text-status-article-fg">
@@ -77,6 +79,8 @@
 </div>
 
 <form method="post" {action} {onsubmit} class="mt-6 space-y-5">
+  <p class="text-sm text-muted-foreground">All fields are required.</p>
+
   {#each fields as f (f.name)}
     <div>
       <label for="contact-{f.name}" class={label}>{f.label}</label>

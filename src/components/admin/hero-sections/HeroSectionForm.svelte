@@ -58,22 +58,28 @@
   <div class="{cardClass} space-y-6 p-6">
     <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
       <Field label="Page location" id="departmentId" error={form.errors.departmentId}>
-        <select id="departmentId" bind:value={departmentId} class="{selectClass} w-full">
-          {#if isSuperAdmin}<option value="">Welcome page (main landing)</option>{/if}
-          {#each departments as dept (dept.id)}
-            <option value={String(dept.id)}>{dept.name}</option>
-          {/each}
-        </select>
+        {#snippet children(props)}
+          <select {...props} bind:value={departmentId} class="{selectClass} w-full">
+            {#if isSuperAdmin}<option value="">Welcome page (main landing)</option>{/if}
+            {#each departments as dept (dept.id)}
+              <option value={String(dept.id)}>{dept.name}</option>
+            {/each}
+          </select>
+        {/snippet}
       </Field>
 
       <Field label="Administrative title" id="title" error={form.errors.title} hint="Only visible to administrators.">
-        <input id="title" type="text" bind:value={title} class={inputClass} placeholder="e.g. Core values spotlight" />
+        {#snippet children(props)}
+          <input {...props} type="text" bind:value={title} class={inputClass} placeholder="e.g. Core values spotlight" />
+        {/snippet}
       </Field>
     </div>
 
     <div class="grid grid-cols-1 items-center gap-6 md:grid-cols-2">
       <Field label="Sort order" id="order" error={form.errors.order}>
-        <input id="order" type="number" step="1" bind:value={order} class={inputClass} />
+        {#snippet children(props)}
+          <input {...props} type="number" step="1" bind:value={order} class={inputClass} />
+        {/snippet}
       </Field>
       <label class="flex cursor-pointer items-center gap-2.5 pt-6 text-sm font-semibold text-foreground">
         <input type="checkbox" bind:checked={isActive} class="h-4 w-4 rounded border-border-strong accent-brand-800" />

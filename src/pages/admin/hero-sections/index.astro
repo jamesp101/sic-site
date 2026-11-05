@@ -1,13 +1,14 @@
 ---
 import { Eye, EyeOff, Pencil, Search, Sparkles } from '@lucide/svelte';
-import Pagination from '@/components/site/Pagination.astro';
+import ListPagination from '@/components/admin/shared/ListPagination.astro';
 import AddLink from '@/components/admin/shared/AddLink.astro';
 import EmptyRow from '@/components/admin/shared/EmptyRow.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DeleteRowButton from '@/components/admin/shared/DeleteRowButton.astro';
 import RowDeleteDialog from '@/components/admin/shared/RowDeleteDialog.svelte';
 import SortableTh from '@/components/admin/shared/SortableTh.astro';
-import { cardClass, iconLinkClass, thClass } from '@/components/admin/ui';
+import { cardClass, iconLinkClass, widePageClass, searchInputClass, thClass } from '@/components/admin/ui';
+import { primaryButtonClass, secondaryButtonClass } from '@/components/admin/shared/form-utils';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { adminPage } from '@/lib/server/admin-page';
 import { runList, sortBy } from '@/lib/server/admin-list';
@@ -18,12 +19,19 @@ const access = await adminPage(Astro.locals.user);
 if (access instanceof Response) return access;
 const { actor } = access;
 
-const include = { department: { select: { name: true } } } satisfies Prisma.HeroSectionInclude;
+const rowSelect = {
+    id: true,
+    title: true,
+    searchText: true,
+    order: true,
+    isActive: true,
+    department: { select: { name: true } },
+} satisfies Prisma.HeroSectionSelect;
 const scope = Astro.locals.adminScope;
 const list = await runList<
     Prisma.HeroSectionWhereInput,
     Prisma.HeroSectionOrderByWithRelationInput,
-    Prisma.HeroSectionGetPayload<{ include: typeof include }>
+    Prisma.HeroSectionGetPayload<{ select: typeof rowSelect }>
 >({
     url: Astro.url,
     actor,
@@ -40,9 +48,9 @@ const list = await runList<
         search: ['title', 'searchText'],
     },
     count: (where) => db.heroSection.count({ where }),
-    fetch: (args) => db.heroSection.findMany({ ...args, include }),
+    fetch: (args) => db.heroSection.findMany({ ...args, select: rowSelect }),
 });
-const { rows: sections, q, sort, dir, page, pageCount, pageHref } = list;
+const { rows: sections, q, sort, dir } = list;
 const showLocation = scope.kind === 'all';
 const columns = [
     ['title', 'Section'],
@@ -52,14 +60,14 @@ const columns = [
 ];
 ---
 
-<AppLayout title="Hero Sections" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Hero Sections' }]}>
-    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+<AppLayout title="Hero sections" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Hero sections' }]}>
+    <div class={widePageClass}>
         <PageHeader
             scoped
             title="Hero sections"
-            description="Manage rich content blocks for the landing page and department pages."
+            description="Rich content panels for the Main site and department pages."
         >
-            <AddLink href="/admin/hero-sections/create">Create hero section</AddLink>
+            <AddLink href="/admin/hero-sections/create">New hero section</AddLink>
         </PageHeader>
 
         <form
@@ -78,23 +86,17 @@ const columns = [
                     value={q}
                     placeholder="Search content…"
                     aria-label="Search hero sections"
-                    class="w-full rounded-lg border border-border-strong bg-surface py-2 pr-4 pl-10 text-sm outline-none focus:border-brand-600"
+                    class={searchInputClass}
                 />
             </div>
             <div class="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-center md:w-auto">
                 <input type="hidden" name="sort" value={sort} />
                 <input type="hidden" name="dir" value={dir} />
-                <button
-                    type="submit"
-                    class="rounded-lg bg-brand-800 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 dark:bg-gold-500 dark:text-brand-950 dark:hover:bg-gold-400"
-                >
+                <button type="submit" class={primaryButtonClass}>
                     Filter
                 </button>
                 {q && (
-                    <a
-                        href="/admin/hero-sections"
-                        class="rounded-lg border border-border-strong px-3 py-2 text-center text-sm font-semibold text-muted-foreground hover:bg-surface-alt"
-                    >
+                    <a href="/admin/hero-sections" class={secondaryButtonClass}>
                         Reset
                     </a>
                 )}
@@ -102,7 +104,7 @@ const columns = [
         </form>
 
         <div class={`${cardClass} overflow-hidden`}>
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto" tabindex="0" role="region" aria-label="Hero sections table">
                 <table class="w-full border-collapse text-left">
                     <thead>
                         <tr class="border-b border-border bg-surface-alt">
@@ -129,8 +131,8 @@ const columns = [
                                                 {hs.title || 'Untitled section'}
                                             </span>
                                             <span class="mt-0.5 block max-w-sm truncate text-xs text-muted-foreground">
-                                                {hs.content.slice(0, 75)}
-                                                {hs.content.length > 75 ? '…' : ''}
+                                                {hs.searchText.slice(0, 75)}
+                                                {hs.searchText.length > 75 ? '…' : ''}
                                             </span>
                                         </div>
                                     </div>
@@ -143,7 +145,7 @@ const columns = [
                                             </span>
                                         ) : (
                                             <span class="rounded bg-file-archive-bg px-2 py-1 text-xs font-semibold text-file-archive-fg">
-                                                Welcome page
+                                                Main site
                                             </span>
                                         )}
                                     </td>
@@ -176,13 +178,19 @@ const columns = [
                             </tr>
                         ))}
                         {sections.length === 0 && (
-                            <EmptyRow colspan={columns.length + 1}>No hero sections found.</EmptyRow>
+                            <EmptyRow
+                                colspan={columns.length + 1}
+                                noun="hero sections"
+                                filtered={Boolean(q)}
+                                createHref="/admin/hero-sections/create"
+                                createLabel="New hero section"
+                            />
                         )}
                     </tbody>
                 </table>
             </div>
         </div>
-        <Pagination page={page} pageCount={pageCount} href={pageHref} label="Hero sections pages" />
+        <ListPagination list={list} />
     </div>
     <RowDeleteDialog client:load />
 </AppLayout>

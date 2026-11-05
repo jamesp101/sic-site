@@ -164,6 +164,10 @@
       >
         <img
           src={index === 0 || loaded.has(slide.id) ? slide.imageUrl : undefined}
+          srcset={slide.imageMediumUrl && (index === 0 || loaded.has(slide.id))
+            ? `${slide.imageMediumUrl} 960w, ${slide.imageUrl} 1920w`
+            : undefined}
+          sizes={slide.imageMediumUrl ? '100vw' : undefined}
           alt=""
           width="1920"
           height="1080"

@@ -1,0 +1,112 @@
+---
+import type { DepartmentRef } from '@/lib/content-types';
+
+interface Props {
+    /** Page path the GET form submits to. */
+    action: string;
+    search?: string;
+    searchLabel?: string;
+    searchPlaceholder?: string;
+    departmentId?: number | null;
+    departments: DepartmentRef[];
+    /** Provide to show the sort control. */
+    sort?: 'newest' | 'oldest';
+    /** Extra query params preserved on submit (e.g. type, directory). */
+    hidden?: Record<string, string>;
+    /** Any filter is active: shows the clear link. */
+    active?: boolean;
+    clearHref: string;
+}
+
+const {
+    action,
+    search = '',
+    searchLabel = 'Search',
+    searchPlaceholder = 'Search…',
+    departmentId = null,
+    departments,
+    sort,
+    hidden = {},
+    active = false,
+    clearHref,
+} = Astro.props;
+
+// Nothing navigates while typing or picking an option: the form is submitted with Enter or Apply.
+const label = 'mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground';
+const control =
+    'block w-full rounded-xl border border-input-border bg-surface px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground';
+---
+
+<form
+    method="get"
+    action={action}
+    role="search"
+    aria-label={searchLabel}
+    class="flex flex-col gap-4 rounded-2xl border border-border bg-surface p-4 shadow-brand-sm md:flex-row md:items-end"
+>
+    {Object.entries(hidden).map(([name, value]) => (
+        <input type="hidden" name={name} value={value} />
+    ))}
+
+    <div class="flex-1">
+        <label for="filter-search" class={label}>
+            {searchLabel}
+        </label>
+        <input
+            id="filter-search"
+            type="search"
+            name="search"
+            value={search}
+            placeholder={searchPlaceholder}
+            autocomplete="off"
+            class={control}
+        />
+    </div>
+
+    <div class="md:w-64">
+        <label for="filter-department" class={label}>
+            Department
+        </label>
+        <select id="filter-department" name="department_id" class={control}>
+            <option value="">All departments</option>
+            {departments.map((department) => (
+                <option value={department.id} selected={department.id === departmentId}>
+                    {department.name}
+                </option>
+            ))}
+        </select>
+    </div>
+
+    {sort && (
+        <div class="md:w-44">
+            <label for="filter-sort" class={label}>
+                Sort by
+            </label>
+            <select id="filter-sort" name="sort" class={control}>
+                <option value="newest" selected={sort === 'newest'}>
+                    Newest first
+                </option>
+                <option value="oldest" selected={sort === 'oldest'}>
+                    Oldest first
+                </option>
+            </select>
+        </div>
+    )}
+
+    <div class="flex items-center gap-3">
+        <button
+            type="submit"
+            class="inline-flex items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+        >
+            Apply
+        </button>
+        {active && (
+            <a
+                href={clearHref}
+                class="inline-flex min-h-6 items-center rounded text-sm font-semibold text-link underline-offset-4 hover:underline"
+            >
+                Clear filters
+            </a>
+        )}
+    </div>
+</form>

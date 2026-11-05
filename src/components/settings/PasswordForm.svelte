@@ -5,7 +5,6 @@
   import { actionForm } from '@/components/admin/shared/action-form.svelte';
   import Field from '@/components/auth/Field.svelte';
   import Notice from '@/components/auth/Notice.svelte';
-  import { fieldErrors } from '@/components/auth/action-errors';
   import PasswordInput from '@/components/PasswordInput.svelte';
   import { Button } from '@/components/ui/button';
 
@@ -14,12 +13,7 @@
   let passwordConfirmation = $state('');
 
   const form = actionForm({
-    parse(failure) {
-      const { code, message } = failure as { code?: string; message: string };
-      const fields = fieldErrors(failure);
-      if (Object.keys(fields).length > 0) return { fields, message: '' };
-      return code === 'BAD_REQUEST' ? { fields: { currentPassword: message }, message: '' } : { fields, message };
-    },
+    fieldByCode: { BAD_REQUEST: 'currentPassword' },
     async run() {
       const result = await actions.account.changePassword({ currentPassword, password, passwordConfirmation });
       if (result.error) currentPassword = password = passwordConfirmation = '';

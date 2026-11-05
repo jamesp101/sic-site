@@ -41,7 +41,7 @@ async function seed(db: PrismaClient) {
     const manager = await db.member.create({ data: { name: 'Dean', role: 'Dean', departmentId: dept.id } });
     await db.member.update({ where: { id: report.id }, data: { parentId: manager.id } });
     await db.rateLimit.create({ data: { key: 'app:x', count: 3, lastRequest: 1_793_888_000_123n } });
-    await db.setting.create({ data: { key: 'welcome_hero_content', value: 'Welcome' } });
+    await db.setting.create({ data: { key: 'example', value: 'Welcome' } });
 }
 
 describe('copyDatabase', () => {

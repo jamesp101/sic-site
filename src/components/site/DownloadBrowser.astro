@@ -89,7 +89,8 @@ const folderLink =
                             </div>
                             {file.department && (
                                 <p class="mt-3 text-xs text-muted-foreground">
-                                    Department: <span class="font-semibold text-link">{file.department.name}</span>
+                                    Department:{' '}
+                                    <span class="font-semibold text-foreground">{file.department.name}</span>
                                 </p>
                             )}
                             {file.tags.length > 0 && (
@@ -98,7 +99,7 @@ const folderLink =
                                         <li>
                                             <a
                                                 href={downloadsHref({ search: tag })}
-                                                class="rounded-md bg-surface-alt px-2 py-0.5 text-xs font-medium text-muted-foreground hover:text-link"
+                                                class="inline-flex min-h-6 items-center rounded-md bg-surface-alt px-2 py-0.5 text-xs font-medium text-muted-foreground hover:text-link"
                                             >
                                                 {tag}
                                             </a>

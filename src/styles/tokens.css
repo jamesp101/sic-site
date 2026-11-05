@@ -31,6 +31,7 @@
     --link: var(--brand-600);
     --border: #e2e8f0;
     --border-strong: #cbd5e1;
+    --input-border: #7f8ea3; /* form control edge: 3.3:1 on white, 3.1:1 on surface-alt (WCAG 1.4.11) */
     --ring: var(--brand-600);
 
     --shadow-sm: 0 1px 3px rgb(10 46 110 / 0.08);
@@ -71,7 +72,7 @@
     --accent-foreground: var(--brand-800);
     --destructive: #dc2626;
     --destructive-foreground: #ffffff;
-    --input: var(--border-strong);
+    --input: var(--input-border);
     --chart-1: var(--brand-800);
     --chart-2: var(--gold-500);
     --chart-3: var(--brand-500);
@@ -101,6 +102,7 @@
     --link: var(--gold-300);
     --border: rgb(255 255 255 / 0.08);
     --border-strong: rgb(255 255 255 / 0.16);
+    --input-border: rgb(255 255 255 / 0.4); /* 3.8:1 on surface */
     --ring: var(--gold-400);
 
     --status-article-bg: rgb(22 101 52 / 0.35);
@@ -127,7 +129,7 @@
     --accent: rgb(255 255 255 / 0.08);
     --accent-foreground: var(--foreground);
     --destructive: #ef4444;
-    --input: rgb(255 255 255 / 0.16);
+    --input: var(--input-border);
     --sidebar: var(--surface-alt);
     --sidebar-background: var(--surface-alt);
     --sidebar-primary: var(--gold-400);

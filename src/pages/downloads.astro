@@ -1,6 +1,6 @@
 ---
 import DownloadBrowser from '@/components/site/DownloadBrowser.astro';
-import FilterBar from '@/components/site/FilterBar.svelte';
+import FilterBar from '@/components/site/FilterBar.astro';
 import PageBanner from '@/components/site/PageBanner.astro';
 import PublicLayout from '@/layouts/PublicLayout.astro';
 import { hasDownloadFilters, parseDownloadFilters } from '@/lib/post-filters';
@@ -20,7 +20,6 @@ const { departments, seo, ...listing } = await getDownloadsPage(filters);
     <section class="min-h-[50vh] py-10" aria-label="Files">
         <div class="mx-auto w-full max-w-7xl space-y-10 px-6">
             <FilterBar
-                client:idle
                 action="/downloads"
                 search={filters.search ?? ''}
                 searchLabel="Search files"

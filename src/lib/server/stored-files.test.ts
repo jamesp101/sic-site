@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createStoredFiles, type FileStore } from './stored-files';
-import { variantKeyOf } from './storage/variants';
+import { variantKeysOf } from './storage/variants';
 
 /** In-memory storage: keys that exist, with switchable failures. */
 function fakeStore() {
@@ -18,11 +18,11 @@ function fakeStore() {
             if (failing.removeKeys.has(key)) throw new Error(`remove failed: ${key}`);
             keys.delete(key);
         },
-        async putVariant(key) {
+        async putVariants(key) {
             if (failing.variant) throw new Error('variant failed');
-            const variant = variantKeyOf(key);
-            if (variant) keys.add(variant);
-            return variant;
+            const variants = variantKeysOf(key);
+            for (const variant of variants) keys.add(variant);
+            return variants;
         },
     };
     return { keys, failing, files: createStoredFiles(store) };

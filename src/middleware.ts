@@ -3,7 +3,18 @@ import { parseScope, resolveScope, SCOPE_COOKIE } from '@/lib/server/admin-scope
 import { getSession } from '@/lib/server/auth-session';
 import { isSuperAdmin } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
-import { guardRequest, isAssetPath, responseHeaders } from '@/lib/server/request-policy';
+import { finishResponse } from '@/lib/server/http-edge';
+import {
+    anonymousActionResponse,
+    guardRequest,
+    isAssetPath,
+    rejectsAnonymousAction,
+    responseHeaders,
+} from '@/lib/server/request-policy';
+
+/** Defined by `astro.config.mjs`: true for the Node adapter (Vercel compresses and conditions responses itself). */
+declare const __NODE_SERVER__: boolean;
+const edgeResponses = __NODE_SERVER__ && import.meta.env.PROD;
 
 export const onRequest = defineMiddleware(async (context, next) => {
     const { pathname } = context.url;
@@ -27,6 +38,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
         context.locals.session = null;
     }
 
+    // Before anything reads the body: a signed-out visitor never reaches an action (or its multipart parser).
+    const rejected = rejectsAnonymousAction(context.request.method, context.url, context.locals.user !== null)
+        ? anonymousActionResponse()
+        : null;
+
     const guard = guardRequest(context.url, context.locals.user !== null);
     if (guard.redirect !== null) return context.redirect(guard.redirect, 302);
 
@@ -47,15 +63,18 @@ export const onRequest = defineMiddleware(async (context, next) => {
         );
     }
 
-    const response = await next();
+    let response = rejected ?? (await next());
 
     const headers = responseHeaders({
         method: context.request.method,
         url: context.url,
         signedIn: context.locals.user !== null,
+        siteIsHttps: context.site?.protocol === 'https:',
         hasCacheControl: response.headers.has('Cache-Control'),
         hasContentSecurityPolicy: response.headers.has('Content-Security-Policy'),
     });
     for (const [name, value] of Object.entries(headers)) response.headers.set(name, value);
+    if (edgeResponses)
+        response = await finishResponse(response, { request: context.request, pathname: context.url.pathname });
     return response;
 });

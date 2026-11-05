@@ -1,13 +1,22 @@
 ---
 import { Network, Pencil, Search } from '@lucide/svelte';
-import Pagination from '@/components/site/Pagination.astro';
+import ListPagination from '@/components/admin/shared/ListPagination.astro';
 import AddLink from '@/components/admin/shared/AddLink.astro';
 import EmptyRow from '@/components/admin/shared/EmptyRow.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DeleteRowButton from '@/components/admin/shared/DeleteRowButton.astro';
 import RowDeleteDialog from '@/components/admin/shared/RowDeleteDialog.svelte';
 import SortableTh from '@/components/admin/shared/SortableTh.astro';
-import { cardClass, formatDate, iconLinkClass, selectClass, thClass } from '@/components/admin/ui';
+import {
+    cardClass,
+    formatDate,
+    iconLinkClass,
+    widePageClass,
+    searchInputClass,
+    selectClass,
+    thClass,
+} from '@/components/admin/ui';
+import { primaryButtonClass, secondaryButtonClass } from '@/components/admin/shared/form-utils';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { getInitials } from '@/lib/initials';
 import { adminPage } from '@/lib/server/admin-page';
@@ -68,7 +77,7 @@ const list = await runList<
     count: (where) => db.department.count({ where }),
     fetch: (args) => db.department.findMany({ ...args, select: rowSelect }),
 });
-const { rows, q, sort, dir, page, pageCount, pageHref } = list;
+const { rows, q, sort, dir } = list;
 
 const filtered = Boolean(q || hasLogo !== null || hasMembers !== null || hasPosts !== null);
 const columns = [
@@ -85,16 +94,13 @@ const filters = [
 ];
 ---
 
-<AppLayout
-    title="Manage Departments"
-    breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Departments' }]}
->
-    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+<AppLayout title="Departments" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Departments' }]}>
+    <div class={widePageClass}>
         <PageHeader
             title="Departments"
             description="Edit department descriptions, hero sections and logos, and manage organizational charts."
         >
-            {superadmin && <AddLink href="/admin/departments/create">Add department</AddLink>}
+            {superadmin && <AddLink href="/admin/departments/create">New department</AddLink>}
         </PageHeader>
 
         <form
@@ -113,7 +119,7 @@ const filters = [
                     value={q}
                     placeholder="Search name, slug or description…"
                     aria-label="Search departments"
-                    class="w-full rounded-lg border border-border-strong bg-surface py-2 pr-4 pl-10 text-sm outline-none focus:border-brand-600"
+                    class={searchInputClass}
                 />
             </div>
             <div class="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-center md:w-auto">
@@ -130,17 +136,11 @@ const filters = [
                 ))}
                 <input type="hidden" name="sort" value={sort} />
                 <input type="hidden" name="dir" value={dir} />
-                <button
-                    type="submit"
-                    class="rounded-lg bg-brand-800 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 dark:bg-gold-500 dark:text-brand-950 dark:hover:bg-gold-400"
-                >
+                <button type="submit" class={primaryButtonClass}>
                     Filter
                 </button>
                 {filtered && (
-                    <a
-                        href="/admin/departments"
-                        class="rounded-lg border border-border-strong px-3 py-2 text-center text-sm font-semibold text-muted-foreground hover:bg-surface-alt"
-                    >
+                    <a href="/admin/departments" class={secondaryButtonClass}>
                         Reset
                     </a>
                 )}
@@ -148,7 +148,7 @@ const filters = [
         </form>
 
         <div class={`${cardClass} overflow-hidden`}>
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto" tabindex="0" role="region" aria-label="Departments table">
                 <table class="w-full border-collapse text-left">
                     <caption class="sr-only">
                         {`Departments, sorted by ${sort} ${dir === 'asc' ? 'ascending' : 'descending'}`}
@@ -244,15 +244,19 @@ const filters = [
                             );
                         })}
                         {rows.length === 0 && (
-                            <EmptyRow colspan={columns.length + 1}>
-                                {filtered ? 'No departments match your filters.' : 'No departments yet.'}
-                            </EmptyRow>
+                            <EmptyRow
+                                colspan={columns.length + 1}
+                                noun="departments"
+                                filtered={filtered}
+                                createHref={superadmin ? '/admin/departments/create' : undefined}
+                                createLabel="New department"
+                            />
                         )}
                     </tbody>
                 </table>
             </div>
         </div>
-        <Pagination page={page} pageCount={pageCount} href={pageHref} label="Departments pages" />
+        <ListPagination list={list} />
     </div>
     {superadmin && <RowDeleteDialog client:load />}
 </AppLayout>

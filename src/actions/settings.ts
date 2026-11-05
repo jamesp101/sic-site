@@ -3,9 +3,7 @@ import { z } from 'astro/zod';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { contentField } from '@/lib/server/content-field';
 import { requireSuperAdmin } from '@/lib/server/authz';
-import { db } from '@/lib/server/db';
-
-const LANDING_SETTING_KEY = 'welcome_hero_content';
+import { setWelcomeHero } from '@/lib/server/welcome-hero';
 
 export const settings = {
     updateLanding: defineAction({
@@ -13,12 +11,7 @@ export const settings = {
         handler: (input, context) =>
             guarded(async () => {
                 requireSuperAdmin(actorOf(context));
-                const value = input.welcomeHeroContent ?? '';
-                await db.setting.upsert({
-                    where: { key: LANDING_SETTING_KEY },
-                    create: { key: LANDING_SETTING_KEY, value },
-                    update: { value },
-                });
+                await setWelcomeHero(input.welcomeHeroContent ?? '');
                 flash(context, 'Landing page settings updated successfully.');
                 return { saved: true };
             }),

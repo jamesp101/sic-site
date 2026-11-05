@@ -1,5 +1,6 @@
 ---
 import ErrorPanel from '@/components/site/ErrorPanel.astro';
+import { field } from '@/components/site/classes';
 import PublicLayout from '@/layouts/PublicLayout.astro';
 
 Astro.response.status = 404;
@@ -15,5 +16,31 @@ Astro.response.status = 404;
         code="404"
         title="Page not found"
         message="The page you are looking for does not exist or may have moved. Try one of these instead."
-    />
+    >
+        <form
+            method="get"
+            action="/posts"
+            role="search"
+            aria-label="Search posts"
+            class="mt-8 flex w-full max-w-md gap-2"
+        >
+            <label for="not-found-search" class="sr-only">
+                Search news &amp; events
+            </label>
+            <input
+                id="not-found-search"
+                type="search"
+                name="search"
+                placeholder="Search news &amp; events…"
+                autocomplete="off"
+                class={field}
+            />
+            <button
+                type="submit"
+                class="inline-flex shrink-0 items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+            >
+                Search
+            </button>
+        </form>
+    </ErrorPanel>
 </PublicLayout>

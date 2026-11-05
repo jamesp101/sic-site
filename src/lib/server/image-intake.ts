@@ -4,7 +4,7 @@
  * Free of `astro:*` imports.
  */
 import type { ImageTargetName } from '@/lib/image-compress';
-import { imageFile } from './image-file';
+import { imageFile, storedImage } from './image-file';
 import { assertUploadQuota } from './rate-limit';
 import { RequestError } from './request-error';
 import { LIMITS, publicUrl, put, type StoragePrefix } from './storage';
@@ -34,6 +34,6 @@ export async function acceptImage(
     await assertUploadQuota(userId);
     const parsed = await imageFile(LIMITS.image, target).safeParseAsync(raw);
     if (!parsed.success) throw new RequestError('BAD_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid image.');
-    const key = await put(prefix, parsed.data);
+    const key = await put(prefix, await storedImage(parsed.data));
     return { key, url: publicUrl(key) as string };
 }

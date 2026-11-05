@@ -18,16 +18,16 @@ const { nodes, root = true } = Astro.props;
                 {node.imageUrl ? (
                     <img
                         src={node.imageUrl}
-                        alt={`Photo of ${node.name}`}
+                        alt=""
                         width="64"
                         height="64"
                         loading="lazy"
                         decoding="async"
-                        class="h-16 w-16 shrink-0 rounded-full object-cover"
+                        class="h-12 w-12 shrink-0 rounded-full object-cover md:h-16 md:w-16"
                     />
                 ) : (
                     <span
-                        class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand-100 text-lg font-bold text-brand-800 dark:bg-surface-alt dark:text-gold-400"
+                        class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-100 text-base font-bold md:h-16 md:w-16 md:text-lg text-brand-800 dark:bg-surface-alt dark:text-gold-400"
                         aria-hidden="true"
                     >
                         {getInitials(node.name)}
@@ -65,6 +65,13 @@ const { nodes, root = true } = Astro.props;
         margin-left: 1.25rem;
         padding-left: 1rem;
         border-left: 2px solid var(--border-strong);
+    }
+    /* From the third level the outline stops moving right, so deep charts stay readable on a phone. */
+    @media (max-width: 767.98px) {
+        .org-list .org-list .org-list .org-list {
+            margin-left: 0;
+            padding-left: 0.75rem;
+        }
     }
     .org-item {
         margin-top: 0.75rem;

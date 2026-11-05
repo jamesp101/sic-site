@@ -26,7 +26,7 @@
   let logo = $state<File | null>(null);
 
   const form = actionForm({
-    conflictField: 'name',
+    fieldByCode: { CONFLICT: 'name' },
     run() {
       const data = new FormData();
       if (initial) append(data, 'id', initial.id);
@@ -42,20 +42,23 @@
 
 <form method="post" onsubmit={form.submit} class="relative space-y-6 rounded-xl border border-border bg-card p-6 shadow-brand-sm">
   <Field id="name" label="Department name" required error={form.errors.name}>
-    <input
-      id="name"
-      type="text"
-      required
-      maxlength="255"
-      bind:value={name}
-      class={inputClass}
-      aria-describedby={form.errors.name ? 'name-error' : undefined}
-      placeholder="e.g. College Department"
-    />
+    {#snippet children(props)}
+      <input
+        {...props}
+        type="text"
+        required
+        maxlength="255"
+        bind:value={name}
+        class={inputClass}
+        placeholder="e.g. College Department"
+      />
+    {/snippet}
   </Field>
 
   <Field id="description" label="Short description" error={form.errors.description}>
-    <textarea id="description" rows="3" bind:value={description} class={inputClass} placeholder="Brief overview of the department."></textarea>
+    {#snippet children(props)}
+      <textarea {...props} rows="3" bind:value={description} class={inputClass} placeholder="Brief overview of the department."></textarea>
+    {/snippet}
   </Field>
 
   <ImageField

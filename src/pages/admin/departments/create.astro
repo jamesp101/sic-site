@@ -1,5 +1,6 @@
 ---
 import AppLayout from '@/layouts/AppLayout.astro';
+import { formPageClass } from '@/components/admin/ui';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DepartmentForm from '@/components/admin/departments/DepartmentForm.svelte';
 import { adminPage } from '@/lib/server/admin-page';
@@ -9,17 +10,17 @@ if (page instanceof Response) return page;
 ---
 
 <AppLayout
-    title="Create Department"
+    title="New department"
     breadcrumbs={[
         { title: 'Dashboard', href: '/dashboard' },
         { title: 'Departments', href: '/admin/departments' },
-        { title: 'Create' },
+        { title: 'New' },
     ]}
 >
-    <div class="mx-auto w-full max-w-4xl space-y-6 p-6">
+    <div class={formPageClass}>
         <PageHeader
-            title="Create department"
-            description="Add a new academic department or administrative unit."
+            title="New department"
+            description="Add an academic department or administrative unit."
             backHref="/admin/departments"
         />
         <DepartmentForm client:load />

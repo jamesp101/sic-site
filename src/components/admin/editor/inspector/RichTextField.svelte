@@ -51,36 +51,33 @@
   }
 </script>
 
-<Field {label} {id}>
-  <div class="flex items-center gap-1" role="toolbar" aria-label={`${label} formatting`} aria-controls={id}>
-    <button type="button" class={buttonClass} aria-label="Bold" title="Bold" onclick={() => wrap('**', '**', 'text', 'text')}>
-      <Bold class="h-4 w-4" aria-hidden="true" />
-    </button>
-    <button type="button" class={buttonClass} aria-label="Italic" title="Italic" onclick={() => wrap('*', '*', 'text', 'text')}>
-      <Italic class="h-4 w-4" aria-hidden="true" />
-    </button>
-    <button
-      type="button"
-      class={buttonClass}
-      aria-label="Link"
-      title="Link"
-      onclick={() => wrap('[', '](https://)', 'text', 'url')}
-    >
-      <Link class="h-4 w-4" aria-hidden="true" />
-    </button>
-  </div>
-  <textarea
-    {id}
-    {rows}
-    {maxlength}
-    {value}
-    bind:this={area}
-    class={[inputClass, 'resize-y']}
-    aria-describedby={`${id}-hint`}
-    oninput={(event) => oninput(event.currentTarget.value)}
-  ></textarea>
-  <p id={`${id}-hint`} class="text-xs text-muted-foreground">
-    {#if hint}{hint}
-    {/if}Use **bold**, *italic* and [label](https://…) for links.
-  </p>
+<Field {label} {id} hint={`${hint ? `${hint} ` : ''}Use **bold**, *italic* and [label](https://…) for links.`}>
+  {#snippet children(props)}
+    <div class="flex items-center gap-1" role="toolbar" aria-label={`${label} formatting`} aria-controls={id}>
+      <button type="button" class={buttonClass} aria-label="Bold" title="Bold" onclick={() => wrap('**', '**', 'text', 'text')}>
+        <Bold class="h-4 w-4" aria-hidden="true" />
+      </button>
+      <button type="button" class={buttonClass} aria-label="Italic" title="Italic" onclick={() => wrap('*', '*', 'text', 'text')}>
+        <Italic class="h-4 w-4" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class={buttonClass}
+        aria-label="Link"
+        title="Link"
+        onclick={() => wrap('[', '](https://)', 'text', 'url')}
+      >
+        <Link class="h-4 w-4" aria-hidden="true" />
+      </button>
+    </div>
+    <textarea
+      {...props}
+      {rows}
+      {maxlength}
+      {value}
+      bind:this={area}
+      class={[inputClass, 'resize-y']}
+      oninput={(event) => oninput(event.currentTarget.value)}
+    ></textarea>
+  {/snippet}
 </Field>

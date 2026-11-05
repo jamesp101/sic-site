@@ -1,14 +1,35 @@
 ---
+import { primaryButtonClass } from '@/components/admin/shared/form-utils';
+
 interface Props {
     /** Number of columns of the table. */
     colspan: number;
+    /** Plural name of the rows, lower case ("posts"). */
+    noun: string;
+    /** A search or filter is active: the list is not empty, nothing matches. */
+    filtered: boolean;
+    /** Where a new row is created (empty variant only); omit when the actor cannot create one. */
+    createHref?: string;
+    /** Label of the create action ("New post"). */
+    createLabel?: string;
 }
 
-const { colspan } = Astro.props;
+const { colspan, noun, filtered, createHref, createLabel } = Astro.props;
 ---
 
 <tr>
-    <td colspan={colspan} class="px-6 py-12 text-center text-muted-foreground italic">
-        <slot />
+    <td colspan={colspan} class="px-6 py-12 text-center text-muted-foreground">
+        {filtered ? (
+            <p class="italic">No {noun} match your filters.</p>
+        ) : (
+            <div class="flex flex-col items-center gap-4">
+                <p class="italic">No {noun} yet.</p>
+                {createHref && createLabel && (
+                    <a href={createHref} class={primaryButtonClass}>
+                        {createLabel}
+                    </a>
+                )}
+            </div>
+        )}
     </td>
 </tr>

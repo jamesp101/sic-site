@@ -30,16 +30,16 @@
 </script>
 
 <Field {label} {id} {hint} {error} {required}>
-  <input
-    {id}
-    {type}
-    {value}
-    {disabled}
-    {maxlength}
-    {placeholder}
-    class={[inputClass, disabled && 'cursor-not-allowed opacity-60']}
-    aria-invalid={error ? true : undefined}
-    aria-describedby={error ? `${id}-error` : undefined}
-    oninput={(event) => oninput(event.currentTarget.value)}
-  />
+  {#snippet children(props)}
+    <input
+      {...props}
+      {type}
+      {value}
+      {disabled}
+      {maxlength}
+      {placeholder}
+      class={[inputClass, disabled && 'cursor-not-allowed opacity-60']}
+      oninput={(event) => oninput(event.currentTarget.value)}
+    />
+  {/snippet}
 </Field>

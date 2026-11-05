@@ -13,13 +13,16 @@ import type {
     PostType,
 } from '@/lib/content-types';
 import { clampExcerpt, excerptOf, parseContent } from '@/lib/blocks/content';
-import { slideDocument } from '@/lib/carousel-overlay-schema';
 import { buildOrgTree, type OrgNode } from '@/lib/org-tree';
 import { departmentPageSeo, postPageSeo, postsListSeo, type PageSeo } from '@/lib/seo';
-import { slideVideoView } from './carousel-admin';
 import { db } from './db';
+import { findSlides } from './slides';
 import { textContains } from './search';
 import { publicUrl, variantUrl } from './storage';
+import { CARD_WIDTH } from './storage/variants';
+import { getWelcomeHero } from './welcome-hero';
+
+const DEPARTMENT_PAGE_POSTS = 6;
 
 const departmentRefSelect = { id: true, name: true, slug: true } as const;
 
@@ -65,7 +68,7 @@ function summaryWithExcerpt(row: PostRow, excerpt: string): PostSummary {
         type: row.type as PostType,
         excerpt,
         imageUrl: publicUrl(row.highlightImagePath),
-        imageSmallUrl: variantUrl(row.highlightImagePath),
+        imageSmallUrl: variantUrl(row.highlightImagePath, CARD_WIDTH),
         startDate: row.startDate,
         endDate: row.endDate,
         isFeatured: row.isFeatured,
@@ -94,28 +97,6 @@ function toDepartmentSummary(row: DepartmentRow): DepartmentSummary {
         description: row.description,
         logoUrl: publicUrl(row.logoPath),
         updatedAt: row.updatedAt,
-    };
-}
-
-const carouselSelect = {
-    id: true,
-    title: true,
-    subtitle: true,
-    imagePath: true,
-    linkUrl: true,
-    overlay: true,
-    videoPath: true,
-    videoUrl: true,
-} satisfies Prisma.CarouselItemSelect;
-
-function toSlide(row: Prisma.CarouselItemGetPayload<{ select: typeof carouselSelect }>): CarouselSlide {
-    const doc = slideDocument(row);
-    return {
-        id: row.id,
-        imageUrl: publicUrl(row.imagePath) ?? row.imagePath,
-        layers: doc.layers,
-        mobile: doc.mobile,
-        video: slideVideoView(row),
     };
 }
 
@@ -167,18 +148,14 @@ export async function getHomeData(): Promise<{
     heroSections: HeroSectionView[];
 }> {
     const [carousel, departments, latestPosts, welcomeHero, heroes] = await Promise.all([
-        db.carouselItem.findMany({
-            where: { showOnMain: true },
-            orderBy: [{ order: 'asc' }, { id: 'asc' }],
-            select: carouselSelect,
-        }),
+        findSlides({ showOnMain: true }),
         getDepartments(),
         db.post.findMany({ orderBy: { createdAt: 'desc' }, take: 6, select: postSelect }),
-        getSetting('welcome_hero_content'),
+        getWelcomeHero(),
         heroSections(null),
     ]);
     return {
-        carousel: carousel.map(toSlide),
+        carousel,
         departments,
         latestPosts: await toPostSummaries(latestPosts),
         welcomeHero,
@@ -186,6 +163,7 @@ export async function getHomeData(): Promise<{
     };
 }
 
+/** A Department's page: its Slides, People, hero sections and its 6 newest Posts, with the total for "View all". */
 export async function getDepartmentPage(
     slug: string,
     site: URL,
@@ -193,6 +171,7 @@ export async function getDepartmentPage(
     department: DepartmentDetail;
     carousel: CarouselSlide[];
     posts: PostSummary[];
+    postCount: number;
     members: MemberNode[];
     heroSections: HeroSectionView[];
     seo: PageSeo;
@@ -203,13 +182,15 @@ export async function getDepartmentPage(
     });
     if (!row) return null;
 
-    const [carousel, posts, memberRows, heroes] = await Promise.all([
-        db.carouselItem.findMany({
+    const [carousel, posts, postCount, memberRows, heroes] = await Promise.all([
+        findSlides({ departmentId: row.id }),
+        db.post.findMany({
             where: { departmentId: row.id },
-            orderBy: [{ order: 'asc' }, { id: 'asc' }],
-            select: carouselSelect,
+            orderBy: { createdAt: 'desc' },
+            take: DEPARTMENT_PAGE_POSTS,
+            select: postSelect,
         }),
-        db.post.findMany({ where: { departmentId: row.id }, orderBy: { createdAt: 'desc' }, select: postSelect }),
+        db.post.count({ where: { departmentId: row.id } }),
         db.member.findMany({
             where: { departmentId: row.id },
             select: { id: true, name: true, role: true, imagePath: true, parentId: true, order: true },
@@ -226,15 +207,15 @@ export async function getDepartmentPage(
     });
     const members = buildOrgTree(memberRows).map(toNode);
     const department: DepartmentDetail = { ...toDepartmentSummary(row), heroContent: row.heroContent };
-    const slides = carousel.map(toSlide);
 
     return {
         department,
-        carousel: slides,
+        carousel,
         posts: await toPostSummaries(posts),
+        postCount,
         members,
         heroSections: heroes,
-        seo: departmentPageSeo(department, members, slides[0]?.imageUrl, site),
+        seo: departmentPageSeo(department, members, carousel[0]?.imageUrl, site),
     };
 }
 
@@ -345,9 +326,4 @@ export async function getSitemapData(): Promise<{
             title: post.title,
         })),
     };
-}
-
-export async function getSetting(key: string): Promise<string | null> {
-    const row = await db.setting.findUnique({ where: { key }, select: { value: true } });
-    return row?.value ?? null;
 }

@@ -1,7 +1,8 @@
 ---
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DownloadsManager from '@/components/admin/downloads/DownloadsManager.svelte';
-import Pagination from '@/components/site/Pagination.astro';
+import ListPagination from '@/components/admin/shared/ListPagination.astro';
+import { widePageClass } from '@/components/admin/ui';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { adminPage } from '@/lib/server/admin-page';
 import { runList, sortBy } from '@/lib/server/admin-list';
@@ -70,13 +71,13 @@ const manager = {
 ---
 
 <AppLayout title="Downloads" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Downloads' }]}>
-    <div class="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-6">
+    <div class={widePageClass}>
         <PageHeader
             scoped
             title="Downloads"
-            description="Upload and organise forms, manuals and resources for the public downloads page."
+            description="Upload and organize forms, manuals and resources for the public downloads page."
         />
         <DownloadsManager client:load downloads={downloads} {departments} {manager} isSuperAdmin={superadmin} />
-        <Pagination page={list.page} pageCount={list.pageCount} href={list.pageHref} label="Downloads pages" />
+        <ListPagination list={list} />
     </div>
 </AppLayout>

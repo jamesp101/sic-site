@@ -127,45 +127,53 @@
     />
 
     <Field id="member-name" label="Full name" required error={errors.name}>
-      <input
-        id="member-name"
-        type="text"
-        required
-        maxlength="255"
-        bind:value={name}
-        bind:this={nameInput}
-        class={inputClass}
-        placeholder="e.g. Juan Dela Cruz"
-      />
+      {#snippet children(props)}
+        <input
+          {...props}
+          type="text"
+          required
+          maxlength="255"
+          bind:value={name}
+          bind:this={nameInput}
+          class={inputClass}
+          placeholder="e.g. Juan Dela Cruz"
+        />
+      {/snippet}
     </Field>
 
     <Field id="member-role" label="Role / position title" required error={errors.role}>
-      <input
-        id="member-role"
-        type="text"
-        required
-        maxlength="255"
-        bind:value={role}
-        class={inputClass}
-        placeholder="e.g. Department Head"
-      />
+      {#snippet children(props)}
+        <input
+          {...props}
+          type="text"
+          required
+          maxlength="255"
+          bind:value={role}
+          class={inputClass}
+          placeholder="e.g. Department Head"
+        />
+      {/snippet}
     </Field>
 
     <Field id="member-parent" label="Reports to" error={errors.parentId} hint="Leave empty for a top-level member.">
-      <select id="member-parent" bind:value={parentId} class={inputClass}>
-        <option value="">None (top level)</option>
-        {#each options as option (option.id)}
-          <option value={String(option.id)}>{'\u00a0\u00a0'.repeat(option.depth)}{option.name} — {option.role}</option>
-        {/each}
-      </select>
+      {#snippet children(props)}
+        <select {...props} bind:value={parentId} class={inputClass}>
+          <option value="">None (top level)</option>
+          {#each options as option (option.id)}
+            <option value={String(option.id)}>{'\u00a0\u00a0'.repeat(option.depth)}{option.name} — {option.role}</option>
+          {/each}
+        </select>
+      {/snippet}
     </Field>
 
     <Field id="member-order" label="Display order" required error={errors.order} hint="Lower numbers appear first.">
-      <input id="member-order" type="number" step="1" required bind:value={order} class={inputClass} />
+      {#snippet children(props)}
+        <input {...props} type="number" step="1" required bind:value={order} class={inputClass} />
+      {/snippet}
     </Field>
 
     {#if message}
-      <p class="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{message}</p>
+      <p class="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert" tabindex="-1" data-form-message>{message}</p>
     {/if}
 
     <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">

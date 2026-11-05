@@ -146,6 +146,8 @@ model CarouselItem {
 
   department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
 
+  @@index([showOnMain, order])
+  @@index([departmentId, order])
   @@map("carousel_items")
 }
 
@@ -206,6 +208,7 @@ model Post {
 
   @@index([type])
   @@index([createdAt])
+  @@index([departmentId, createdAt])
   @@map("posts")
 }
 
@@ -225,6 +228,7 @@ model Download {
   department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([departmentId, directory])
   @@map("downloads")
 }
 
@@ -254,6 +258,7 @@ model HeroSection {
 
   department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
 
+  @@index([departmentId, isActive, order])
   @@map("hero_sections")
 }
 

@@ -33,6 +33,8 @@ export interface DepartmentDetail extends DepartmentSummary {
 export interface CarouselSlide {
     id: number;
     imageUrl: string;
+    /** Smaller version of `imageUrl` (960 px wide), when the photo has one; the server falls back to the original if it is missing. */
+    imageMediumUrl: string | null;
     /** Designer layers; a legacy slide (title / subtitle / link only) arrives already converted to layers. */
     layers: OverlayLayer[];
     /** Phone settings of the slide (photo focal point); null = centred. */

@@ -22,9 +22,11 @@
 </script>
 
 <Field {label} {id} {hint}>
-  <select {id} class={[selectClass, 'w-full']} {value} onchange={(event) => onchange(event.currentTarget.value)}>
-    {#each options as option (option.value)}
-      <option value={option.value}>{option.label}</option>
-    {/each}
-  </select>
+  {#snippet children(props)}
+    <select {...props} class={[selectClass, 'w-full']} {value} onchange={(event) => onchange(event.currentTarget.value)}>
+      {#each options as option (option.value)}
+        <option value={option.value}>{option.label}</option>
+      {/each}
+    </select>
+  {/snippet}
 </Field>

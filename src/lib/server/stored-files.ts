@@ -6,23 +6,24 @@
  * is rethrown; if it succeeds the stale files are removed. Cleanup failures are logged and never
  * undo a new file or fail the request.
  */
-import { putCardVariant } from './image-variant';
+import { storedImage } from './image-file';
+import { putVariants } from './image-variant';
 import { put, remove, type StoragePrefix } from './storage';
-import { variantKeyOf } from './storage/variants';
+import { variantKeysOf } from './storage/variants';
 
 export type StoredKey = string | null | undefined;
 
 export interface FileStore {
     put(prefix: StoragePrefix, file: File): Promise<string>;
     remove(key: string): Promise<void>;
-    /** Stores the derived variant of the stored image `key` (`variants.ts`); resolves to its key, or null when it has none. */
-    putVariant?(key: string, file: File): Promise<string | null>;
+    /** Stores the derived variants of the stored image `key` (`variants.ts`); resolves to their keys (none when it has none). */
+    putVariants?(key: string, file: File): Promise<string[]>;
 }
 
 export interface NewFile {
     prefix: StoragePrefix;
     file: File;
-    /** Also store the image's card variant in the same commit (a failure is logged; the page falls back to the original). */
+    /** Also store the image's variants in the same commit (a failure is logged; the page falls back to the original). */
     variant?: boolean;
 }
 
@@ -51,9 +52,8 @@ export function createStoredFiles(store: FileStore) {
     async function removeAll(keys: readonly StoredKey[], context: string): Promise<void> {
         await Promise.all(
             keys
-                .flatMap((key) => (key ? [key, variantKeyOf(key)] : []))
+                .flatMap((key) => (key ? [key, ...variantKeysOf(key)] : []))
                 .map(async (key) => {
-                    if (!key) return;
                     try {
                         await store.remove(key);
                     } catch (error) {
@@ -74,7 +74,7 @@ export function createStoredFiles(store: FileStore) {
 
     async function storeVariant(key: string, file: File): Promise<void> {
         try {
-            await store.putVariant?.(key, file);
+            await store.putVariants?.(key, file);
         } catch (error) {
             console.error(`Image variant failed: ${key}`, error);
         }
@@ -93,10 +93,12 @@ export function createStoredFiles(store: FileStore) {
             for (const [name, upload] of Object.entries(files ?? {})) {
                 keys[name] = undefined;
                 if (!upload) continue;
-                const key = await store.put(upload.prefix, upload.file);
+                // Image conversion (sharp) happens here, after the caller's sign-in and ownership checks.
+                const file = await storedImage(upload.file);
+                const key = await store.put(upload.prefix, file);
                 stored.push(key);
                 keys[name] = key;
-                if (upload.variant) await storeVariant(key, upload.file);
+                if (upload.variant) await storeVariant(key, file);
             }
             const result = await run(keys as StoredKeys<F>);
             await cleanup(stale, 'replaced');
@@ -126,5 +128,5 @@ export function createStoredFiles(store: FileStore) {
 export const { commitWithFiles, deleteWithFiles, discardFiles } = createStoredFiles({
     put,
     remove,
-    putVariant: putCardVariant,
+    putVariants,
 });

@@ -118,13 +118,13 @@ export function publicUrl(value: string | null | undefined): string | null {
 }
 
 /**
- * URL of the card variant of a stored image that has one (a Highlight image), else null. Always the app route:
- * it serves the original when the variant is missing (not backfilled yet, or never made), which a direct bucket
- * URL could not.
+ * URL of the `width` px variant of a stored image whose kind has one (`storage/variants.ts`), else null. Always the
+ * app route: it serves the original when the variant is missing (not backfilled yet, or never made), which a
+ * direct bucket URL could not.
  */
-export function variantUrl(value: string | null | undefined): string | null {
+export function variantUrl(value: string | null | undefined, width: number): string | null {
     if (!value || isExternal(value) || (value.startsWith('/') && !value.startsWith('/storage/'))) return null;
-    const variantKey = variantKeyOf(toKey(value));
+    const variantKey = variantKeyOf(toKey(value), width);
     return variantKey ? `/storage/${variantKey}` : null;
 }
 

@@ -2,7 +2,7 @@
 import AppLayout from '@/layouts/AppLayout.astro';
 import CarouselDesigner from '@/components/admin/carousels/CarouselDesigner.svelte';
 import { db } from '@/lib/server/db';
-import { toDesignerSlide } from '@/lib/server/carousel-admin';
+import { toDesignerSlide } from '@/lib/server/slides';
 import { departmentWhere, scopeDefaultDepartment, scopeLabel } from '@/lib/server/admin-scope';
 import { isSuperAdmin } from '@/lib/server/authz';
 import { adminPage } from '@/lib/server/admin-page';

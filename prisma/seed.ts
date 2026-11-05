@@ -14,6 +14,7 @@ import { db } from '../src/lib/server/db';
 import { hashPassword } from '../src/lib/server/password';
 import { setPasswordLogin } from '../src/lib/server/password-login';
 import { slugify } from '../src/lib/server/slug';
+import { setWelcomeHero } from '../src/lib/server/welcome-hero';
 import {
     DEMO_DEPARTMENTS,
     DEMO_DOWNLOAD_NAV_CHILDREN,
@@ -56,7 +57,25 @@ async function createUser(data: {
     });
 }
 
+/** Seeding writes demo users with known passwords: only a local database is accepted unless SEED_ALLOW_REMOTE=1. */
+function assertLocalDatabase(): void {
+    const url = process.env.DATABASE_URL ?? '';
+    if (process.env.SEED_ALLOW_REMOTE === '1' || url.startsWith('file:')) return;
+    let host = '';
+    try {
+        host = new URL(url).hostname;
+    } catch {
+        // Unparseable: treated as remote below.
+    }
+    if (['localhost', '127.0.0.1', '[::1]'].includes(host)) return;
+    throw new Error(
+        `Refusing to seed ${host ? `the database on ${host}` : 'a database that is not local'}. ` +
+            'Set SEED_ALLOW_REMOTE=1 if that is really intended.',
+    );
+}
+
 async function main() {
+    assertLocalDatabase();
     if (ifEmpty && (await db.user.count()) > 0) {
         console.log('Database already has users; skipping seed (--if-empty).');
         return;
@@ -130,11 +149,7 @@ async function main() {
     // 7. Downloads: skipped (the Laravel seeder only wrote mock text files).
 
     // 8. Settings
-    await db.setting.upsert({
-        where: { key: 'welcome_hero_content' },
-        create: { key: 'welcome_hero_content', value: WELCOME_HERO },
-        update: { value: WELCOME_HERO },
-    });
+    await setWelcomeHero(WELCOME_HERO);
 
     // 9. Hero sections
     await db.heroSection.createMany({

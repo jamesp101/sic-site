@@ -2,6 +2,7 @@
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import HeroSectionForm from '@/components/admin/hero-sections/HeroSectionForm.svelte';
 import AppLayout from '@/layouts/AppLayout.astro';
+import { widePageClass } from '@/components/admin/ui';
 import { scopeDefaultDepartment } from '@/lib/server/admin-scope';
 import { isSuperAdmin } from '@/lib/server/authz';
 import { adminPage } from '@/lib/server/admin-page';
@@ -15,17 +16,17 @@ const departments = await departmentOptions(actor);
 ---
 
 <AppLayout
-    title="Add Hero Section"
+    title="New hero section"
     breadcrumbs={[
         { title: 'Dashboard', href: '/dashboard' },
         { title: 'Hero Sections', href: '/admin/hero-sections' },
-        { title: 'Create' },
+        { title: 'New' },
     ]}
 >
-    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+    <div class={widePageClass}>
         <PageHeader
-            title="Create hero section"
-            description="Design a new hero block for the landing page or a department page with the visual editor."
+            title="New hero section"
+            description="Design a new hero panel for the Main site or a department page with the visual editor."
             backHref="/admin/hero-sections"
         />
         <HeroSectionForm

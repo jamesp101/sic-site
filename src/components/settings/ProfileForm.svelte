@@ -4,7 +4,6 @@
   import { actionForm } from '@/components/admin/shared/action-form.svelte';
   import Field from '@/components/auth/Field.svelte';
   import Notice from '@/components/auth/Notice.svelte';
-  import { fieldErrors } from '@/components/auth/action-errors';
   import PasswordInput from '@/components/PasswordInput.svelte';
   import { Button } from '@/components/ui/button';
   import { Input } from '@/components/ui/input';
@@ -18,15 +17,7 @@
   const emailChanged = $derived(email.trim().toLowerCase() !== initialEmail.toLowerCase());
 
   const form = actionForm({
-    parse(failure) {
-      const { code, message } = failure as { code?: string; message: string };
-      const fields = fieldErrors(failure);
-      if (code === 'CONFLICT') fields.email = message;
-      else if (Object.keys(fields).length === 0) {
-        return code === 'BAD_REQUEST' ? { fields: { currentPassword: message }, message: '' } : { fields, message };
-      }
-      return { fields, message: '' };
-    },
+    fieldByCode: { CONFLICT: 'email', BAD_REQUEST: 'currentPassword' },
     async run() {
       const result = await actions.account.updateProfile({
         name,

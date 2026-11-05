@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { absoluteUrl, escapeXml, siteUrl } from '@/lib/seo';
 import { listPosts } from '@/lib/server/queries';
 import { SITE } from '@/lib/site';
+import { postHref } from '@/lib/site-nav';
 
 export const GET: APIRoute = async (context) => {
     const origin = siteUrl(context);
@@ -10,7 +11,7 @@ export const GET: APIRoute = async (context) => {
 
     const items = posts
         .map((post) => {
-            const link = escapeXml(absoluteUrl(`/posts/${post.slug}`, origin));
+            const link = escapeXml(absoluteUrl(postHref(post.slug), origin));
             return [
                 '    <item>',
                 `      <title>${escapeXml(post.title)}</title>`,

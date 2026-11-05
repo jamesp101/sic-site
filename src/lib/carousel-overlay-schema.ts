@@ -23,8 +23,19 @@ import {
     type SlideMobile,
 } from './carousel-overlay';
 
-const pct = z.number().min(0).max(100);
-const span = z.number().min(1).max(100);
+/** Numeric bounds of a Layer's geometry and look: the schema below validates against them and the designer clamps edits to them. */
+export const LAYER_LIMITS = {
+    x: [0, 100],
+    y: [0, 100],
+    w: [1, 100],
+    h: [1, 100],
+    rotation: [-180, 180],
+    opacity: [10, 100],
+} as const;
+
+const range = ([min, max]: readonly [number, number]) => z.number().min(min).max(max);
+const pct = range(LAYER_LIMITS.x);
+const span = range(LAYER_LIMITS.w);
 /** Phone overrides: percent bounds, token sizes only; a position needs both x and y. */
 const mobileOverride = z
     .strictObject({
@@ -43,8 +54,8 @@ const base = {
     id: z.string().regex(/^[A-Za-z0-9_-]{1,40}$/, 'Invalid layer id.'),
     x: pct,
     y: pct,
-    rotation: z.number().min(-180).max(180).default(0),
-    opacity: z.number().int().min(10).max(100).default(100),
+    rotation: range(LAYER_LIMITS.rotation).default(0),
+    opacity: range(LAYER_LIMITS.opacity).int().default(100),
     mobile: mobileOverride.optional(),
 };
 const href = z

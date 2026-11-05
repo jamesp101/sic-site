@@ -5,7 +5,7 @@
   import { flip } from 'svelte/animate';
   import { inputClass, primaryButtonClass } from '../shared/form-utils';
   import SlideStage from './SlideStage.svelte';
-  import type { StripSlide } from './types';
+  import type { StripSlide } from '@/lib/slide-designer-session';
 
   let {
     slides,

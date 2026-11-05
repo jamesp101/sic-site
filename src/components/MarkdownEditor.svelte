@@ -1,5 +1,6 @@
 <script lang="ts">
     import { untrack } from 'svelte';
+    import { toast } from 'svelte-sonner';
     import { parseMarkdown } from '@/lib/markdown';
     import { postImage } from '@/components/admin/editor/upload';
     import { themeState } from '@/lib/theme.svelte';
@@ -156,7 +157,7 @@
             const { url } = await postImage(file, 'content');
             insertAtCursor(`![${file.name}](${url})`, '');
         } catch (error) {
-            alert(error instanceof Error ? error.message : 'An error occurred during image upload.');
+            toast.error(error instanceof Error ? error.message : 'An error occurred during image upload.');
         } finally {
             isUploading = false;
             target.value = '';

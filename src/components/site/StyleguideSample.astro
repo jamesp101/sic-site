@@ -8,7 +8,7 @@ import DownloadBrowser from './DownloadBrowser.astro';
 import EmptyState from './EmptyState.astro';
 import Eyebrow from './Eyebrow.astro';
 import FileKindBadge from './FileKindBadge.astro';
-import FilterBar from './FilterBar.svelte';
+import FilterBar from './FilterBar.astro';
 import HeroCarousel from './HeroCarousel.svelte';
 import MarkdownSection from './MarkdownSection.astro';
 import OrgChart from './OrgChart.astro';
@@ -61,6 +61,7 @@ const slides: CarouselSlide[] = [
     {
         id: 1,
         imageUrl: '/sic-seal.png',
+        imageMediumUrl: null,
         layers: legacyLayers({ title: 'Sample slide one', subtitle: 'Subtitle text', linkUrl: '/posts' }),
         mobile: null,
         video: null,
@@ -68,6 +69,7 @@ const slides: CarouselSlide[] = [
     {
         id: 2,
         imageUrl: '/sic-seal.png',
+        imageMediumUrl: null,
         layers: legacyLayers({ title: 'Sample slide two' }),
         mobile: null,
         video: null,
@@ -275,14 +277,7 @@ const h = 'mb-6 mt-16 border-b border-border pb-2 font-sans text-xl font-semibol
     {interactive && (
         <>
             <h3 class={h}>Filter bar</h3>
-            <FilterBar
-                client:idle
-                action="/styleguide"
-                search=""
-                departments={[dept]}
-                sort="newest"
-                clearHref="/styleguide"
-            />
+            <FilterBar action="/styleguide" search="" departments={[dept]} sort="newest" clearHref="/styleguide" />
             <h3 class={h}>Contact form</h3>
             <div class="max-w-xl">
                 <ContactForm client:idle action="/contact" />

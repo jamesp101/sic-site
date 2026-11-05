@@ -26,19 +26,19 @@ const stats = [
     { label: 'Posts & news', value: postsCount, note: 'Total articles & announcements', icon: FileText },
     { label: 'Downloads', value: downloadsCount, note: 'Total uploaded public files', icon: Download },
     { label: 'Departments', value: departmentsCount, note: 'Colleges & academic divisions', icon: School },
-    { label: 'Administrators', value: usersCount, note: 'Total platform admins', icon: Users },
+    { label: 'Users', value: usersCount, note: 'People who sign in to the admin', icon: Users },
 ];
 const tasks = [
     {
         href: '/admin/posts/create',
-        title: 'Write news or event',
-        text: 'Publish an article, campus event or announcement.',
-        cta: 'Get started',
+        title: 'New post',
+        text: 'Publish an article, event or announcement.',
+        cta: 'New post',
         icon: CirclePlus,
     },
     {
         href: '/admin/downloads',
-        title: 'Upload document',
+        title: 'Upload file',
         text: 'Add forms, calendars or guides to the public downloads page.',
         cta: 'Upload file',
         icon: Upload,
@@ -63,8 +63,8 @@ const tasks = [
             </h1>
             <p class="text-sm text-muted-foreground">
                 {isSuperAdmin(actor)
-                    ? 'System SuperAdmin • Full administrative controls active.'
-                    : `Department Administrator • Managing content for ${scopeLabel(scope)}.`}
+                    ? 'Superadmin • Full administrative controls active.'
+                    : `Department user • Managing content for ${scopeLabel(scope)}.`}
             </p>
             <ScopeIndicator />
         </header>

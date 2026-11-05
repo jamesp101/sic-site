@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { DEMO_DEPARTMENTS } from '../prisma/demo-data';
+import { ADMIN } from './auth-state';
 
 const PAGES = ['/', '/posts', '/downloads', '/contact', `/departments/${DEMO_DEPARTMENTS.cit.slug}`, '/login'];
 
@@ -25,4 +26,17 @@ test('skip link moves focus to main', async ({ page }) => {
     await expect(skip).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/#main$/);
+});
+
+test.describe('admin', () => {
+    test.use({ storageState: ADMIN });
+
+    test('skip link moves focus to the main landmark', async ({ page }) => {
+        await page.goto('/admin/posts');
+        await page.keyboard.press('Tab');
+        const skip = page.getByRole('link', { name: 'Skip to main content' });
+        await expect(skip).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('main#main')).toBeFocused();
+    });
 });

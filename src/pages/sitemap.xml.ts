@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { absoluteUrl, escapeXml, siteUrl } from '@/lib/seo';
-import { SITEMAP_PAGES, departmentHref } from '@/lib/site-nav';
+import { SITEMAP_PAGES, departmentHref, postHref } from '@/lib/site-nav';
 import { getSitemapData } from '@/lib/server/queries';
 
 export const GET: APIRoute = async (context) => {
@@ -28,7 +28,7 @@ export const GET: APIRoute = async (context) => {
         ...SITEMAP_PAGES.map((path) => entry(path, path === '/' || path === '/posts' ? latestPost : null)),
         ...departments.map((d) => entry(departmentHref(d.slug), d.updatedAt)),
         ...posts.map((p) =>
-            entry(`/posts/${p.slug}`, p.updatedAt, p.imageUrl ? { url: p.imageUrl, title: p.title } : null),
+            entry(postHref(p.slug), p.updatedAt, p.imageUrl ? { url: p.imageUrl, title: p.title } : null),
         ),
     ].join('\n');
 

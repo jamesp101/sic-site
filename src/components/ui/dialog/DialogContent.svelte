@@ -3,6 +3,7 @@
     import { getContext } from 'svelte';
     import { cn } from '@/lib/utils';
     import { DIALOG_CONTEXT, type DialogContext } from './context';
+    import { focusScope } from './focus-scope';
 
     let { class: className = '', children }: { class?: string; children?: Snippet } = $props();
 
@@ -16,6 +17,7 @@
         <button
             type="button"
             class="fixed inset-0 bg-black/50"
+            tabindex="-1"
             aria-label="Close"
             onclick={close}
         ></button>
@@ -26,6 +28,8 @@
             )}
             role="dialog"
             aria-modal="true"
+            tabindex="-1"
+            use:focusScope
         >
             {@render children?.()}
         </div>

@@ -6,6 +6,7 @@ import OrgChart from '@/components/site/OrgChart.astro';
 import PageBanner from '@/components/site/PageBanner.astro';
 import PostCard from '@/components/site/PostCard.astro';
 import PublicLayout from '@/layouts/PublicLayout.astro';
+import { postsHref } from '@/lib/post-filters';
 import { siteUrl } from '@/lib/seo';
 import { getDepartmentPage } from '@/lib/server/queries';
 
@@ -13,7 +14,7 @@ const { slug } = Astro.params;
 const page = slug ? await getDepartmentPage(slug, siteUrl(Astro)) : null;
 if (!page) return new Response(null, { status: 404, statusText: 'Not Found' });
 
-const { department, carousel, posts, members, heroSections, seo } = page;
+const { department, carousel, posts, postCount, members, heroSections, seo } = page;
 ---
 
 <PublicLayout {...seo}>
@@ -21,7 +22,7 @@ const { department, carousel, posts, members, heroSections, seo } = page;
         <HeroCarousel client:visible slides={carousel} tall={false} label={`${department.name} highlights`} />
     )}
 
-    <PageBanner eyebrow="Academic department" title={department.name} lead={department.description} />
+    <PageBanner eyebrow="Department" title={department.name} lead={department.description} />
 
     <MarkdownSection content={department.heroContent} />
     {heroSections.map((section) => (
@@ -44,7 +45,7 @@ const { department, carousel, posts, members, heroSections, seo } = page;
                         Leadership &amp; faculty
                     </h2>
                 </div>
-                <div class="mt-12 overflow-x-auto pb-4">
+                <div class="mt-12 overflow-x-auto pb-4" role="region" aria-labelledby="people-heading" tabindex="0">
                     <div class="mx-auto w-max min-w-full">
                         <OrgChart nodes={members} />
                     </div>
@@ -64,10 +65,10 @@ const { department, carousel, posts, members, heroSections, seo } = page;
                         Announcements &amp; events
                     </h2>
                     <a
-                        href={`/posts?department_id=${department.id}`}
+                        href={postsHref({ departmentId: department.id })}
                         class="rounded text-sm font-semibold text-link underline-offset-4 hover:underline"
                     >
-                        View all from this department &rarr;
+                        View all {postCount} from this department &rarr;
                     </a>
                 </div>
                 <div class="mt-10 grid grid-cols-1 gap-8 md:grid-cols-3">

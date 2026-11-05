@@ -2,6 +2,7 @@
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import PostForm from '@/components/admin/posts/PostForm.svelte';
 import AppLayout from '@/layouts/AppLayout.astro';
+import { widePageClass } from '@/components/admin/ui';
 import { scopeDefaultDepartment } from '@/lib/server/admin-scope';
 import { isSuperAdmin } from '@/lib/server/authz';
 import { adminPage } from '@/lib/server/admin-page';
@@ -15,16 +16,16 @@ const departments = await departmentOptions(actor);
 ---
 
 <AppLayout
-    title="Create Post"
+    title="New post"
     breadcrumbs={[
         { title: 'Dashboard', href: '/dashboard' },
         { title: 'Posts', href: '/admin/posts' },
-        { title: 'Create' },
+        { title: 'New' },
     ]}
 >
-    <div class="mx-auto w-full max-w-7xl space-y-6 p-6">
+    <div class={widePageClass}>
         <PageHeader
-            title="Create new post"
+            title="New post"
             description="Publish a new article, event advisory or announcement."
             backHref="/admin/posts"
         />

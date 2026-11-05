@@ -28,13 +28,15 @@ test('admin posts list is paginated and deletes rows through the one shared dial
 
         await page.goto(listUrl);
         await expect(rows(page)).toHaveCount(25);
+        await expect(page.getByText(`Showing 1–25 of ${TOTAL}`)).toBeVisible();
         await expect(rows(page).first()).toContainText(title(1));
         // One island for the whole list instead of one per row.
         expect(await page.locator('astro-island[component-url*="RowDeleteDialog"]').count()).toBe(1);
-        const pager = page.getByRole('navigation', { name: 'Posts pages' });
+        const pager = page.getByRole('navigation', { name: 'Pages' });
         await pager.getByRole('link', { name: 'Page 2' }).click();
         await expect(page).toHaveURL(/[?&]page=2/);
         await expect(rows(page)).toHaveCount(TOTAL - 25);
+        await expect(page.getByText(`Showing 26–${TOTAL} of ${TOTAL}`)).toBeVisible();
         await expect(rows(page).first()).toContainText(title(26));
 
         // Cancel returns focus to the row's button; confirm deletes the row.
@@ -61,4 +63,13 @@ test('admin posts list is paginated and deletes rows through the one shared dial
             await postAction(page, 'posts.delete', { json: { id } });
         }
     }
+});
+
+test('users list is searchable and says so when nothing matches', async ({ page }) => {
+    await page.goto('/admin/users');
+    await expect(rows(page).first()).toBeVisible();
+    await page.getByLabel('Search users').fill('no-such-user-anywhere');
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await expect(page).toHaveURL(/q=no-such-user-anywhere/);
+    await expect(page.getByText('No users match your filters.')).toBeVisible();
 });

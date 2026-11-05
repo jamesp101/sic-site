@@ -1,5 +1,6 @@
 ---
 import AppLayout from '@/layouts/AppLayout.astro';
+import { formPageClass } from '@/components/admin/ui';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import UserForm from '@/components/admin/users/UserForm.svelte';
 import { db } from '@/lib/server/db';
@@ -37,12 +38,8 @@ const departments = await departmentOptions(page.actor);
         { title: 'Edit user' },
     ]}
 >
-    <div class="mx-auto w-full max-w-3xl space-y-6 p-6">
-        <PageHeader
-            title="Edit user"
-            description={`Change the account details of ${user.name}.`}
-            backHref="/admin/users"
-        />
+    <div class={formPageClass}>
+        <PageHeader title="Edit user" description={`Change the details of ${user.name}.`} backHref="/admin/users" />
         <UserForm client:load {user} {departments} />
     </div>
 </AppLayout>

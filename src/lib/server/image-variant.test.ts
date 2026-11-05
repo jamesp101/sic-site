@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vite-plus/test';
-import { backfillVariants, cardVariantOf } from './image-variant';
+import { backfillVariants, variantOf } from './image-variant';
 import { createLocalDriver } from './storage/local';
 
 let dir: string;
@@ -18,11 +18,11 @@ const image = (width: number) =>
         .webp()
         .toBuffer();
 
-describe('cardVariantOf', () => {
+describe('variantOf', () => {
     it('scales down to 640 px wide and never up', async () => {
-        const wide = await cardVariantOf(new Uint8Array(await image(1600)));
+        const wide = await variantOf(new Uint8Array(await image(1600)), 640);
         expect((await sharp(new Uint8Array(await wide!.arrayBuffer())).metadata()).width).toBe(640);
-        const small = await cardVariantOf(new Uint8Array(await image(300)));
+        const small = await variantOf(new Uint8Array(await image(300)), 640);
         expect((await sharp(new Uint8Array(await small!.arrayBuffer())).metadata()).width).toBe(300);
     });
 });
@@ -47,5 +47,20 @@ describe('backfillVariants', () => {
         const second = await backfillVariants(driver);
         expect(second.created).toBe(0);
         expect(second.existing).toBe(2);
+    });
+
+    it('creates the 960 px variant of the given Slide photos only', async () => {
+        mkdirSync(path.join(dir, 'carousels'), { recursive: true });
+        writeFileSync(path.join(dir, 'carousels/s.webp'), await image(1920));
+        writeFileSync(path.join(dir, 'carousels/layer.webp'), await image(800));
+        const driver = createLocalDriver(dir);
+
+        const report = await backfillVariants(driver, ['carousels/s.webp']);
+        expect(report.created).toBe(1);
+        const variant = await driver.get('carousels/s.w960.webp');
+        expect((await sharp(new Uint8Array(await new Response(variant!.body).arrayBuffer())).metadata()).width).toBe(
+            960,
+        );
+        expect(await driver.head('carousels/layer.w960.webp')).toBeNull();
     });
 });

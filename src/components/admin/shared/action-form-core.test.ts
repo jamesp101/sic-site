@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
-import { submitActionForm, type ActionFormState } from './action-form-core';
+import { focusTarget, submitActionForm, type ActionFormState } from './action-form-core';
 import type { FormErrors } from './form-utils';
 
 const fresh = (): ActionFormState => ({ processing: false, errors: { stale: 'x' }, message: 'stale' });
@@ -50,5 +50,13 @@ describe('submitActionForm', () => {
         expect(onSuccess).toHaveBeenCalledTimes(1);
         expect(during).toBe(true);
         expect(state).toEqual({ processing: false, errors: {}, message: '' });
+    });
+});
+
+describe('focusTarget', () => {
+    it('prefers the first invalid field, then the form alert, else nothing', () => {
+        expect(focusTarget({ field: 'field', alert: 'alert' })).toBe('field');
+        expect(focusTarget({ field: null, alert: 'alert' })).toBe('alert');
+        expect(focusTarget({ field: null, alert: null })).toBeNull();
     });
 });

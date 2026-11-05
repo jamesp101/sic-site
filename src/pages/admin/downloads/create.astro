@@ -1,5 +1,6 @@
 ---
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
+import { formPageClass } from '@/components/admin/ui';
 import DownloadUploadForm from '@/components/admin/downloads/DownloadUploadForm.svelte';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { scopeDefaultDepartment } from '@/lib/server/admin-scope';
@@ -17,17 +18,17 @@ const [departments, directories] = await Promise.all([departmentOptions(actor), 
 ---
 
 <AppLayout
-    title="Upload Document"
+    title="Upload file"
     breadcrumbs={[
         { title: 'Dashboard', href: '/dashboard' },
         { title: 'Downloads', href: '/admin/downloads' },
         { title: 'Upload' },
     ]}
 >
-    <div class="mx-auto w-full max-w-3xl space-y-6 p-6">
+    <div class={formPageClass}>
         <PageHeader
-            title="Upload document"
-            description="Publish forms, manuals or resources to the downloads directory."
+            title="Upload file"
+            description="Publish a form, manual or resource to the public downloads page."
             backHref="/admin/downloads"
         />
         <DownloadUploadForm

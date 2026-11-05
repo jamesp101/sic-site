@@ -87,52 +87,63 @@
   <div class="{cardClass} grid gap-8 p-6 lg:grid-cols-3">
     <div class="space-y-5 lg:col-span-2">
       <Field label="Post title" id="title" error={form.errors.title} required>
-        <input id="title" type="text" required bind:value={title} class={inputClass} placeholder="e.g. Enrollment details for first semester" aria-invalid={form.errors.title ? 'true' : undefined} />
+        {#snippet children(props)}
+          <input {...props} type="text" required bind:value={title} class={inputClass} placeholder="e.g. Enrollment details for first semester" />
+        {/snippet}
       </Field>
 
       <Field
         label="Post slug (URL path)"
         id="slug"
         error={form.errors.slug}
-        hint={post ? 'Leave empty to regenerate from the title.' : 'Generated from the title. Edit to customise.'}
+        hint={post ? 'Leave empty to regenerate from the title.' : 'Generated from the title. Edit to customize.'}
       >
-        <input
-          id="slug"
-          type="text"
-          bind:value={slug}
-          oninput={() => (slugEdited = true)}
-          class={inputClass}
-          placeholder="e.g. enrollment-details"
-          aria-invalid={form.errors.slug ? 'true' : undefined}
-        />
+        {#snippet children(props)}
+          <input
+            {...props}
+            type="text"
+            bind:value={slug}
+            oninput={() => (slugEdited = true)}
+            class={inputClass}
+            placeholder="e.g. enrollment-details"
+          />
+        {/snippet}
       </Field>
 
       <div class="grid gap-5 md:grid-cols-2">
         <Field label="Post type" id="type" error={form.errors.type}>
-          <select id="type" bind:value={type} class="{selectClass} w-full">
-            <option value="article">Article / Story</option>
-            <option value="event">Campus Event</option>
-            <option value="announcement">Official Announcement</option>
-          </select>
+          {#snippet children(props)}
+            <select {...props} bind:value={type} class="{selectClass} w-full">
+              <option value="article">Article / Story</option>
+              <option value="event">Campus Event</option>
+              <option value="announcement">Official Announcement</option>
+            </select>
+          {/snippet}
         </Field>
 
         <Field label="Department" id="departmentId" error={form.errors.departmentId}>
-          <select id="departmentId" bind:value={departmentId} class="{selectClass} w-full">
-            {#if isSuperAdmin}<option value="">General landing page</option>{/if}
-            {#each departments as dept (dept.id)}
-              <option value={String(dept.id)}>{dept.name}</option>
-            {/each}
-          </select>
+          {#snippet children(props)}
+            <select {...props} bind:value={departmentId} class="{selectClass} w-full">
+              {#if isSuperAdmin}<option value="">General landing page</option>{/if}
+              {#each departments as dept (dept.id)}
+                <option value={String(dept.id)}>{dept.name}</option>
+              {/each}
+            </select>
+          {/snippet}
         </Field>
       </div>
 
       {#if type === 'event'}
         <div class="grid gap-5 border-t border-border pt-4 md:grid-cols-2">
           <Field label="Event start" id="startDate" error={form.errors.startDate}>
-            <input id="startDate" type="datetime-local" bind:value={startDate} class={inputClass} />
+            {#snippet children(props)}
+              <input {...props} type="datetime-local" bind:value={startDate} class={inputClass} />
+            {/snippet}
           </Field>
           <Field label="Event end" id="endDate" error={form.errors.endDate}>
-            <input id="endDate" type="datetime-local" bind:value={endDate} class={inputClass} />
+            {#snippet children(props)}
+              <input {...props} type="datetime-local" bind:value={endDate} class={inputClass} />
+            {/snippet}
           </Field>
         </div>
       {/if}

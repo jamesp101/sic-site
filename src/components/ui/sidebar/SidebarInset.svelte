@@ -5,7 +5,7 @@
     let { class: className = '', children }: { class?: string; children?: Snippet } = $props();
 </script>
 
-<main
+<div
     data-slot="sidebar-inset"
     class={cn(
         'bg-background relative flex w-full flex-1 flex-col',
@@ -14,4 +14,4 @@
     )}
 >
     {@render children?.()}
-</main>
+</div>

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
+  import { actionForm } from '@/components/admin/shared/action-form.svelte';
   import Field from '@/components/auth/Field.svelte';
   import Notice from '@/components/auth/Notice.svelte';
-  import { fieldErrors } from '@/components/auth/action-errors';
   import Heading from '@/components/Heading.svelte';
   import PasswordInput from '@/components/PasswordInput.svelte';
   import { Button } from '@/components/ui/button';
@@ -10,26 +10,19 @@
 
   let open = $state(false);
   let password = $state('');
-  let processing = $state(false);
-  let error = $state('');
-  let errors = $state<Record<string, string>>({});
+  let redirect = '/';
 
-  async function submit(event: SubmitEvent) {
-    event.preventDefault();
-    processing = true;
-    error = '';
-    errors = {};
-    const { data, error: failure } = await actions.account.deleteAccount({ password });
-    if (!failure) {
-      window.location.assign(data.redirect);
-      return;
-    }
-    processing = false;
-    password = '';
-    errors = fieldErrors(failure);
-    if (failure.code === 'BAD_REQUEST' && !errors.password) errors.password = failure.message;
-    else if (!errors.password) error = failure.message;
-  }
+  const form = actionForm({
+    fieldByCode: { BAD_REQUEST: 'password' },
+    async run() {
+      const result = await actions.account.deleteAccount({ password });
+      if (result.error) password = '';
+      else redirect = result.data.redirect;
+      return result;
+    },
+    // A full page load: the account and its session are gone.
+    onSuccess: () => window.location.assign(redirect),
+  });
 </script>
 
 <div class="space-y-6">
@@ -46,7 +39,7 @@
         {/snippet}
       </DialogTrigger>
       <DialogContent>
-        <form method="post" onsubmit={submit} class="space-y-6">
+        <form method="post" onsubmit={form.submit} class="space-y-6">
           <div class="space-y-3">
             <DialogTitle>Are you sure you want to delete your account?</DialogTitle>
             <DialogDescription>
@@ -55,9 +48,9 @@
             </DialogDescription>
           </div>
 
-          <Notice kind="error" message={error} />
+          <Notice kind="error" message={form.message} />
 
-          <Field id="delete_password" label="Password" error={errors.password}>
+          <Field id="delete_password" label="Password" error={form.errors.password}>
             {#snippet children(props)}
               <PasswordInput {...props} name="password" required autocomplete="current-password" placeholder="Password" bind:value={password} />
             {/snippet}
@@ -67,8 +60,8 @@
             <DialogClose>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="destructive" disabled={processing} data-test="confirm-delete-user-button">
-              {processing ? 'Deleting…' : 'Delete account'}
+            <Button type="submit" variant="destructive" disabled={form.processing} data-test="confirm-delete-user-button">
+              {form.processing ? 'Deleting…' : 'Delete account'}
             </Button>
           </DialogFooter>
         </form>

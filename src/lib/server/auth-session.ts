@@ -15,7 +15,7 @@ export type SignInResult = { ok: true; setCookies: string[] } | { ok: false; sta
 /** The failed sign-in answer for Better Auth's response status: 429 when rate limited, else 422. */
 export function signInFailure(status: number): { status: 422 | 429; message: string } {
     return status === 429
-        ? { status: 429, message: 'Too many attempts. Please wait a minute and try again.' }
+        ? { status: 429, message: 'Too many attempts. Please wait a few minutes and try again.' }
         : { status: 422, message: 'These credentials do not match our records.' };
 }
 

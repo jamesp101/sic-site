@@ -1,7 +1,7 @@
 import type { DepartmentDetail, MemberNode, PostDetail, PostFilters, PostSummary } from './content-types';
 import { hasPostFilters, postsHref } from './post-filters';
 import { SITE } from './site';
-import { departmentHref } from './site-nav';
+import { departmentHref, postHref } from './site-nav';
 
 type JsonLd = Record<string, unknown>;
 type Site = URL | string;
@@ -94,7 +94,7 @@ export function postsItemList(posts: PostSummary[], site: Site, name: string): J
         itemListElement: posts.map((post, index) => ({
             '@type': 'ListItem',
             position: index + 1,
-            url: absoluteUrl(`/posts/${post.slug}`, site),
+            url: absoluteUrl(postHref(post.slug), site),
             name: post.title,
         })),
     };
@@ -203,7 +203,7 @@ export interface PageSeo {
 }
 
 export function postPageSeo(post: PostDetail, site: Site): PageSeo {
-    const canonical = `/posts/${post.slug}`;
+    const canonical = postHref(post.slug);
     return {
         title: post.title,
         description: post.excerpt || post.title,

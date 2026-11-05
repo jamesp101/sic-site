@@ -16,7 +16,7 @@
 </script>
 
 {#if message}
-  <p class="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{message}</p>
+  <p class="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert" tabindex="-1" data-form-message>{message}</p>
 {/if}
 <div class="flex items-center justify-end gap-3 border-t border-border pt-4">
   <a href={cancelHref} class={secondaryButtonClass}>Cancel</a>

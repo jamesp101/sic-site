@@ -23,7 +23,7 @@ test.describe('as superadmin', () => {
         await sidebar.getByRole('link', { name: 'Departments', exact: true }).click();
         await expect(page).toHaveURL(/\/admin\/departments$/);
         await expect(page.getByRole('heading', { level: 1, name: 'Departments' })).toBeVisible();
-        await expect(page).toHaveTitle(/Manage Departments/);
+        await expect(page).toHaveTitle(/^Departments/);
 
         // GET filter forms are swapped in too.
         await page.getByLabel('Search departments').fill('business');
@@ -180,7 +180,7 @@ test.describe('as department user', () => {
         await expect(names).toHaveText([DEMO_DEPARTMENTS.cit.name]);
         await page.goto('/admin/departments?q=business');
         await expect(names).toHaveCount(0);
-        await expect(page.getByRole('link', { name: 'Add department' })).toHaveCount(0);
+        await expect(page.getByRole('link', { name: 'New department' })).toHaveCount(0);
     });
 
     test('cannot edit another department post or see it in their list', async ({ browser, page }) => {

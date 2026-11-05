@@ -181,4 +181,22 @@ describe('cleanupStorage', () => {
             expect(exists(key)).toBe(false);
         }
     });
+
+    it('keeps a Slide photo variant (960 px) with its photo and deletes it with an unreferenced one', async () => {
+        file('carousels/kept.webp', 48);
+        file('carousels/kept.w960.webp', 48);
+        file('carousels/gone.webp', 48);
+        file('carousels/gone.w960.webp', 48);
+        await db.carouselItem.create({ data: { imagePath: 'carousels/kept.webp', order: 1 } });
+
+        const dry = await cleanupStorage(deps(), { dryRun: true });
+        expect(dry.keys).toContain('carousels/gone.webp');
+        expect(dry.keys).not.toContain('carousels/kept.webp');
+        expect(dry.keys).not.toContain('carousels/kept.w960.webp');
+        expect(dry.keys).not.toContain('carousels/gone.w960.webp');
+
+        await cleanupStorage(deps());
+        for (const key of ['carousels/kept.webp', 'carousels/kept.w960.webp']) expect(exists(key)).toBe(true);
+        for (const key of ['carousels/gone.webp', 'carousels/gone.w960.webp']) expect(exists(key)).toBe(false);
+    });
 });

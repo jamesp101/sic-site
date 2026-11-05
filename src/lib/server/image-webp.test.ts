@@ -52,6 +52,49 @@ describe('toWebp', () => {
         expect(new Uint8Array(await out.arrayBuffer())).toEqual(new Uint8Array(await webp.arrayBuffer()));
     });
 
+    it('re-encodes a fitting WebP that carries EXIF or XMP, and drops the metadata', async () => {
+        const withExif = await fileOf(
+            solid(300, 200)
+                .webp()
+                .withExif({ IFD0: { Copyright: 'someone', ImageDescription: 'GPS home' } }),
+            'tagged.webp',
+            'image/webp',
+        );
+        expect((await metaOf(withExif)).exif).toBeDefined();
+        const out = await toWebp(withExif, 'content');
+        const meta = await metaOf(out);
+        expect([meta.format, meta.width, meta.height]).toEqual(['webp', 300, 200]);
+        expect(meta.exif).toBeUndefined();
+        expect(meta.xmp).toBeUndefined();
+    });
+
+    it('drops EXIF from re-encoded JPEGs', async () => {
+        const tagged = await fileOf(
+            solid(300, 200)
+                .jpeg()
+                .withExif({ IFD0: { Copyright: 'someone' } }),
+            'tagged.jpg',
+            'image/jpeg',
+        );
+        expect((await metaOf(tagged)).exif).toBeDefined();
+        expect((await metaOf(await toWebp(tagged, 'content'))).exif).toBeUndefined();
+    });
+
+    it('accepts AVIF but not other HEIF-family or non-allowlisted formats, whatever the file says', async () => {
+        const avif = await fileOf(solid(64, 48).avif(), 'photo.png', 'image/png');
+        expect((await metaOf(await toWebp(avif, 'content'))).format).toBe('webp');
+
+        const tiff = await fileOf(solid(64, 48).tiff(), 'scan.png', 'image/png');
+        await expect(toWebp(tiff, 'content')).rejects.toThrow(/Unsupported image format: tiff/);
+
+        const svg = new File(
+            ['<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40"/></svg>'],
+            'logo.png',
+            { type: 'image/png' },
+        );
+        await expect(toWebp(svg, 'content')).rejects.toThrow(/Unsupported image format: svg/);
+    });
+
     it('throws on bytes that are not an image', async () => {
         await expect(toWebp(new File(['<html>'], 'x.png', { type: 'image/png' }), 'content')).rejects.toThrow();
     });

@@ -1,14 +1,16 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
+  import { toast } from 'svelte-sonner';
   import { reloadView } from '@/lib/navigation';
   import {
     Check, Copy, ExternalLink, File, FileArchive, FileImage, FileSpreadsheet, FileText, Folder, FolderPlus, HardDrive,
-    Info, LayoutGrid, List, Loader2, RefreshCw, Search, Tag, Trash, X,
+    Info, LayoutGrid, List, Loader2, RefreshCw, Search, Tag, Trash,
   } from '@lucide/svelte';
   import ConfirmDialog from '@/components/admin/ConfirmDialog.svelte';
-  import { parseActionError, primaryButtonClass, secondaryButtonClass } from '@/components/admin/shared/form-utils';
-  import { cardClass, formatDate, selectClass } from '@/components/admin/ui';
+  import { inputClass, parseActionError, primaryButtonClass, secondaryButtonClass } from '@/components/admin/shared/form-utils';
+  import { cardClass, formatDate, searchInputClass, selectClass } from '@/components/admin/ui';
   import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+  import { Sheet, SheetContent } from '@/components/ui/sheet';
   import type { FileKind } from '@/lib/content-types';
   import { formatFileSize } from '@/lib/format';
 
@@ -71,6 +73,7 @@
 
   let viewMode = $state<'grid' | 'list'>('grid');
   let selected = $state<DownloadRow | null>(null);
+  let detailsOpen = $state(false);
   let copied = $state(false);
 
   let folderOpen = $state(false);
@@ -84,6 +87,11 @@
   let pending = $state<{ kind: 'file' | 'folder'; id: number; name: string } | null>(null);
 
   const filtered = $derived(Boolean(manager.q || manager.folder));
+
+  function openDetails(row: DownloadRow) {
+    selected = row;
+    detailsOpen = true;
+  }
 
   async function copyLink(url: string) {
     await navigator.clipboard.writeText(window.location.origin + url);
@@ -105,7 +113,7 @@
     if (error) {
       confirmBusy = false;
       confirmOpen = false;
-      alert(parseActionError(error).message);
+      toast.error(parseActionError(error).message);
       return;
     }
     await reloadView();
@@ -129,7 +137,7 @@
   }
 
   function onKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape' && selected && !confirmOpen) selected = null;
+    if (event.key === 'Escape' && detailsOpen && !confirmOpen) detailsOpen = false;
   }
 
   const chip = 'inline-flex items-center gap-1 rounded-md bg-surface-alt px-2 py-0.5 text-xs font-semibold text-muted-foreground';
@@ -155,7 +163,7 @@
         </button>
       </div>
       <button type="button" onclick={() => (folderOpen = true)} class={secondaryButtonClass}>
-        <FolderPlus class="h-4 w-4 text-gold-600" aria-hidden="true" /> New folder
+        <FolderPlus class="h-4 w-4 text-gold-600" aria-hidden="true" /> New directory
       </button>
       <a href="/admin/downloads/create" class={primaryButtonClass}>Upload file</a>
     </div>
@@ -165,7 +173,7 @@
   <form method="get" action="/admin/downloads" class="flex flex-col items-center justify-between gap-3 md:flex-row">
     <div class="relative w-full md:max-w-md">
       <Search class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-      <input type="search" name="q" value={manager.q} placeholder="Search filename, category, tags…" aria-label="Search files" class="w-full rounded-lg border border-border-strong bg-surface py-2 pr-4 pl-10 text-sm shadow-brand-sm outline-none focus:border-brand-600" />
+      <input type="search" name="q" value={manager.q} placeholder="Search file name, directory, tags…" aria-label="Search files" class={searchInputClass} />
     </div>
     <input type="hidden" name="folder" value={manager.folder} disabled={!manager.folder} />
     <input type="hidden" name="sort" value={manager.sort} />
@@ -178,9 +186,9 @@
     </div>
   </form>
 
-  <!-- Folders -->
-  <section class="space-y-2" aria-label="Folders">
-    <h2 class="font-sans text-xs font-bold tracking-wider text-muted-foreground uppercase">Folders</h2>
+  <!-- Directories -->
+  <section class="space-y-2" aria-label="Directories">
+    <h2 class="font-sans text-xs font-bold tracking-wider text-muted-foreground uppercase">Directories</h2>
     <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
       <a href={manager.allFoldersHref} aria-current={manager.folder === '' ? 'true' : undefined} class="flex items-center gap-3 rounded-xl border p-3 text-left transition-colors {manager.folder === '' ? 'border-gold-500 bg-gold-500/10' : 'border-border bg-surface hover:border-gold-400'}">
         <Folder class="h-5 w-5 shrink-0 text-gold-500" aria-hidden="true" />
@@ -193,7 +201,7 @@
             <span class="min-w-0"><span class="block truncate text-xs font-semibold">{dir.name}</span><span class="block text-xs text-muted-foreground">{dir.count} items</span></span>
           </a>
           {#if dir.id && dir.canDelete}
-            <button type="button" onclick={() => askDelete('folder', dir.id!, dir.name)} class="ml-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete folder ${dir.name}`}>
+            <button type="button" onclick={() => askDelete('folder', dir.id!, dir.name)} class="ml-1 inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete directory ${dir.name}`}>
               <Trash class="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           {/if}
@@ -220,9 +228,15 @@
     {#if downloads.length === 0}
       <div class="{cardClass} flex flex-col items-center justify-center border-2 border-dashed p-12 text-center">
         <HardDrive class="mb-3 h-12 w-12 text-muted-foreground" aria-hidden="true" />
-        <h3 class="text-base font-semibold">No documents found</h3>
-        <p class="mt-1 max-w-sm text-xs text-muted-foreground">No files match your filters. Clear them or upload a new file.</p>
-        <a href={manager.resetHref} class="{secondaryButtonClass} mt-4">Clear filters</a>
+        {#if filtered}
+          <h3 class="text-base font-semibold">No files found</h3>
+          <p class="mt-1 max-w-sm text-xs text-muted-foreground">No files match your filters. Clear them to see every file.</p>
+          <a href={manager.resetHref} class="{secondaryButtonClass} mt-4">Clear filters</a>
+        {:else}
+          <h3 class="text-base font-semibold">No files yet</h3>
+          <p class="mt-1 max-w-sm text-xs text-muted-foreground">Upload a form, manual or resource to publish it on the downloads page.</p>
+          <a href="/admin/downloads/create" class="{primaryButtonClass} mt-4">Upload file</a>
+        {/if}
       </div>
     {:else if viewMode === 'grid'}
       <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -248,7 +262,7 @@
             <div class="flex items-center justify-between border-t border-border pt-2 text-xs">
               <span class="text-xs text-muted-foreground">{formatDate(d.createdAt)}</span>
               <div class="flex items-center gap-1">
-                <button type="button" onclick={() => (selected = d)} class={iconBtn} aria-label={`Details for ${d.fileName}`}><Info class="h-4 w-4" aria-hidden="true" /></button>
+                <button type="button" onclick={() => openDetails(d)} class={iconBtn} aria-label={`Details for ${d.fileName}`}><Info class="h-4 w-4" aria-hidden="true" /></button>
                 <a href={d.url} target="_blank" rel="noopener" class={iconBtn} aria-label={`Open ${d.fileName}`}><ExternalLink class="h-4 w-4" aria-hidden="true" /></a>
                 <button type="button" onclick={() => askDelete('file', d.id, d.fileName)} class="{iconBtn} hover:!bg-destructive/10 hover:!text-destructive" aria-label={`Delete ${d.fileName}`}><Trash class="h-4 w-4" aria-hidden="true" /></button>
               </div>
@@ -257,12 +271,12 @@
         {/each}
       </ul>
     {:else}
-      <div class="{cardClass} overflow-x-auto">
+      <div class="{cardClass} overflow-x-auto" tabindex="0" role="region" aria-label="Files table">
         <table class="w-full border-collapse text-left">
           <thead>
             <tr class="border-b border-border bg-surface-alt text-xs font-bold text-muted-foreground">
               <th scope="col" class="px-6 py-3.5">Name</th>
-              <th scope="col" class="px-6 py-3.5">Category</th>
+              <th scope="col" class="px-6 py-3.5">Directory</th>
               <th scope="col" class="px-6 py-3.5">Department</th>
               <th scope="col" class="px-6 py-3.5">Size</th>
               <th scope="col" class="px-6 py-3.5">Uploaded</th>
@@ -288,7 +302,7 @@
                 <td class="px-6 py-3.5 text-xs text-muted-foreground">{formatDate(d.createdAt)}</td>
                 <td class="px-6 py-3.5">
                   <div class="flex items-center justify-end gap-1">
-                    <button type="button" onclick={() => (selected = d)} class={iconBtn} aria-label={`Details for ${d.fileName}`}><Info class="h-4 w-4" aria-hidden="true" /></button>
+                    <button type="button" onclick={() => openDetails(d)} class={iconBtn} aria-label={`Details for ${d.fileName}`}><Info class="h-4 w-4" aria-hidden="true" /></button>
                     <a href={d.url} target="_blank" rel="noopener" class={iconBtn} aria-label={`Open ${d.fileName}`}><ExternalLink class="h-4 w-4" aria-hidden="true" /></a>
                     <button type="button" onclick={() => askDelete('file', d.id, d.fileName)} class="{iconBtn} hover:!bg-destructive/10 hover:!text-destructive" aria-label={`Delete ${d.fileName}`}><Trash class="h-4 w-4" aria-hidden="true" /></button>
                   </div>
@@ -302,14 +316,14 @@
   </section>
 </div>
 
-<!-- New folder -->
+<!-- New directory -->
 <Dialog bind:open={folderOpen}>
   <DialogContent class="max-w-md border-border bg-surface shadow-brand-xl">
     <form method="post" onsubmit={createFolder} class="space-y-4">
-      <DialogTitle>New folder</DialogTitle>
+      <DialogTitle>New directory</DialogTitle>
       <div class="space-y-1.5">
-        <label for="folder_name" class="block text-sm font-semibold">Folder name</label>
-        <input id="folder_name" type="text" required maxlength="255" bind:value={folderName} placeholder="e.g. Student handbooks" class="w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm outline-none focus:border-brand-600" />
+        <label for="folder_name" class="block text-sm font-semibold">Directory name</label>
+        <input id="folder_name" type="text" required maxlength="255" bind:value={folderName} placeholder="e.g. Student handbooks" class="{inputClass} w-full" />
       </div>
       <div class="space-y-1.5">
         <label for="folder_dept" class="block text-sm font-semibold">Owning department</label>
@@ -322,7 +336,7 @@
       <div class="flex justify-end gap-3 pt-2">
         <button type="button" onclick={() => (folderOpen = false)} class={secondaryButtonClass}>Cancel</button>
         <button type="submit" disabled={folderBusy} class={primaryButtonClass}>
-          {#if folderBusy}<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />{/if} Create folder
+          {#if folderBusy}<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />{/if} Create directory
         </button>
       </div>
     </form>
@@ -331,8 +345,8 @@
 
 <ConfirmDialog
   bind:open={confirmOpen}
-  title={pending?.kind === 'folder' ? `Delete folder “${pending.name}”?` : `Delete “${pending?.name ?? ''}”?`}
-  description={pending?.kind === 'folder' ? 'Files in this folder are kept.' : 'The file will be permanently removed. This cannot be undone.'}
+  title={pending?.kind === 'folder' ? `Delete directory “${pending.name}”?` : `Delete “${pending?.name ?? ''}”?`}
+  description={pending?.kind === 'folder' ? 'Files in this directory are kept.' : 'The file will be permanently removed. This cannot be undone.'}
   confirmLabel="Delete"
   destructive
   processing={confirmBusy}
@@ -340,16 +354,14 @@
 />
 
 <!-- File details drawer -->
-{#if selected}
-  {@const d = selected}
-  {@const Icon = kindIcon[d.kind]}
-  <div class="fixed inset-0 z-50 flex justify-end">
-    <button type="button" class="fixed inset-0 bg-black/50" aria-label="Close details" onclick={() => (selected = null)}></button>
-    <div role="dialog" aria-modal="true" aria-label="File details" class="relative z-10 flex h-full w-full max-w-md flex-col justify-between overflow-y-auto border-l border-border bg-surface p-6 shadow-brand-xl">
+<Sheet bind:open={detailsOpen}>
+  <SheetContent label="File details" class="w-full justify-between gap-0 border-l border-border bg-surface shadow-brand-xl sm:max-w-md">
+    {#if selected}
+      {@const d = selected}
+      {@const Icon = kindIcon[d.kind]}
       <div class="space-y-6">
-        <div class="flex items-center justify-between border-b border-border pb-4">
+        <div class="border-b border-border pb-4 pr-8">
           <h2 class="font-serif text-lg font-bold">File details</h2>
-          <button type="button" onclick={() => (selected = null)} class={iconBtn} aria-label="Close"><X class="h-5 w-5" aria-hidden="true" /></button>
         </div>
         <div class="flex flex-col items-center space-y-3 rounded-2xl p-8 text-center {kindClass[d.kind]}">
           <Icon class="h-10 w-10" aria-hidden="true" />
@@ -359,8 +371,8 @@
           </div>
         </div>
         <dl class="space-y-3 text-xs">
-          <div class="flex justify-between border-b border-border py-2"><dt class="text-muted-foreground">Folder</dt><dd class="font-semibold">{d.directory}</dd></div>
-          <div class="flex justify-between border-b border-border py-2"><dt class="text-muted-foreground">Department</dt><dd class="font-semibold text-link">{d.departmentName ?? 'General public'}</dd></div>
+          <div class="flex justify-between border-b border-border py-2"><dt class="text-muted-foreground">Directory</dt><dd class="font-semibold">{d.directory}</dd></div>
+          <div class="flex justify-between border-b border-border py-2"><dt class="text-muted-foreground">Department</dt><dd class="font-semibold text-link">{d.departmentName ?? 'General'}</dd></div>
           <div class="flex justify-between border-b border-border py-2"><dt class="text-muted-foreground">Uploaded</dt><dd class="font-mono">{formatDate(d.createdAt, true)}</dd></div>
           {#if d.tags.length > 0}
             <div class="space-y-1.5 border-b border-border py-2"><dt class="text-muted-foreground">Tags</dt><dd class="flex flex-wrap gap-1">{#each d.tags as tag (tag)}<span class={chip}><Tag class="h-3 w-3" aria-hidden="true" /> {tag}</span>{/each}</dd></div>
@@ -369,11 +381,12 @@
         <div class="space-y-1.5">
           <label for="direct-url" class="block text-xs font-semibold text-muted-foreground">Direct access URL</label>
           <div class="flex items-center gap-2">
-            <input id="direct-url" type="text" readonly value={typeof window === 'undefined' ? d.url : window.location.origin + d.url} class="w-full rounded-lg border border-border-strong bg-surface-alt px-3 py-1.5 font-mono text-xs outline-none" />
+            <input id="direct-url" type="text" readonly value={typeof window === 'undefined' ? d.url : window.location.origin + d.url} class="w-full rounded-lg border border-input-border bg-surface-alt px-3 py-1.5 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             <button type="button" onclick={() => copyLink(d.url)} class="{primaryButtonClass} shrink-0 !px-3 !py-1.5 text-xs">
               {#if copied}<Check class="h-3.5 w-3.5" aria-hidden="true" /> Copied{:else}<Copy class="h-3.5 w-3.5" aria-hidden="true" /> Copy{/if}
             </button>
           </div>
+          <p class="sr-only" role="status">{copied ? 'Link copied' : ''}</p>
         </div>
       </div>
       <div class="flex items-center justify-between border-t border-border pt-6">
@@ -382,6 +395,6 @@
         </button>
         <a href={d.url} target="_blank" rel="noopener" class={primaryButtonClass}><ExternalLink class="h-4 w-4" aria-hidden="true" /> Open file</a>
       </div>
-    </div>
-  </div>
-{/if}
+    {/if}
+  </SheetContent>
+</Sheet>

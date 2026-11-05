@@ -85,7 +85,7 @@
       <span class="mb-1 text-sm font-medium"><span class="font-bold text-link">Click to choose a file</span> or drag and drop</span>
       <span class="text-xs text-muted-foreground">PDF, DOCX, XLSX, images, ZIP (max {maxMb} MB)</span>
     </label>
-    <input id="file" type="file" required class="sr-only" onchange={onFile} aria-invalid={form.errors.file ? 'true' : undefined} />
+    <input id="file" type="file" required class="sr-only" onchange={onFile} aria-invalid={form.errors.file ? 'true' : undefined} aria-describedby={form.errors.file ? 'file-error' : undefined} />
     {#if file}
       <p class="flex items-center gap-2 rounded-lg border border-gold-500/30 bg-gold-500/10 px-3 py-2 text-xs font-semibold text-foreground">
         <Upload class="h-4 w-4 shrink-0" aria-hidden="true" /> Ready to upload: {file.name} ({formatFileSize(file.size)})
@@ -94,35 +94,43 @@
     {#if progress !== null}
       <p class="text-xs font-semibold text-muted-foreground" role="status">Uploading… {progress}%</p>
     {/if}
-    {#if form.errors.file}<p class="text-xs text-destructive" role="alert">{form.errors.file}</p>{/if}
+    {#if form.errors.file}<p id="file-error" class="text-xs text-destructive" role="alert">{form.errors.file}</p>{/if}
   </div>
 
   <Field label="Display name" id="fileName" error={form.errors.fileName} required>
-    <input id="fileName" type="text" required bind:value={fileName} class={inputClass} placeholder="e.g. Student Handbook 2026" />
+    {#snippet children(props)}
+      <input {...props} type="text" required bind:value={fileName} class={inputClass} placeholder="e.g. Student Handbook 2026" />
+    {/snippet}
   </Field>
 
   <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-    <Field label="Category / folder" id="directory" error={form.errors.directoryName} hint={`Defaults to ${defaultDirectory}.`}>
-      <div class="relative">
-        <Folder class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-        <input id="directory" type="text" list="directory-list" bind:value={directory} class="{inputClass} pl-10" placeholder="e.g. Handbook, Enrollment" />
-        <datalist id="directory-list">{#each directories as name (name)}<option value={name}></option>{/each}</datalist>
-      </div>
+    <Field label="Directory" id="directory" error={form.errors.directoryName} hint={`Defaults to ${defaultDirectory}.`}>
+      {#snippet children(props)}
+        <div class="relative">
+          <Folder class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <input {...props} type="text" list="directory-list" bind:value={directory} class="{inputClass} pl-10" placeholder="e.g. Handbook, Enrollment" />
+          <datalist id="directory-list">{#each directories as name (name)}<option value={name}></option>{/each}</datalist>
+        </div>
+      {/snippet}
     </Field>
 
     <Field label="Owning department" id="departmentId" error={form.errors.departmentId}>
-      <select id="departmentId" bind:value={departmentId} class="{selectClass} w-full">
-        {#if isSuperAdmin}<option value="">General (no specific department)</option>{/if}
-        {#each departments as dept (dept.id)}<option value={String(dept.id)}>{dept.name}</option>{/each}
-      </select>
+      {#snippet children(props)}
+        <select {...props} bind:value={departmentId} class="{selectClass} w-full">
+          {#if isSuperAdmin}<option value="">General (no specific department)</option>{/if}
+          {#each departments as dept (dept.id)}<option value={String(dept.id)}>{dept.name}</option>{/each}
+        </select>
+      {/snippet}
     </Field>
   </div>
 
   <Field label="Tags (comma-separated)" id="tags" error={form.errors.tags}>
-    <div class="relative">
-      <Tag class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-      <input id="tags" type="text" bind:value={tags} class="{inputClass} pl-10" placeholder="e.g. freshman, manual, 2026" />
-    </div>
+    {#snippet children(props)}
+      <div class="relative">
+        <Tag class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <input {...props} type="text" bind:value={tags} class="{inputClass} pl-10" placeholder="e.g. freshman, manual, 2026" />
+      </div>
+    {/snippet}
   </Field>
 
   <FormActions cancelHref="/admin/downloads" processing={form.processing} message={form.message} submitLabel="Upload and publish" />

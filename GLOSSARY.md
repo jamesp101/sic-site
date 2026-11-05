@@ -75,7 +75,7 @@ The lead image of a Post.
 _Avoid_: cover, thumbnail, banner
 
 **Image variant**:
-The smaller copy (640 px WebP) of a Highlight image, stored next to the original and used by Post cards.
+A smaller WebP copy of an uploaded image, stored next to the original: 640 px for a Highlight image (Post cards and the Post hero), 960 px for a Slide photo.
 _Avoid_: thumbnail, resized image
 
 **Rich content**:

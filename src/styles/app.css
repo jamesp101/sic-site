@@ -32,6 +32,7 @@
     --color-foreground: var(--foreground);
     --color-link: var(--link);
     --color-border-strong: var(--border-strong);
+    --color-input-border: var(--input-border);
 
     --color-status-article-bg: var(--status-article-bg);
     --color-status-article-fg: var(--status-article-fg);

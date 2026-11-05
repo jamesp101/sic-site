@@ -12,7 +12,7 @@ export const btnOutline = `${button} border border-border-strong bg-surface text
 export const btnOnDark = `${button} border border-white/30 text-white hover:bg-white/10`;
 
 export const field =
-    'block w-full rounded-xl border border-border-strong bg-surface px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground';
+    'block w-full rounded-xl border border-input-border bg-surface px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground';
 
 export const card =
     'rounded-2xl border border-border bg-surface shadow-brand-sm transition duration-200 hover:-translate-y-1 hover:shadow-brand-md';

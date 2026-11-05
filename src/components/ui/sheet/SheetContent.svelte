@@ -5,13 +5,17 @@
     import { fly } from 'svelte/transition';
     import { cn } from '@/lib/utils';
     import { SHEET_CONTEXT, type SheetContext } from './context';
+    import { focusScope } from '../dialog/focus-scope';
 
     let {
         side = 'right',
+        label,
         class: className = '',
         children,
     }: {
         side?: 'right' | 'left' | 'top' | 'bottom';
+        /** Accessible name of the panel. */
+        label: string;
         class?: string;
         children?: Snippet;
     } = $props();
@@ -53,10 +57,16 @@
         <button
             type="button"
             class="fixed inset-0 border-0 bg-black/50"
+            tabindex="-1"
             aria-label="Close"
             onclick={close}
         ></button>
         <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={label}
+            tabindex="-1"
+            use:focusScope
             class={cn(
                 'fixed relative flex flex-col gap-4 overflow-y-auto border-none bg-background p-6 shadow-lg',
                 sideClasses[side] ?? sideClasses.right,

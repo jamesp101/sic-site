@@ -50,6 +50,23 @@ test('post filters work without JavaScript', async ({ browser }) => {
     await page.context().close();
 });
 
+test('post filters apply on Enter or Apply, never while typing or selecting', async ({ page }) => {
+    await page.goto('/posts');
+    const search = page.getByRole('searchbox', { name: 'Search posts' });
+    await search.pressSequentially('zzz-no-such-post', { delay: 20 });
+    await page.getByLabel('Sort by').selectOption('oldest');
+    await page.waitForTimeout(800);
+    expect(new URL(page.url()).search).toBe('');
+
+    await search.press('Enter');
+    await expect(page).toHaveURL(/search=zzz-no-such-post/);
+    await expect(page).toHaveURL(/sort=oldest/);
+    await expect(page.getByText('No posts found')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await expect(page).toHaveURL(/search=zzz-no-such-post/);
+});
+
 test('guests are redirected from admin areas', async ({ page }) => {
     for (const path of ['/dashboard', '/admin/posts', '/settings/profile']) {
         await page.goto(path);

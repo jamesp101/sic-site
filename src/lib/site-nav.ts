@@ -39,6 +39,11 @@ export function departmentHref(slug: string): string {
     return `/departments/${slug}`;
 }
 
+/** Public page of a Post. */
+export function postHref(slug: string): string {
+    return `/posts/${slug}`;
+}
+
 /** Header items: stored links when any exist, otherwise the default menu. */
 export function headerItems(navLinks: NavLinkView[], departments: { name: string; slug: string }[]): NavItem[] {
     const departmentLinks = departments.map((d) => ({ label: d.name, href: departmentHref(d.slug) }));

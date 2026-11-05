@@ -1,5 +1,6 @@
 ---
 import AppLayout from '@/layouts/AppLayout.astro';
+import { formPageClass } from '@/components/admin/ui';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import UserForm from '@/components/admin/users/UserForm.svelte';
 import { departmentOptions } from '@/lib/server/department-access';
@@ -12,17 +13,17 @@ const departments = await departmentOptions(page.actor);
 ---
 
 <AppLayout
-    title="Add User"
+    title="New user"
     breadcrumbs={[
         { title: 'Dashboard', href: '/dashboard' },
         { title: 'Users', href: '/admin/users' },
-        { title: 'Add user' },
+        { title: 'New user' },
     ]}
 >
-    <div class="mx-auto w-full max-w-3xl space-y-6 p-6">
+    <div class={formPageClass}>
         <PageHeader
-            title="Add user"
-            description="Create an admin account and assign its role."
+            title="New user"
+            description="Add a person who signs in to the admin and set their role."
             backHref="/admin/users"
         />
         <UserForm client:load {departments} />

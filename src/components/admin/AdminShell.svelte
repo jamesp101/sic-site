@@ -36,11 +36,19 @@
   });
 </script>
 
+<a
+  href="#main"
+  class="sr-only z-100 rounded-lg bg-gold-500 px-4 py-2 text-sm font-semibold text-brand-950 focus:not-sr-only focus:fixed focus:top-4 focus:left-4"
+>
+  Skip to main content
+</a>
 <AppShell {sidebarOpen}>
   <AppSidebar {user} {currentPath} {scope} {scopeDepartments} {scopeLocked} />
   <AppContent class="overflow-x-hidden">
     <AppSidebarHeader {breadcrumbs} />
-    {@render children?.()}
+    <main id="main" tabindex="-1" class="flex flex-1 flex-col outline-none">
+      {@render children?.()}
+    </main>
   </AppContent>
   <Toaster />
 </AppShell>

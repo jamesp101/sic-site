@@ -25,6 +25,11 @@ export interface ActionFormCore {
     parse: (error: unknown) => FormErrors;
 }
 
+/** Where focus goes after a failed submit: the first invalid field, else the form-level alert, else nowhere. */
+export function focusTarget<T>(found: { field: T | null; alert: T | null }): T | null {
+    return found.field ?? found.alert;
+}
+
 const FALLBACK_MESSAGE = 'Something went wrong. Please try again.';
 
 /** Resets the state, runs the action, and records errors; `processing` is always cleared at the end, even on a throw. */

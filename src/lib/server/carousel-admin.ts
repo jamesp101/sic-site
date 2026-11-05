@@ -1,48 +1,11 @@
 import type { CarouselItem } from '@/generated/prisma/client';
-import { serializeOverlay, type Layer, type SlideMobile } from '../carousel-overlay';
-import type { SlideVideoView } from '@/lib/content-types';
+import { serializeOverlay } from '../carousel-overlay';
 import { parseVideoUrl } from '../blocks/urls';
-import { parseOverlay, parseOverlayDocument, slideDocument } from '../carousel-overlay-schema';
+import { parseOverlay, parseOverlayDocument } from '../carousel-overlay-schema';
 import { db } from './db';
+import { youtubeWatchUrl } from './slides';
 import { headUpload, keyFromPublicUrl, publicUrl, read, videoKeyFromUrl } from './storage';
 import { commitWithFiles, deleteWithFiles, type NewFile, type NewFiles } from './stored-files';
-
-/** Slide as the admin designer sees it. */
-export interface DesignerSlide {
-    id: number;
-    imageUrl: string;
-    title: string | null;
-    subtitle: string | null;
-    linkUrl: string | null;
-    order: number;
-    departmentId: number | null;
-    showOnMain: boolean;
-    /** A legacy slide (title / subtitle / link only) arrives already converted to layers. */
-    layers: Layer[];
-    /** Slide-level phone settings (photo focal point); null = centred. */
-    mobile: SlideMobile | null;
-    /** Public URL of the uploaded background video, or the YouTube link; '' = none. */
-    video: string;
-    videoKind: 'file' | 'youtube' | null;
-}
-
-export function toDesignerSlide(row: CarouselItem): DesignerSlide {
-    const doc = slideDocument(row);
-    return {
-        id: row.id,
-        imageUrl: publicUrl(row.imagePath) ?? '',
-        title: row.title,
-        subtitle: row.subtitle,
-        linkUrl: row.linkUrl,
-        order: row.order,
-        departmentId: row.departmentId,
-        showOnMain: row.showOnMain,
-        layers: doc.layers,
-        mobile: doc.mobile,
-        video: row.videoPath ? (publicUrl(row.videoPath) ?? '') : (row.videoUrl ?? ''),
-        videoKind: row.videoPath ? 'file' : row.videoUrl ? 'youtube' : null,
-    };
-}
 
 /** The two video columns of a slide: an uploaded file the row owns, or a YouTube link; at most one is set. */
 export interface SlideVideo {
@@ -63,7 +26,7 @@ export function parseSlideVideo(input: string): SlideVideoResult {
     if (key) return { ok: true, video: { videoPath: key, videoUrl: null } };
     const source = parseVideoUrl(value);
     if (source?.provider === 'youtube') {
-        return { ok: true, video: { videoPath: null, videoUrl: `https://www.youtube.com/watch?v=${source.id}` } };
+        return { ok: true, video: { videoPath: null, videoUrl: youtubeWatchUrl(source.id) } };
     }
     return { ok: false, error: 'Use a YouTube link or upload an mp4 or webm video.' };
 }
@@ -83,16 +46,6 @@ export async function videoUsedElsewhere(key: string, exceptId?: number): Promis
         db.setting.count({ where: { value: { contains: key } } }),
     ]);
     return slides + posts + heroes + settings > 0;
-}
-
-/** How the public carousel plays a slide's background video: our file (by extension) or a YouTube id; null for none. */
-export function slideVideoView(row: { videoPath: string | null; videoUrl: string | null }): SlideVideoView | null {
-    if (row.videoPath) {
-        const src = publicUrl(row.videoPath);
-        return src ? { kind: 'file', src, mime: row.videoPath.endsWith('.webm') ? 'video/webm' : 'video/mp4' } : null;
-    }
-    const source = row.videoUrl ? parseVideoUrl(row.videoUrl) : null;
-    return source?.provider === 'youtube' ? { kind: 'youtube', id: source.id } : null;
 }
 
 /** Error message when `key` cannot become the video of slide `slideId` (a new slide has no id), else null. */
@@ -141,7 +94,7 @@ export async function updateSlide(
     const kept = overlayImageSrcs(input.content.overlay);
     const droppedSrcs = overlayImageSrcs(row.overlay).filter((src) => !kept.includes(src));
     return commitWithFiles({
-        files: { image: input.image && { prefix: 'carousels', file: input.image } },
+        files: { image: input.image && { prefix: 'carousels', file: input.image, variant: true } },
         adopted: videoChanged ? [video.videoPath] : [],
         run: ({ image }) =>
             db.carouselItem.update({
@@ -177,7 +130,7 @@ export async function createSlide(input: {
 }): Promise<CarouselItem> {
     const last = await db.carouselItem.aggregate({ _max: { order: true } });
     return commitWithFiles({
-        files: { image: { prefix: 'carousels', file: input.image } },
+        files: { image: { prefix: 'carousels', file: input.image, variant: true } },
         adopted: [input.video.videoPath],
         run: ({ image }) =>
             db.carouselItem.create({
@@ -194,12 +147,13 @@ export async function createSlide(input: {
 }
 
 /** A copy of a stored object, to be stored under `prefix`; null when the source is missing. */
-async function copyOf(key: string, prefix: NewFile['prefix'] = 'carousels'): Promise<NewFile | null> {
+async function copyOf(key: string, prefix: NewFile['prefix'] = 'carousels', variant = false): Promise<NewFile | null> {
     const stored = await read(key);
     if (!stored) return null;
     const bytes = await new Response(stored.body).arrayBuffer();
     return {
         prefix,
+        variant,
         file: new File([bytes], key.slice(key.lastIndexOf('/') + 1), {
             type: stored.contentType ?? 'application/octet-stream',
         }),
@@ -212,7 +166,7 @@ async function copyOf(key: string, prefix: NewFile['prefix'] = 'carousels'): Pro
  */
 export async function duplicateSlide(row: CarouselItem): Promise<CarouselItem> {
     const files: NewFiles = {
-        image: await copyOf(row.imagePath),
+        image: await copyOf(row.imagePath, 'carousels', true),
         video: row.videoPath ? await copyOf(row.videoPath, 'videos') : null,
     };
     const layerCopies = new Map<string, string>();

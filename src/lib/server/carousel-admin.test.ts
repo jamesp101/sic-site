@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vit
 import { serializeOverlay } from '../carousel-overlay';
 import type { PrismaClient } from '../../generated/prisma/client';
 import type * as CarouselAdmin from './carousel-admin';
+import { setWelcomeHero } from './welcome-hero';
 
 vi.mock('./db', async () => ({ db: await (await import('./test-db')).openTestDb() }));
 
@@ -91,27 +92,6 @@ describe('parseSlideVideo', () => {
     });
 });
 
-describe('slide video views', () => {
-    test('files and YouTube links reach the public and the designer view', () => {
-        expect(admin.slideVideoView({ videoPath: 'videos/a.webm', videoUrl: null })).toEqual({
-            kind: 'file',
-            src: '/storage/videos/a.webm',
-            mime: 'video/webm',
-        });
-        expect(admin.slideVideoView({ videoPath: 'videos/a.mp4', videoUrl: null })).toMatchObject({
-            mime: 'video/mp4',
-        });
-        expect(
-            admin.slideVideoView({ videoPath: null, videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }),
-        ).toEqual({
-            kind: 'youtube',
-            id: 'dQw4w9WgXcQ',
-        });
-        expect(admin.slideVideoView({ videoPath: null, videoUrl: 'https://vimeo.com/123456789' })).toBeNull();
-        expect(admin.slideVideoView(none)).toBeNull();
-    });
-});
-
 describe('claimSlideVideo', () => {
     const claim = async (raw: string, slideId?: number) => {
         const result = await admin.claimSlideVideo(raw, slideId);
@@ -132,7 +112,7 @@ describe('claimSlideVideo', () => {
 
         const free = stored();
         expect(await claim(`/storage/${free}`)).toBeNull();
-        await db.setting.create({ data: { key: 'welcome_hero_content', value: `{"url":"/storage/${free}"}` } });
+        await setWelcomeHero(`{"url":"/storage/${free}"}`);
         expect(await claim(`/storage/${free}`)).toMatch(/already used/);
     });
 

@@ -1,6 +1,6 @@
 ---
 import EmptyState from '@/components/site/EmptyState.astro';
-import FilterBar from '@/components/site/FilterBar.svelte';
+import FilterBar from '@/components/site/FilterBar.astro';
 import PageBanner from '@/components/site/PageBanner.astro';
 import Pagination from '@/components/site/Pagination.astro';
 import PostCard from '@/components/site/PostCard.astro';
@@ -70,7 +70,6 @@ const tabs: { label: string; type?: PostType }[] = [
             </nav>
 
             <FilterBar
-                client:idle
                 action="/posts"
                 search={search}
                 searchLabel="Search posts"

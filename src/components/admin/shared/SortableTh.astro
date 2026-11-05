@@ -1,5 +1,5 @@
 ---
-import { ArrowUpDown } from '@lucide/svelte';
+import { ArrowUpDown, ChevronDown, ChevronUp } from '@lucide/svelte';
 import { thClass } from '@/components/admin/ui';
 import type { SortLinks } from '@/lib/server/admin-list';
 
@@ -11,10 +11,15 @@ interface Props {
 }
 
 const { list, field, class: className = '' } = Astro.props;
+const sorted = list.ariaSort(field);
+const Icon = sorted === 'ascending' ? ChevronUp : sorted === 'descending' ? ChevronDown : ArrowUpDown;
 ---
 
-<th scope="col" class={`${thClass} ${className}`} aria-sort={list.ariaSort(field)}>
-    <a href={list.sortHref(field)} class="inline-flex items-center gap-1 hover:text-link">
-        <slot /> <ArrowUpDown class="h-3.5 w-3.5" aria-hidden="true" />
+<th scope="col" class={`${thClass} ${className}`} aria-sort={sorted}>
+    <a
+        href={list.sortHref(field)}
+        class={`inline-flex items-center gap-1 hover:text-link ${sorted ? 'text-foreground' : ''}`}
+    >
+        <slot /> <Icon class="h-3.5 w-3.5" aria-hidden="true" />
     </a>
 </th>
