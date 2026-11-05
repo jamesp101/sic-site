@@ -3,12 +3,14 @@
   import { parseVideoUrl, safeHref } from '../../../lib/blocks/urls';
   import { inputClass, secondaryButtonClass } from '../shared/form-utils';
   import AddButton from './inspector/AddButton.svelte';
+  import AlbumEditor from './inspector/AlbumEditor.svelte';
   import CheckField from './inspector/CheckField.svelte';
   import Group from './inspector/Group.svelte';
   import ImageEditor from './inspector/ImageEditor.svelte';
   import ItemToolbar from './inspector/ItemToolbar.svelte';
   import { joinDateTime, moveItem, removeItem, replaceItem, splitDateTime } from './inspector/list-utils';
   import {
+    ALBUM_COLUMN_OPTIONS,
     ALIGN_OPTIONS,
     BACKGROUND_OPTIONS,
     BUTTON_VARIANT_OPTIONS,
@@ -31,6 +33,7 @@
   import StringListEditor from './inspector/StringListEditor.svelte';
   import TableEditor from './inspector/TableEditor.svelte';
   import TextField from './inspector/TextField.svelte';
+  import VideoUpload from './inspector/VideoUpload.svelte';
   import Field from '../shared/Field.svelte';
 
   let {
@@ -194,6 +197,29 @@
       <Group title="Caption">
         <TextField id={fid('caption')} label="Caption" value={block.props.caption} maxlength={LIMITS.label} oninput={(v) => set({ caption: v })} />
       </Group>
+      <Group title="Link">
+        <TextField
+          id={fid('link')}
+          label="Link (optional)"
+          value={block.props.link ?? ''}
+          maxlength={LIMITS.url}
+          hint="Makes the image clickable. Accepted: https://…, /path, mailto: or tel:. External links open in a new tab."
+          error={linkError(block.props.link ?? '') || (block.props.link && block.props.decorative ? 'A linked image needs alt text; untick decorative.' : '')}
+          oninput={(v) => set({ link: v })}
+        />
+      </Group>
+    {:else if block.type === 'album'}
+      <Group title="Images">
+        <AlbumEditor
+          idBase={fid('album')}
+          ownerKey={block.id}
+          images={block.props.images}
+          onchange={(images) => set({ images })}
+        />
+      </Group>
+      <Group title="Layout">
+        <SelectField id={fid('columns')} label="Columns" value={block.props.columns} options={ALBUM_COLUMN_OPTIONS} hint="Columns on wide screens; small screens always show two." onchange={(v) => set({ columns: Number(v) })} />
+      </Group>
     {:else if block.type === 'table'}
       <Group title="Table">
         <CheckField id={fid('header')} label="First row is a header" checked={block.props.header} onchange={(v) => set({ header: v })} />
@@ -243,13 +269,18 @@
       </Group>
     {:else if block.type === 'video'}
       <Group title="Video">
+        <VideoUpload
+          idBase={fid('video')}
+          ownerKey={block.id}
+          onupload={(url) => set({ url })}
+        />
         <TextField
           id={fid('url')}
           label="Video URL"
           value={block.props.url}
           maxlength={LIMITS.url}
-          hint="A YouTube or Vimeo link."
-          error={block.props.url.trim() && !parseVideoUrl(block.props.url) ? 'Use a YouTube or Vimeo link.' : ''}
+          hint="A YouTube or Vimeo link, or upload a video file above."
+          error={block.props.url.trim() && !parseVideoUrl(block.props.url) ? 'Use a YouTube or Vimeo link, or upload a video.' : ''}
           oninput={(v) => set({ url: v })}
         />
         <TextField

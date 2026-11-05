@@ -2,7 +2,7 @@
  * View-model shapes returned by src/lib/server/queries.ts and consumed by
  * public components. URLs are already resolved through storage.publicUrl.
  */
-import type { Layer as OverlayLayer } from './carousel-overlay';
+import type { Layer as OverlayLayer, SlideMobile } from './carousel-overlay';
 
 export type PostType = 'article' | 'event' | 'announcement';
 export const POST_TYPES: readonly PostType[] = ['article', 'event', 'announcement'];
@@ -38,7 +38,16 @@ export interface CarouselSlide {
     linkUrl: string | null;
     /** Designer layers; null = legacy slide rendered from title / subtitle / linkUrl. */
     overlay: OverlayLayer[] | null;
+    /** Phone settings of the slide (photo focal point); null = centred. */
+    mobile: SlideMobile | null;
+    /** Background video behind the layers; the photo stays the poster. */
+    video: SlideVideoView | null;
 }
+
+/** An uploaded file (public URL and MIME type) or a YouTube video (id). */
+export type SlideVideoView =
+    | { kind: 'file'; src: string; mime: 'video/mp4' | 'video/webm' }
+    | { kind: 'youtube'; id: string };
 
 export interface HeroSectionView {
     id: number;

@@ -7,7 +7,9 @@
  * missing object does not burn the claim; only the user the key was issued to can use it.
  */
 import { z } from 'astro/zod';
+import { claimUploadedObject } from './direct-intake';
 import { isDirectUploadKey } from './direct-upload';
+import { isVideoUpload } from './file-types';
 import { claimPendingUpload, ownsPendingUpload } from './pending-uploads';
 import { RequestError } from './request-error';
 import { discardFiles } from './stored-files';
@@ -20,7 +22,9 @@ export const DOWNLOAD_TOO_LARGE = `The file must not be larger than ${DOWNLOAD_M
 export const downloadFile = z
     .instanceof(File, { error: 'Choose a file to upload.' })
     .refine((file) => file.size > 0, 'Choose a file to upload.')
-    .refine((file) => file.size <= LIMITS.download, DOWNLOAD_TOO_LARGE);
+    .refine((file) => file.size <= LIMITS.download, DOWNLOAD_TOO_LARGE)
+    // Downloads keep their own allowlist: videos go through the video upload (`/api/admin/uploads/video`).
+    .refine((file) => !isVideoUpload(file.name, file.type), 'Videos cannot be uploaded as Downloads.');
 
 /** How the browser delivers a Download file: straight to the bucket (`direct`) or as a multipart `file`. */
 export type DownloadUploadMode = 'direct' | 'multipart';
@@ -42,21 +46,17 @@ export interface AcceptedDownload {
 }
 
 export function createDownloadIntake(deps: DownloadIntakeDeps) {
-    const invalid = () => new RequestError('BAD_REQUEST', 'Invalid uploaded file.');
-
-    async function acceptDirectUpload(userId: number, key: string): Promise<AcceptedDownload> {
-        if (!deps.directUploads || !isDirectUploadKey(key) || !(await deps.ownsPendingUpload(key, userId))) {
-            throw invalid();
-        }
-        const uploaded = await deps.headUpload(key);
-        if (!uploaded) throw new RequestError('BAD_REQUEST', 'The uploaded file was not found. Upload it again.');
-        if (uploaded.size > deps.maxBytes) {
-            // The claim is consumed so only the owner's rejected object is removed, once.
-            if (await deps.claimPendingUpload(key, userId)) await deps.discardFiles([key], 'rejected upload');
-            throw new RequestError('BAD_REQUEST', DOWNLOAD_TOO_LARGE);
-        }
-        if (!(await deps.claimPendingUpload(key, userId))) throw invalid();
-        return { key, size: uploaded.size };
+    function acceptDirectUpload(userId: number, key: string): Promise<AcceptedDownload> {
+        return claimUploadedObject(deps, userId, key, {
+            validKey: deps.directUploads && isDirectUploadKey(key),
+            maxBytes: deps.maxBytes,
+            messages: {
+                missing: 'The uploaded file was not found. Upload it again.',
+                empty: 'The uploaded file is empty.',
+                tooLarge: DOWNLOAD_TOO_LARGE,
+            },
+            context: 'rejected upload',
+        });
     }
 
     /** The accepted file is already stored; the caller removes it (`commitWithFiles({ adopted })`) if its row write fails. */

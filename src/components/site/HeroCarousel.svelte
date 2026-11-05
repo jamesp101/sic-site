@@ -3,8 +3,10 @@
   import { onMount, tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { readingOrder, safeHref } from '@/lib/carousel-overlay';
+  import { resolveMobile, slideFocus } from '@/lib/carousel-overlay-mobile';
   import type { CarouselSlide } from '@/lib/content-types';
   import SlideLayer from './SlideLayer.svelte';
+  import SlideVideo from './SlideVideo.svelte';
 
   let {
     slides,
@@ -39,6 +41,8 @@
   let hovering = $state(false);
   let focused = $state(false);
   let reducedMotion = $state(false);
+  /** The visitor asked the browser to save data: slides stay on their photo. */
+  let saveData = $state(false);
   let inView = $state(true);
   let pageVisible = $state(true);
   /** Slides whose photo may load besides the first: the current slide and its neighbours. */
@@ -46,6 +50,10 @@
 
   const multiple = $derived(slides.length > 1);
   const canAutoplay = $derived(mounted && multiple && !reducedMotion);
+  /** Background videos only start for visitors who allow motion and data use; everyone else keeps the photo (the poster). */
+  const videoAllowed = $derived(mounted && !reducedMotion && !saveData);
+  const videoRunning = $derived(videoAllowed && !userPaused && inView && pageVisible);
+  const showPill = $derived(mounted && (multiple || (videoAllowed && slides.some((slide) => slide.video))));
   const autoplay = $derived(canAutoplay && !userPaused && !hovering && !focused && inView && pageVisible);
   const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -54,6 +62,11 @@
     reducedMotion = media.matches;
     const onMotion = () => (reducedMotion = media.matches);
     media.addEventListener('change', onMotion);
+
+    const connection = (navigator as Navigator & { connection?: EventTarget & { saveData?: boolean } }).connection;
+    const onSaveData = () => (saveData = connection?.saveData === true);
+    onSaveData();
+    connection?.addEventListener('change', onSaveData);
 
     const onVisibility = () => (pageVisible = document.visibilityState === 'visible');
     onVisibility();
@@ -65,6 +78,7 @@
     mounted = true;
     return () => {
       media.removeEventListener('change', onMotion);
+      connection?.removeEventListener('change', onSaveData);
       document.removeEventListener('visibilitychange', onVisibility);
       observer.disconnect();
     };
@@ -147,6 +161,8 @@
           ? 'z-10 opacity-100'
           : 'z-0 opacity-0'}"
         class:is-active={index === current}
+        style:--fx="{slideFocus(slide.mobile).x}%"
+        style:--fy="{slideFocus(slide.mobile).y}%"
       >
         <img
           src={index === 0 || loaded.has(slide.id) ? slide.imageUrl : undefined}
@@ -160,12 +176,17 @@
           class:zoom={index === current || index === previous}
           style:transform-origin={index % 2 ? '70% 60%' : '30% 40%'}
         />
+        {#if slide.video && videoAllowed && (slide.video.kind === 'file' ? loaded.has(slide.id) : index === current)}
+          <!-- Background video: the photo above is the poster until it plays. Other slides' files stay paused; YouTube only loads for the active slide. -->
+          <SlideVideo video={slide.video} play={index === current && videoRunning} />
+        {/if}
         <div class="absolute inset-0 bg-linear-to-t from-brand-950/90 via-brand-950/45 to-brand-950/30 md:from-brand-950/85"></div>
         {#if slide.overlay}
+          {@const phone = resolveMobile(slide.overlay)}
           <!-- Designer slide: real, server-rendered text, links and images positioned over the picture. -->
           <div class="stage rise">
             {#each readingOrder(slide.overlay) as { layer, z } (layer.id)}
-              <SlideLayer {layer} {z} />
+              <SlideLayer {layer} {z} box={phone.get(layer.id) ?? null} />
             {/each}
           </div>
         {:else}
@@ -210,14 +231,16 @@
     <button type="button" class="{arrow} right-6" aria-label="Next slide" onclick={next}>
       <ChevronRight class="h-6 w-6" aria-hidden="true" />
     </button>
+  {/if}
 
+  {#if showPill}
     <div class="absolute inset-x-0 bottom-4 z-20 flex justify-center px-4 md:bottom-6">
-      <div class="flex items-center gap-1 rounded-full bg-brand-950/45 py-1 pl-1 pr-4 text-white backdrop-blur-sm">
+      <div class="flex items-center gap-1 rounded-full bg-brand-950/45 py-1 pl-1 text-white backdrop-blur-sm {multiple ? 'pr-4' : 'pr-1'}">
         {#if !reducedMotion}
           <button
             type="button"
             class="inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/15"
-            aria-label={userPaused ? 'Play slideshow' : 'Pause slideshow'}
+            aria-label={userPaused ? (multiple ? 'Play slideshow' : 'Play video') : multiple ? 'Pause slideshow' : 'Pause video'}
             onclick={() => (userPaused = !userPaused)}
           >
             {#if userPaused}
@@ -229,6 +252,7 @@
         {:else}
           <span class="w-3" aria-hidden="true"></span>
         {/if}
+        {#if multiple}
         <div class="flex">
           {#each slides as slide, index (slide.id)}
             <button
@@ -260,6 +284,7 @@
         <span class="ml-2 text-xs font-semibold tabular-nums tracking-widest text-white/85" aria-hidden="true">
           {pad(current + 1)}<span class="px-1 text-white/50">/</span><span class="text-white/50">{pad(slides.length)}</span>
         </span>
+        {/if}
       </div>
     </div>
   {/if}
@@ -268,8 +293,9 @@
 <style>
   /*
    * The hero is a size container named "hero". Overlay layers live on a 16:9 stage that covers it
-   * exactly like the object-cover photo, so percentages match the editor. Below 48rem the stage
-   * becomes a bottom-aligned column and layers stack in reading order (see SlideLayer).
+   * exactly like the object-cover photo, so percentages match the editor. Below `sm` (40rem) the hero is a
+   * 4:5 frame, the stage is that frame, and every layer sits at its phone box (see SlideLayer, resolveMobile);
+   * the photo and video are cropped around the slide's focal point (--fx / --fy).
    */
   .hero {
     container: hero / inline-size;
@@ -288,6 +314,15 @@
       --hh: 450px;
     }
   }
+  @media (max-width: 39.99rem) {
+    .hero {
+      height: auto;
+      aspect-ratio: 4 / 5;
+    }
+    .photo {
+      object-position: var(--fx, 50%) var(--fy, 50%);
+    }
+  }
   .stage {
     position: absolute;
     left: 50%;
@@ -298,18 +333,12 @@
     container-type: inline-size;
     --min-fs: 0.75rem;
   }
-  @container hero (max-width: 47.99rem) {
+  @container hero (max-width: 39.99rem) {
     .stage {
       inset: 0;
       transform: none;
       width: auto;
       aspect-ratio: auto;
-      container-type: normal;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      gap: 0.75rem;
-      padding: 1.5rem 1.5rem 5rem;
     }
   }
 

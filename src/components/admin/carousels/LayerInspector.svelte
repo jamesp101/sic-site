@@ -9,9 +9,11 @@
     ChevronsDown,
     ChevronsUp,
     Copy,
+    RotateCcw,
     Trash2,
   } from '@lucide/svelte';
   import { alignBox, type AlignTo, type Box, type ZMove } from '@/lib/carousel-editor';
+  import { hasMobileOverride, isPlaced, mobileSize, type MobileBox } from '@/lib/carousel-overlay-mobile';
   import {
     ALIGNS,
     BG_COLOR_CLASS,
@@ -31,6 +33,7 @@
     type Align,
     type ColorKey,
     type Layer,
+    type MobileOverride,
   } from '@/lib/carousel-overlay';
   import { inputClass, secondaryButtonClass } from '../shared/form-utils';
 
@@ -43,6 +46,10 @@
     onduplicate,
     ondelete,
     measure,
+    view = 'desktop',
+    mobileBox = null,
+    onmobile,
+    onmobilereset,
   }: {
     layer: Layer;
     index: number;
@@ -54,6 +61,13 @@
     ondelete: () => void;
     /** Rendered box of the layer in percent of the slide (height is automatic for text, buttons and badges). */
     measure: () => Box | null;
+    /** `mobile`: the panel edits the phone layout (position, size step, visibility) instead of the desktop geometry. */
+    view?: 'desktop' | 'mobile';
+    /** The layer's resolved phone box (automatic or hand-placed). */
+    mobileBox?: MobileBox | null;
+    /** Edits the layer's phone overrides; `key` coalesces rapid edits. Keys set to undefined are removed. */
+    onmobile: (patch: MobileOverride, key?: string) => void;
+    onmobilereset: () => void;
   } = $props();
 
   const set = (patch: object, key?: string) => onchange(patch as unknown as Partial<Layer>, key);
@@ -78,6 +92,24 @@
   function imageSize(h: number) {
     if (layer.type !== 'image') return;
     set({ h, w: Math.min(100, Math.round(((layer.w / layer.h) * h) * 100) / 100) });
+  }
+
+  const placed = $derived(isPlaced(layer));
+  const phoneSize = $derived(mobileSize(layer));
+  const phoneHidden = $derived(layer.mobile?.hidden === true);
+  const phoneBox = $derived(mobileBox ?? { x: 0, y: 0, w: 0, h: 0 });
+  /** Edits one phone geometry field; the first edit places the layer by hand at its current automatic box. */
+  function phoneGeometry(field: 'x' | 'y' | 'w' | 'h', event: Event) {
+    const value = Math.min(100, Math.max(field === 'w' || field === 'h' ? 1 : 0, num(event, phoneBox[field])));
+    const base: MobileOverride = placed
+      ? {}
+      : {
+          x: phoneBox.x,
+          y: phoneBox.y,
+          ...(layer.type === 'text' || layer.type === 'shape' || layer.type === 'image' ? { w: phoneBox.w } : {}),
+          ...(layer.type === 'shape' || layer.type === 'image' ? { h: phoneBox.h } : {}),
+        };
+    onmobile({ ...base, [field]: value }, field);
   }
 
   const hrefInvalid = $derived(layer.type === 'button' && layer.href !== '' && safeHref(layer.href) === null);
@@ -113,6 +145,7 @@
 {/snippet}
 
 {#snippet sizeSelect(current: string)}
+  {#if view === 'desktop'}
   <div>
     <span class={label} id="layer-size-label">Size</span>
     <div role="group" aria-labelledby="layer-size-label" class="grid grid-cols-3 gap-1">
@@ -128,6 +161,7 @@
       {/each}
     </div>
   </div>
+  {/if}
 {/snippet}
 
 {#snippet alignTo()}
@@ -177,6 +211,7 @@
       </div>
     </div>
     {@render sizeSelect(layer.size)}
+    {#if view === 'desktop'}
     <div>
       <span class={label} id="layer-width-label">Text width</span>
       <div role="group" aria-labelledby="layer-width-label" class="grid grid-cols-3 gap-1">
@@ -187,6 +222,7 @@
         {/each}
       </div>
     </div>
+    {/if}
     {#if layer.role === 'heading'}
       <div>
         <label for="layer-font" class={label}>Font</label>
@@ -296,6 +332,7 @@
         <p class="mt-1 text-xs text-destructive">Required. Describe the logo or image.</p>
       {/if}
     </div>
+    {#if view === 'desktop'}
     <div>
       <span class={label} id="layer-img-size-label">Size</span>
       <div role="group" aria-labelledby="layer-img-size-label" class="grid grid-cols-3 gap-1">
@@ -307,6 +344,7 @@
       </div>
       <p class="mt-1 text-xs text-muted-foreground">Resizing keeps the aspect ratio (hold Shift on a corner to stretch).</p>
     </div>
+    {/if}
     <div>
       <label for="layer-radius" class={label}>Corners</label>
       <select id="layer-radius" value={layer.radius} class={inputClass} onchange={(e) => set({ radius: e.currentTarget.value })}>
@@ -317,6 +355,75 @@
     </div>
   {/if}
 
+  {#if view === 'mobile'}
+    <fieldset class="space-y-3 rounded-lg border border-border bg-surface-alt p-3" data-testid="phone-layout">
+      <legend class="px-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">Phone layout</legend>
+      <p class="text-xs text-muted-foreground" role="status">
+        {#if phoneHidden}
+          Hidden on phones.
+        {:else if placed}
+          Placed by hand for phones.
+        {:else if layer.type === 'shape'}
+          Panels are skipped on phones unless you place one by hand (drag it on the canvas).
+        {:else}
+          Stacked automatically. Drag it on the canvas to place it by hand.
+        {/if}
+      </p>
+      <label class="flex cursor-pointer items-center gap-3">
+        <input
+          type="checkbox"
+          checked={phoneHidden}
+          onchange={(event) => onmobile({ hidden: event.currentTarget.checked ? true : undefined })}
+          class="h-4 w-4 rounded border-border-strong accent-brand-800"
+        />
+        <span class="text-sm font-semibold text-foreground">Hide on phones</span>
+      </label>
+      {#if phoneSize}
+        <div>
+          <span class={label} id="layer-phone-size-label">Phone size</span>
+          <div role="group" aria-labelledby="layer-phone-size-label" class="grid grid-cols-3 gap-1">
+            {#each SIZES as size (size)}
+              <button
+                type="button"
+                aria-pressed={phoneSize === size}
+                onclick={() => onmobile({ size })}
+                class="{iconButton} text-xs {phoneSize === size ? '!border-brand-600 !bg-accent' : ''}"
+              >
+                {SIZE_LABEL[size]}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
+      {#if placed}
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="layer-mx" class={label}>X (%)</label>
+            <input id="layer-mx" type="number" min="0" max="100" step="1" value={Math.round(phoneBox.x * 10) / 10} class={numberInput} oninput={(e) => phoneGeometry('x', e)} />
+          </div>
+          <div>
+            <label for="layer-my" class={label}>Y (%)</label>
+            <input id="layer-my" type="number" min="0" max="100" step="1" value={Math.round(phoneBox.y * 10) / 10} class={numberInput} oninput={(e) => phoneGeometry('y', e)} />
+          </div>
+          {#if layer.type === 'text' || layer.type === 'shape' || layer.type === 'image'}
+            <div>
+              <label for="layer-mw" class={label}>Width (%)</label>
+              <input id="layer-mw" type="number" min="1" max="100" step="0.5" value={Math.round(phoneBox.w * 10) / 10} class={numberInput} oninput={(e) => phoneGeometry('w', e)} />
+            </div>
+          {/if}
+          {#if layer.type === 'shape' || layer.type === 'image'}
+            <div>
+              <label for="layer-mh" class={label}>Height (%)</label>
+              <input id="layer-mh" type="number" min="1" max="100" step="0.5" value={Math.round(phoneBox.h * 10) / 10} class={numberInput} oninput={(e) => phoneGeometry('h', e)} />
+            </div>
+          {/if}
+        </div>
+      {/if}
+      <button type="button" class="{secondaryButtonClass} w-full !px-3 !py-1.5 text-xs" onclick={onmobilereset} disabled={!hasMobileOverride(layer)}>
+        <RotateCcw class="h-4 w-4" aria-hidden="true" /> Reset to automatic
+      </button>
+    </fieldset>
+  {:else}
   {@render alignTo()}
 
   <fieldset class="space-y-3 rounded-lg border border-border bg-surface-alt p-3">
@@ -361,6 +468,7 @@
       </div>
     </div>
   </fieldset>
+  {/if}
 
   <div>
     <span class={label} id="layer-order-label">Stacking order</span>

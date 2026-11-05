@@ -1,9 +1,13 @@
 /**
  * Carousel slide overlay model: a versioned JSON document stored in `carousel_items.overlay`.
  *
- * `{ "v": 1, "layers": [Layer, ...] }`. Layer array order is the z-order (last = on top).
+ * `{ "v": 1, "layers": [Layer, ...], "mobile"?: SlideMobile }`. Layer array order is the z-order (last = on top).
  * Positions and sizes are percentages of the 16:9 slide (x/w of its width, y/h of its height);
- * text sizes are named steps (see SIZE_CQW) so they scale with the slide.
+ * text sizes are named steps (see TYPE_SCALE) so they scale with the slide.
+ * Phones show the slide at 4:5. A layer may carry `mobile` overrides (position/size in percent of the 4:5
+ * frame, a size step, hidden); layers without a position override are stacked automatically
+ * (carousel-overlay-mobile.ts). `SlideMobile` holds slide-level mobile settings (the photo's focal point).
+ * Documents without any `mobile` data (every document written before it existed) parse unchanged.
  * Free of `astro:*` imports and of zod (validation lives in carousel-overlay-schema.ts) so the public
  * carousel bundle stays small and the module runs in the browser, on the server and in unit tests.
  */
@@ -31,12 +35,32 @@ export type Font = (typeof FONTS)[number];
 export type Radius = (typeof RADII)[number];
 export type ButtonVariant = (typeof BUTTON_VARIANTS)[number];
 
+/**
+ * Per-layer phone overrides, in percent of the 4:5 frame. `x` and `y` come together (a hand-placed layer);
+ * without them the layer is stacked automatically. `w`/`h` apply to text, panels and images; `size` is a
+ * step of the phone type scale; `hidden` removes the layer on phones.
+ */
+export interface MobileOverride {
+    x?: number;
+    y?: number;
+    w?: number;
+    h?: number;
+    size?: Size;
+    hidden?: boolean;
+}
+
+/** Slide-level phone settings: where the 16:9 photo is centred when cropped to 4:5 (percent). */
+export interface SlideMobile {
+    focus: { x: number; y: number };
+}
+
 interface LayerBase {
     id: string;
     x: number;
     y: number;
     rotation: number;
     opacity: number;
+    mobile?: MobileOverride;
 }
 export interface TextLayer extends LayerBase {
     type: 'text';
@@ -160,17 +184,26 @@ export const COLOR_LABEL: Record<ColorKey, string> = {
 };
 
 /*
- * Class maps are literal strings so Tailwind can see them. Dark text colours switch to white
- * in the stacked mobile layout (`@max-3xl/hero`), where the slide image is darkened by a gradient.
+ * Class maps are literal strings so Tailwind can see them. Layers stacked automatically on phones
+ * (TEXT_COLOR_AUTO_CLASS) turn dark text colours white below `sm`, where the photo is darkened by a gradient;
+ * hand-placed layers keep their colour.
  */
 export const TEXT_COLOR_CLASS: Record<ColorKey, string> = {
     white: 'text-white',
     gold: 'text-gold-300',
-    navy: 'text-brand-800 @max-3xl/hero:text-white',
-    'navy-deep': 'text-brand-950 @max-3xl/hero:text-white',
+    navy: 'text-brand-800',
+    'navy-deep': 'text-brand-950',
     sky: 'text-brand-100',
-    foreground: 'text-foreground @max-3xl/hero:text-white',
-    surface: 'text-surface @max-3xl/hero:text-white',
+    foreground: 'text-foreground',
+    surface: 'text-surface',
+};
+
+export const TEXT_COLOR_AUTO_CLASS: Record<ColorKey, string> = {
+    ...TEXT_COLOR_CLASS,
+    navy: 'text-brand-800 @max-[39.99rem]/hero:text-white',
+    'navy-deep': 'text-brand-950 @max-[39.99rem]/hero:text-white',
+    foreground: 'text-foreground @max-[39.99rem]/hero:text-white',
+    surface: 'text-surface @max-[39.99rem]/hero:text-white',
 };
 
 export const BG_COLOR_CLASS: Record<ColorKey, string> = {
@@ -265,11 +298,24 @@ export function rounded(layer: Layer): Layer {
     const next: Layer = { ...layer, x: round(layer.x), y: round(layer.y), rotation: round(layer.rotation) };
     if ('w' in next && typeof next.w === 'number') next.w = round(next.w);
     if ('h' in next && typeof next.h === 'number') next.h = round(next.h);
+    if (layer.mobile) {
+        const mobile: MobileOverride = { ...layer.mobile };
+        for (const field of ['x', 'y', 'w', 'h'] as const) {
+            if (typeof mobile[field] === 'number') mobile[field] = round(mobile[field]);
+        }
+        next.mobile = mobile;
+    }
     return next;
 }
 
-export function serializeOverlay(layers: Layer[]): string {
-    return JSON.stringify({ v: OVERLAY_VERSION, layers: layers.map(rounded) });
+/** Stored document. `mobile` is only written when the slide has phone settings, so old documents stay identical. */
+export function serializeOverlay(layers: Layer[], mobile?: SlideMobile | null): string {
+    const doc: { v: number; layers: Layer[]; mobile?: SlideMobile } = {
+        v: OVERLAY_VERSION,
+        layers: layers.map(rounded),
+    };
+    if (mobile) doc.mobile = { focus: { x: round(mobile.focus.x), y: round(mobile.focus.y) } };
+    return JSON.stringify(doc);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,10 +1,11 @@
 import { adminRoute, json } from '@/lib/server/api-route';
 import { newDirectUploadKey } from '@/lib/server/direct-upload';
 import { DOWNLOAD_TOO_LARGE } from '@/lib/server/download-intake';
-import { isAllowedContentType } from '@/lib/server/file-types';
-import { registerPendingUpload, sweepPendingUploads } from '@/lib/server/pending-uploads';
+import { isAllowedContentType, isVideoUpload } from '@/lib/server/file-types';
+import { registerPendingUpload } from '@/lib/server/pending-uploads';
 import { assertUploadQuota } from '@/lib/server/rate-limit';
 import { directUploads, LIMITS, presignUpload } from '@/lib/server/storage';
+import { readUploadRequest } from '@/lib/server/upload-request';
 
 export const prerender = false;
 
@@ -13,31 +14,19 @@ export const prerender = false;
  * A signed-in user posts `{ fileName, contentType, size }`; the response is a server-generated
  * `downloads/<random>.<ext>` key and a 10-minute presigned PUT URL that only accepts exactly that
  * content type and size. The key is recorded as issued to this user: only they can attach it with
- * `downloads.create` (which re-checks the stored size), and unclaimed keys are swept with their objects.
+ * `downloads.create` (which re-checks the stored size); an abandoned object is reclaimed by the orphan cleanup.
  */
 export const POST = adminRoute(async ({ request, user }) => {
     if (!directUploads) return json({ message: 'Direct uploads are not enabled.' }, 404);
 
-    let body: { fileName?: unknown; contentType?: unknown; size?: unknown } | null;
-    try {
-        body = await request.json();
-    } catch {
-        return json({ message: 'Expected a JSON body.' }, 400);
-    }
-    const { fileName, contentType, size } = body ?? {};
-    if (typeof fileName !== 'string' || !fileName.trim() || fileName.length > 255) {
-        return json({ message: 'A file name is required.' }, 400);
-    }
-    if (typeof contentType !== 'string' || !isAllowedContentType(contentType)) {
+    const { fileName, contentType, size } = await readUploadRequest(request);
+    // Downloads keep their own allowlist: every `FILE_TYPES` entry except videos, which only the video upload accepts.
+    if (!isAllowedContentType(contentType) || isVideoUpload(fileName, contentType)) {
         return json({ message: 'This file type is not allowed.' }, 422);
-    }
-    if (typeof size !== 'number' || !Number.isInteger(size) || size <= 0) {
-        return json({ message: 'Choose a file to upload.' }, 400);
     }
     if (size > LIMITS.download) return json({ message: DOWNLOAD_TOO_LARGE }, 422);
     await assertUploadQuota(user.id);
 
-    await sweepPendingUploads();
     const key = newDirectUploadKey(fileName, contentType);
     await registerPendingUpload(key, user.id);
     return json({ key, url: await presignUpload(key, contentType, size) });

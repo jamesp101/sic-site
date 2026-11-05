@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -145,6 +147,64 @@ test.describe('visual block editor (superadmin)', () => {
         });
         expect(buttonBeforeTable).toBe(true);
         expect(await visitor.content()).not.toContain('sic-blocks"');
+        await context.close();
+    });
+
+    test('builds a post with a 3-image album and opens its lightbox on the public page', async ({ page, browser }) => {
+        const title = `E2E album ${Date.now()}`;
+        const seal = fs.readFileSync(path.resolve('public/sic-seal.png'));
+
+        await page.goto('/admin/posts/create');
+        await editorReady(page);
+        await page.getByLabel('Post title').fill(title);
+        await add(page, 'Album').click();
+        await page
+            .getByLabel('Choose image files')
+            .setInputFiles([1, 2, 3].map((n) => ({ name: `seal-${n}.png`, mimeType: 'image/png', buffer: seal })));
+        await expect(page.getByLabel('Image 3 alt text')).toBeVisible({ timeout: 30_000 });
+        for (const n of [1, 2, 3]) await page.getByLabel(`Image ${n} alt text`).fill(`School seal ${n}`);
+        await page.getByLabel('Image 2 caption (optional)').fill('Second seal');
+        await expect(canvas(page).locator('[data-block-type="album"] img')).toHaveCount(3);
+
+        await page.getByRole('button', { name: 'Publish post' }).click();
+        await expect(page).toHaveURL(/\/admin\/posts$/);
+
+        await page.goto(`/posts?search=${encodeURIComponent(title)}`);
+        const href = await page.getByRole('link', { name: title }).first().getAttribute('href');
+        expect(href).toMatch(/^\/posts\//);
+
+        // Without JavaScript the thumbnails are plain links to the full images.
+        const plain = await browser.newContext({ javaScriptEnabled: false });
+        const noScript = await plain.newPage();
+        await noScript.goto(href!);
+        const noScriptLinks = noScript.locator('[data-album] a[data-album-item]');
+        await expect(noScriptLinks).toHaveCount(3);
+        expect(await noScriptLinks.first().getAttribute('href')).toMatch(/^\/storage\/posts\/inline\/[0-9a-f]+\.webp$/);
+        await plain.close();
+
+        const context = await browser.newContext();
+        const visitor = await context.newPage();
+        await visitor.goto(href!);
+        const links = visitor.locator('[data-album] a[data-album-item]');
+        await expect(links).toHaveCount(3);
+        const first = links.first();
+        await first.click();
+
+        const lightbox = visitor.getByRole('dialog', { name: 'Image viewer' });
+        await expect(lightbox).toBeVisible();
+        await expect(lightbox.getByText('1 of 3')).toBeVisible();
+        await expect(lightbox.getByRole('img', { name: 'School seal 1' })).toBeVisible();
+        // Focus is inside the dialog while it is open.
+        expect(await visitor.evaluate(() => document.activeElement?.closest('dialog') !== null)).toBe(true);
+
+        await visitor.keyboard.press('ArrowRight');
+        await expect(lightbox.getByText('2 of 3')).toBeVisible();
+        await expect(lightbox.getByRole('img', { name: 'School seal 2' })).toBeVisible();
+        await expect(lightbox.getByText('Second seal')).toBeVisible();
+
+        await visitor.keyboard.press('Escape');
+        await expect(lightbox).toBeHidden();
+        await expect(first).toBeFocused();
         await context.close();
     });
 

@@ -146,3 +146,31 @@ describe('toPlainText: legacy Markdown', () => {
         expect(toPlainText('{"hello":"world"}')).toBe('{"hello":"world"}');
     });
 });
+
+describe('toPlainText: album', () => {
+    it('extracts alt texts and captions, in order, and nothing from the URLs', () => {
+        const album = createBlock('album', {
+            images: [
+                { src: '/storage/images/a.webp', alt: 'Students at the gate', caption: 'First day' },
+                { src: '/storage/images/b.webp', alt: 'The library', caption: '' },
+            ],
+        });
+        expect(text(createBlock('heading', { text: 'Gallery' }), album)).toBe(
+            'Gallery Students at the gate First day The library',
+        );
+        expect(text(album)).not.toContain('storage');
+    });
+
+    it('tolerates malformed album props', () => {
+        expect(
+            blocksToPlainText(
+                '{"type":"sic-blocks","version":1,"blocks":[{"id":"a","type":"album","props":{"images":[1,null,{"alt":"Ok"}]}}]}',
+            ),
+        ).toBe('Ok');
+        expect(
+            blocksToPlainText(
+                '{"type":"sic-blocks","version":1,"blocks":[{"id":"a","type":"album","props":{"images":"x"}}]}',
+            ),
+        ).toBe('');
+    });
+});

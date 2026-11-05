@@ -1,0 +1,10 @@
+---
+/**
+ * Loads the album lightbox (`src/scripts/lightbox.ts`) on pages whose rendered content has an album.
+ * Render it next to content only when `hasAlbum(html)`; the script also checks the DOM before fetching the viewer.
+ */
+---
+
+<script>
+    if (document.querySelector('[data-album]')) void import('@/scripts/lightbox');
+</script>

@@ -2,6 +2,7 @@ import {
     DeleteObjectCommand,
     GetObjectCommand,
     HeadObjectCommand,
+    ListObjectsV2Command,
     NoSuchKey,
     NotFound,
     PutObjectCommand,
@@ -9,6 +10,8 @@ import {
     S3ServiceException,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { RangeNotSatisfiableError } from './errors';
+import { rangeHeaderValue } from './range';
 import type { StorageDriver } from './types';
 
 export interface S3Config {
@@ -24,8 +27,6 @@ export interface S3Config {
 }
 
 export interface S3Driver extends StorageDriver {
-    /** Size of an existing object, or null when it does not exist. */
-    head(key: string): Promise<{ size: number } | null>;
     /**
      * Presigned PUT URL for a browser upload of exactly `size` bytes of `contentType` to `key`.
      * Both are signed, so the browser must send them unchanged.
@@ -69,20 +70,48 @@ export function createS3Driver(config: S3Config): S3Driver {
             // S3 DeleteObject succeeds for missing keys, matching the local driver.
             await client.send(new DeleteObjectCommand({ Bucket, Key: objectKey(key) }));
         },
-        async get(key) {
+        async get(key, range) {
             try {
-                const res = await client.send(new GetObjectCommand({ Bucket, Key: objectKey(key) }));
+                const res = await client.send(
+                    new GetObjectCommand({
+                        Bucket,
+                        Key: objectKey(key),
+                        Range: range ? rangeHeaderValue(range) : undefined,
+                    }),
+                );
                 if (!res.Body) return null;
+                // `ContentRange` is `bytes <start>-<end>/<total>`; a store that ignores Range sends the whole object.
+                const served = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(res.ContentRange ?? '');
                 return {
                     body: res.Body.transformToWebStream() as ReadableStream<Uint8Array>,
-                    size: res.ContentLength ?? 0,
+                    size: served ? Number(served[3]) : (res.ContentLength ?? 0),
                     mtime: res.LastModified ?? null,
                     contentType: res.ContentType ?? null,
+                    range: served ? { start: Number(served[1]), end: Number(served[2]) } : null,
                 };
             } catch (error) {
                 if (isMissing(error)) return null;
+                if (error instanceof S3ServiceException && error.$metadata.httpStatusCode === 416) {
+                    const head = await client.send(new HeadObjectCommand({ Bucket, Key: objectKey(key) }));
+                    throw new RangeNotSatisfiableError(head.ContentLength ?? 0);
+                }
                 throw error;
             }
+        },
+        async *list(prefix = '') {
+            let token: string | undefined;
+            do {
+                const page = await client.send(
+                    new ListObjectsV2Command({ Bucket, Prefix: objectKey(prefix), ContinuationToken: token }),
+                );
+                for (const item of page.Contents ?? []) {
+                    if (!item.Key?.startsWith(config.prefix)) continue;
+                    const key = item.Key.slice(config.prefix.length);
+                    if (!key || key.endsWith('/')) continue;
+                    yield { key, size: item.Size ?? 0, mtime: item.LastModified ?? new Date() };
+                }
+                token = page.IsTruncated ? page.NextContinuationToken : undefined;
+            } while (token);
         },
         async head(key) {
             try {

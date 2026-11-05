@@ -13,7 +13,7 @@ import { parseMarkdown } from '../markdown';
 import { stripMarkdown } from '../markdown-strip';
 import { createBlock, isBlockDocument } from './document';
 import { documentToPlainText } from './plain-text';
-import { renderBlocks } from './render';
+import { ALBUM_ATTR, renderBlocks } from './render';
 import { parseBlockJson } from './schema';
 import type { Block } from './types';
 
@@ -90,6 +90,9 @@ export function parseContent(content: string | null | undefined): RichContent {
 
 /** Stored content → HTML for public pages. */
 export const renderContent = (content: string | null | undefined): string => parseContent(content).html();
+
+/** Whether rendered content (`renderContent`/`html()`) contains an album, i.e. needs the public lightbox script. */
+export const hasAlbum = (html: string): boolean => html.includes(` ${ALBUM_ATTR}`);
 
 /** Stored content → plain text (markup stripped, whitespace collapsed) for meta descriptions and feeds. */
 export const toPlainText = (content: string | null | undefined): string => parseContent(content).text();

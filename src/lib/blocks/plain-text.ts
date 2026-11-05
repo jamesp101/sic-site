@@ -37,6 +37,11 @@ function collect(blocks: unknown[], out: string[]): void {
             case 'table':
                 for (const row of items(props.rows)) out.push(items(row).map(rich).join(' '));
                 break;
+            case 'album':
+                for (const image of items(props.images)) {
+                    if (isObject(image)) out.push(text(image.alt), text(image.caption));
+                }
+                break;
             case 'accordion':
                 for (const item of items(props.items)) {
                     if (isObject(item)) out.push(text(item.title), rich(item.body));

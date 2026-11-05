@@ -219,6 +219,96 @@ describe('validateDocument: block rules', () => {
         rejects(validateDocument(raw([leaf('video', { url: 'https://youtu.be/dQw4w9WgXcQ', title: '' })])), 'title');
     });
 
+    it('accepts our uploaded videos and rejects foreign or traversal file URLs', () => {
+        const KEY = '0123456789abcdef0123456789abcdef';
+        expect(validateDocument(raw([leaf('video', { url: `/storage/videos/${KEY}.mp4`, title: 'Tour' })])).ok).toBe(
+            true,
+        );
+        expect(validateDocument(raw([leaf('video', { url: `/storage/videos/${KEY}.webm`, title: 'Tour' })])).ok).toBe(
+            true,
+        );
+        for (const url of [
+            `https://evil.com/storage/videos/${KEY}.mp4`,
+            `/storage/videos/../${KEY}.mp4`,
+            `/storage/images/${KEY}.mp4`,
+            `/storage/videos/${KEY}.mov`,
+        ]) {
+            rejects(validateDocument(raw([leaf('video', { url, title: 'Tour' })])), 'YouTube or Vimeo');
+        }
+    });
+
+    it('keeps documents without an image link valid and defaults it to none', () => {
+        const result = validateDocument(raw([leaf('image', { src: '/a.png', alt: 'A' })]));
+        expect(result.ok).toBe(true);
+        if (result.ok) expect(result.document.blocks[0].props).toMatchObject({ link: '' });
+    });
+
+    it('validates the image link with the safe-link rules', () => {
+        for (const link of ['/posts', 'https://example.com/x', 'mailto:a@b.co', '#top']) {
+            expect(validateDocument(raw([leaf('image', { src: '/a.png', alt: 'A', link })])).ok, link).toBe(true);
+        }
+        for (const link of [
+            'javascript:alert(1)',
+            'data:text/html;base64,AAAA',
+            ' java\tscript:alert(1)',
+            '//evil.com',
+        ]) {
+            rejects(validateDocument(raw([leaf('image', { src: '/a.png', alt: 'A', link })])), 'valid link');
+        }
+        rejects(
+            validateDocument(raw([leaf('image', { src: '/a.png', decorative: true, link: '/posts' })])),
+            'alt text',
+        );
+    });
+
+    it('accepts a pasted https image URL and rejects script/data sources for images', () => {
+        expect(validateDocument(raw([leaf('image', { src: 'https://example.com/a.jpg', alt: 'A' })])).ok).toBe(true);
+        for (const src of ['javascript:alert(1)', 'data:image/png;base64,AAAA']) {
+            rejects(validateDocument(raw([leaf('image', { src, alt: 'A' })])), 'not allowed');
+        }
+    });
+
+    it('validates albums: images, alt text, columns and the image limit', () => {
+        const image = (n: number) => ({
+            src: `/storage/images/${n}.webp`,
+            alt: `Photo ${n}`,
+            caption: n % 2 ? 'Cap' : '',
+        });
+        const ok = validateDocument(raw([leaf('album', { images: [image(1), image(2), image(3)], columns: 4 })]));
+        expect(ok.ok).toBe(true);
+        if (ok.ok) expect(ok.document.blocks[0].props).toEqual({ images: [image(1), image(2), image(3)], columns: 4 });
+
+        // Defaults: columns 3.
+        const defaults = validateDocument(raw([leaf('album', { images: [image(1)] })]));
+        if (defaults.ok) expect(defaults.document.blocks[0].props).toMatchObject({ columns: 3 });
+        expect(defaults.ok).toBe(true);
+
+        rejects(validateDocument(raw([leaf('album', { images: [] })])), 'at least one image');
+        rejects(
+            validateDocument(raw([leaf('album', { images: [{ src: '/a.png', alt: ' ', caption: '' }] })])),
+            'alt text',
+        );
+        rejects(
+            validateDocument(raw([leaf('album', { images: [{ src: '', alt: 'A', caption: '' }] })])),
+            'choose an image',
+        );
+        rejects(
+            validateDocument(raw([leaf('album', { images: [{ src: 'javascript:alert(1)', alt: 'A', caption: '' }] })])),
+            'not allowed',
+        );
+        for (const columns of [1, 5, '3', null]) {
+            expect(validateDocument(raw([leaf('album', { images: [image(1)], columns })])).ok, String(columns)).toBe(
+                false,
+            );
+        }
+        const tooMany = Array.from({ length: LIMITS.albumImages + 1 }, (_, n) => image(n));
+        expect(validateDocument(raw([leaf('album', { images: tooMany })])).ok).toBe(false);
+        expect(validateDocument(raw([leaf('album', { images: tooMany.slice(0, LIMITS.albumImages) })])).ok).toBe(true);
+        // Unknown image props are dropped.
+        const dirty = validateDocument(raw([leaf('album', { images: [{ ...image(1), onclick: 'x' }] })]));
+        if (dirty.ok) expect(JSON.stringify(dirty.document)).not.toContain('onclick');
+    });
+
     it('only allows heading levels 2 to 4', () => {
         for (const level of [2, 3, 4])
             expect(validateDocument(raw([leaf('heading', { text: 'T', level })])).ok).toBe(true);

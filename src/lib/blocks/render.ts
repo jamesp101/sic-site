@@ -16,6 +16,15 @@ export interface RenderOptions {
     editor?: boolean;
 }
 
+/** Hooks the public lightbox script (`src/scripts/lightbox.ts`) binds to; see `hasAlbum` in `content.ts`. */
+export const ALBUM_ATTR = 'data-album';
+export const ALBUM_ITEM_ATTR = 'data-album-item';
+
+const ALBUM_COLUMNS = {
+    '2': 'grid-cols-2',
+    '3': 'grid-cols-2 sm:grid-cols-3',
+    '4': 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4',
+} as const;
 const GAP = { none: 'gap-0', sm: 'gap-2', md: 'gap-4', lg: 'gap-8' } as const;
 const TEXT_ALIGN = { inherit: '', left: 'text-left', center: 'text-center', right: 'text-right' } as const;
 const JUSTIFY_SELF = {
@@ -304,7 +313,34 @@ const RENDERERS: { [T in BlockType]: Renderer<T> } = {
         const caption = p.caption.trim()
             ? `<figcaption class="mt-2 text-sm text-muted-foreground">${esc(p.caption)}</figcaption>`
             : '';
-        return `<figure${hooks(block, ctx)}><img src="${esc(src)}" alt="${esc(alt)}"${size} loading="lazy" decoding="async" class="h-auto max-w-full rounded-xl">${caption}</figure>`;
+        const img = `<img src="${esc(src)}" alt="${esc(alt)}"${size} loading="lazy" decoding="async" class="h-auto max-w-full rounded-xl">`;
+        const href = p.link ? safeHref(p.link) : null;
+        const linked =
+            href === null
+                ? img
+                : isExternalHref(href)
+                  ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer" class="inline-block rounded-xl">${img}<span class="sr-only"> (opens in a new tab)</span></a>`
+                  : `<a href="${esc(href)}" class="inline-block rounded-xl">${img}</a>`;
+        return `<figure${hooks(block, ctx)}>${linked}${caption}</figure>`;
+    },
+
+    album(block, ctx) {
+        const p = block.props;
+        const images = p.images.flatMap((image) => {
+            const src = safeImageSrc(image.src);
+            return src === null ? [] : [{ src, alt: image.alt, caption: image.caption.trim() }];
+        });
+        if (images.length === 0)
+            return ctx.editor
+                ? `<figure class="rounded-xl border border-dashed border-border-strong bg-surface-alt p-8 text-center text-sm text-muted-foreground"${hooks(block, ctx)}>Add images in the inspector.</figure>`
+                : '';
+        const items = images
+            .map(
+                (image) =>
+                    `<li><a href="${esc(image.src)}" ${ALBUM_ITEM_ATTR}${image.caption ? ` data-caption="${esc(image.caption)}"` : ''} class="block overflow-hidden rounded-xl border border-border bg-surface-alt focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"><img src="${esc(image.src)}" alt="${esc(image.alt)}" loading="lazy" decoding="async" class="aspect-square w-full object-cover transition-transform motion-safe:hover:scale-105"></a></li>`,
+            )
+            .join('');
+        return `<div ${ALBUM_ATTR}${hooks(block, ctx)}><ul class="grid ${pick(ALBUM_COLUMNS as Record<string, string>, String(p.columns), '3')} gap-3">${items}</ul></div>`;
     },
 
     table(block, ctx) {
@@ -365,9 +401,14 @@ const RENDERERS: { [T in BlockType]: Renderer<T> } = {
         const caption = p.caption.trim()
             ? `<figcaption class="mt-2 text-sm text-muted-foreground">${esc(p.caption)}</figcaption>`
             : '';
-        const frame = ctx.editor
-            ? `<div class="flex h-full w-full items-center justify-center p-4 text-center text-sm font-semibold text-muted-foreground">Video: ${esc(p.title)}</div>`
-            : `<iframe src="${esc(source.embedUrl)}" title="${esc(p.title)}" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" class="h-full w-full"></iframe>`;
+        let frame: string;
+        if (ctx.editor) {
+            frame = `<div class="flex h-full w-full items-center justify-center p-4 text-center text-sm font-semibold text-muted-foreground">Video: ${esc(p.title)}</div>`;
+        } else if (source.provider === 'file') {
+            frame = `<video controls preload="metadata" playsinline aria-label="${esc(p.title)}" title="${esc(p.title)}" class="h-full w-full bg-brand-950"><source src="${esc(source.embedUrl)}" type="${source.mime}"></video>`;
+        } else {
+            frame = `<iframe src="${esc(source.embedUrl)}" title="${esc(p.title)}" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" class="h-full w-full"></iframe>`;
+        }
         return `<figure${hooks(block, ctx)}><div class="aspect-video overflow-hidden rounded-xl border border-border bg-surface-alt">${frame}</div>${caption}</figure>`;
     },
 

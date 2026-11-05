@@ -1,7 +1,9 @@
 ---
+import AlbumLightbox from '@/components/site/AlbumLightbox.astro';
 import PostCard from '@/components/site/PostCard.astro';
 import TypePill from '@/components/site/TypePill.astro';
 import PublicLayout from '@/layouts/PublicLayout.astro';
+import { hasAlbum } from '@/lib/blocks/content';
 import { formatDate, formatDateRange } from '@/lib/format';
 import { siteUrl } from '@/lib/seo';
 import { getPostPage } from '@/lib/server/queries';
@@ -83,6 +85,7 @@ const hasEventDates = post.type === 'event' && post.startDate;
             </p>
         </div>
     </article>
+    {hasAlbum(post.html) && <AlbumLightbox />}
 
     {related.length > 0 && (
         <section class="border-t border-border bg-surface py-16" aria-labelledby="related-heading">

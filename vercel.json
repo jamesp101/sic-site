@@ -4,6 +4,7 @@
     "buildCommand": "node scripts/prisma-schema.mjs && prisma generate && astro build",
     "regions": ["sin1"],
     "git": { "deploymentEnabled": false },
+    "crons": [{ "path": "/api/cron/storage-cleanup", "schedule": "17 3 * * *" }],
     "headers": [
         {
             "source": "/sic-seal(.*)",

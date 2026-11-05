@@ -6,9 +6,11 @@
     ImagePlus,
     Layers as LayersIcon,
     Loader2,
+    Monitor,
     MousePointerClick,
     Redo2,
     Save,
+    Smartphone,
     Square,
     Tag,
     Type,
@@ -42,7 +44,10 @@
     serializeOverlay,
     type Layer,
     type LayerType,
+    type MobileOverride,
+    type SlideMobile,
   } from '@/lib/carousel-overlay';
+  import { resetMobile, resolveMobile, setMobile, slideFocus } from '@/lib/carousel-overlay-mobile';
   import { parseOverlayStrict } from '@/lib/carousel-overlay-schema';
   import type { DesignerSlide } from '@/lib/server/carousel-admin';
   import ConfirmDialog from '../ConfirmDialog.svelte';
@@ -66,6 +71,12 @@
     showOnMain: boolean;
     title: string;
     history: History<Layer[]>;
+    /** Phone settings of the slide (photo focal point); null = centred. */
+    mobile: SlideMobile | null;
+    /** Background video: an uploaded file's URL or a YouTube link; '' = none. */
+    video: string;
+    /** `video` as last saved. */
+    savedVideo: string;
     /** Serialized layers as last saved; LEGACY marks a slide converted from title/subtitle/link. */
     baseline: string;
     imageError: string;
@@ -106,7 +117,10 @@
       showOnMain: slide.showOnMain,
       title: slide.title ?? '',
       history: createHistory(layers),
-      baseline: legacy && layers.length > 0 ? LEGACY : serializeOverlay(layers),
+      mobile: slide.mobile,
+      video: slide.video,
+      savedVideo: slide.video,
+      baseline: legacy && layers.length > 0 ? LEGACY : serializeOverlay(layers, slide.mobile),
       imageError: '',
     };
   }
@@ -121,6 +135,8 @@
   let errorMessage = $state('');
   let status = $state('');
   let showVisibleArea = $state(true);
+  /** Which layout the canvas shows and the panels edit. */
+  let view = $state<'desktop' | 'mobile'>('desktop');
   let deleteKey = $state<string | null>(null);
   let deleting = $state(false);
   /** Navigation or form submit held back until the user decides about unsaved changes. */
@@ -132,9 +148,12 @@
   const layers = $derived(active?.history.present ?? []);
   const selectedIndex = $derived(layers.findIndex((layer) => layer.id === selectedId));
   const selected = $derived(selectedIndex >= 0 ? layers[selectedIndex] : null);
+  const mobileBoxes = $derived(resolveMobile(layers));
+  const focus = $derived(slideFocus(active?.mobile));
   const canvasImage = $derived(active ? (active.previewUrl ?? active.imageUrl) : null);
 
-  const isDirty = (draft: Draft) => draft.id === null || draft.file !== null || draft.baseline !== serializeOverlay(draft.history.present);
+  const isDirty = (draft: Draft) =>
+    draft.id === null || draft.file !== null || draft.video !== draft.savedVideo || draft.baseline !== serializeOverlay(draft.history.present, draft.mobile);
   const activeDirty = $derived(active ? isDirty(active) : false);
   const anyDirty = $derived(drafts.some((draft) => draft.id !== null && isDirty(draft)) || drafts.some((draft) => draft.id === null && (draft.file || draft.history.present.length > 0)));
   const legacyPending = $derived(active?.baseline === LEGACY);
@@ -213,6 +232,42 @@
       if (typeof safe[field] === 'number') safe[field] = Math.min(max, Math.max(min, safe[field] as number));
     }
     applyLayers(patchLayer(layers, selected.id, safe as Partial<Layer>), coalesceKey ? `${selected.id}:${coalesceKey}` : undefined);
+  }
+
+  /** Width/height a hand-placed phone layer stores, taken from its rendered box. */
+  function placedSize(layer: Layer, box: Box): MobileOverride {
+    const size: MobileOverride = {};
+    if (layer.type === 'text' || layer.type === 'shape' || layer.type === 'image') size.w = box.w;
+    if (layer.type === 'shape' || layer.type === 'image') size.h = box.h;
+    return size;
+  }
+
+  /** Edits the selected layer's phone overrides (keys set to undefined are removed). */
+  function patchMobile(patch: MobileOverride, coalesceKey?: string) {
+    if (!selected) return;
+    const next = layers.map((layer) => (layer.id === selected.id ? setMobile(layer, patch) : layer));
+    applyLayers(next, coalesceKey ? `${selected.id}:m:${coalesceKey}` : undefined);
+  }
+
+  function resetSelectedMobile() {
+    if (!selected) return;
+    applyLayers(layers.map((layer) => (layer.id === selected.id ? resetMobile(layer) : layer)));
+    status = 'Phone layout of the layer reset to automatic.';
+  }
+
+  /** Clears every phone override and the focal point of the open slide. */
+  function resetSlideMobile() {
+    if (!active) return;
+    update(active.key, (draft) => ({
+      ...draft,
+      mobile: null,
+      history: commit(draft.history, draft.history.present.map(resetMobile)),
+    }));
+    status = 'Phone layout reset to automatic.';
+  }
+
+  function setFocus(next: { x: number; y: number }) {
+    update(activeKey, (draft) => ({ ...draft, mobile: { focus: next } }));
   }
 
   function addLayer(layer: Layer) {
@@ -323,6 +378,15 @@
 
   function nudge(dx: number, dy: number) {
     if (!selected) return;
+    if (view === 'mobile') {
+      const box = measureSelected();
+      if (!box) return;
+      patchMobile(
+        { x: Math.min(100 - box.w, Math.max(0, box.x + dx)), y: Math.min(100 - box.h, Math.max(0, box.y + dy)), ...placedSize(selected, box) },
+        'nudge',
+      );
+      return;
+    }
     const maxX = 'w' in selected ? 100 - selected.w : 100;
     const maxY = 'h' in selected ? 100 - selected.h : 100;
     patchSelected(
@@ -402,6 +466,9 @@
         showOnMain: true,
         title: '',
         history: createHistory<Layer[]>([]),
+        mobile: null,
+        video: '',
+        savedVideo: '',
         baseline: serializeOverlay([]),
         imageError: '',
       },
@@ -427,7 +494,7 @@
       selectedId = null;
       return;
     }
-    const json = serializeOverlay(draft.history.present);
+    const json = serializeOverlay(draft.history.present, draft.mobile);
     const check = parseOverlayStrict(json);
     if (!check.ok) {
       errorMessage = check.error;
@@ -438,6 +505,7 @@
     const form = new FormData();
     append(form, 'overlay', json);
     append(form, 'image', draft.file);
+    form.set('video', draft.video);
     let result;
     if (draft.id === null) {
       append(form, 'departmentId', draft.departmentId);
@@ -452,7 +520,7 @@
     if (result.error) {
       const parsed = parseActionError(result.error);
       if (parsed.fields.image) update(draft.key, (current) => ({ ...current, imageError: parsed.fields.image }));
-      errorMessage = parsed.fields.overlay || parsed.fields.image || parsed.message || 'The slide could not be saved.';
+      errorMessage = parsed.fields.overlay || parsed.fields.image || parsed.fields.video || parsed.message || 'The slide could not be saved.';
       return;
     }
 
@@ -468,6 +536,9 @@
       departmentId: slide.departmentId,
       showOnMain: slide.showOnMain,
       title: slide.title ?? '',
+      mobile: slide.mobile,
+      video: slide.video,
+      savedVideo: slide.video,
       baseline: json,
       imageError: '',
     }));
@@ -640,6 +711,25 @@
           <button type="button" class="{secondaryButtonClass} !px-2 !py-1.5" onclick={doRedo} disabled={!active.history.future.length} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)">
             <Redo2 class="h-4 w-4" aria-hidden="true" />
           </button>
+          <div role="group" aria-label="Layout" class="flex gap-1">
+            <button
+              type="button"
+              class="{secondaryButtonClass} !px-3 !py-1.5 text-xs {view === 'desktop' ? '!border-brand-600 !bg-accent' : ''}"
+              aria-pressed={view === 'desktop'}
+              onclick={() => (view = 'desktop')}
+            >
+              <Monitor class="h-4 w-4" aria-hidden="true" /> Desktop
+            </button>
+            <button
+              type="button"
+              class="{secondaryButtonClass} !px-3 !py-1.5 text-xs {view === 'mobile' ? '!border-brand-600 !bg-accent' : ''}"
+              aria-pressed={view === 'mobile'}
+              onclick={() => (view = 'mobile')}
+            >
+              <Smartphone class="h-4 w-4" aria-hidden="true" /> Mobile
+            </button>
+          </div>
+          {#if view === 'desktop'}
           <button
             type="button"
             class="{secondaryButtonClass} !px-3 !py-1.5 text-xs"
@@ -650,6 +740,7 @@
             {#if showVisibleArea}<Eye class="h-4 w-4" aria-hidden="true" />{:else}<EyeOff class="h-4 w-4" aria-hidden="true" />{/if}
             Wide-screen crop
           </button>
+          {/if}
           <span class="ml-auto"></span>
           <button type="button" class="{primaryButtonClass} !px-4 !py-1.5 text-xs" onclick={save} disabled={saving || (!activeDirty && active.id !== null)} title="Save (Ctrl/Cmd+S)">
             {#if saving}<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />{:else}<Save class="h-4 w-4" aria-hidden="true" />{/if}
@@ -672,6 +763,9 @@
             {layers}
             {selectedId}
             {showVisibleArea}
+            {view}
+            {focus}
+            {mobileBoxes}
             onselect={(id) => (selectedId = id)}
             onlive={(next) => update(activeKey, (draft) => ({ ...draft, history: { ...draft.history, present: next } }))}
             oncommit={(base) =>
@@ -680,7 +774,13 @@
         </div>
         <p class="text-xs text-muted-foreground">
           Drag layers to move, use the handles to resize. Arrow keys nudge (Shift for bigger steps), Delete removes, Ctrl/Cmd+D duplicates,
-          Ctrl/Cmd+Z undoes, Ctrl/Cmd+S saves. On phones the layers stack in reading order below the photo’s focal area.
+          Ctrl/Cmd+Z undoes, Ctrl/Cmd+S saves.
+          {#if view === 'mobile'}
+            You are editing the phone layout (4:5). Layers you have not moved are stacked automatically; moving one places it by hand, and
+            “Reset to automatic” undoes that.
+          {:else}
+            On phones the slide is 4:5: layers you have not placed in the Mobile layout are stacked automatically.
+          {/if}
         </p>
       {:else}
         <div class="flex flex-1 items-center justify-center rounded-xl border border-dashed border-border-strong p-10 text-center text-muted-foreground">
@@ -714,8 +814,13 @@
               onduplicate={duplicateSelected}
               ondelete={removeSelected}
               measure={measureSelected}
+              {view}
+              mobileBox={mobileBoxes.get(selected.id) ?? null}
+              onmobile={patchMobile}
+              onmobilereset={resetSelectedMobile}
             />
           {:else}
+            {#key active.key}
             <SlideSettings
               bind:file={() => active?.file ?? null, setFile}
               savedImageUrl={active.imageUrl}
@@ -726,7 +831,14 @@
               {superadmin}
               {busy}
               onplacement={(patch) => placement(active.key, patch)}
+              video={active.video}
+              onvideo={(value) => update(activeKey, (draft) => ({ ...draft, video: value }))}
+              {focus}
+              onfocus={setFocus}
+              mobileCustomized={active.mobile !== null || layers.some((layer) => layer.mobile !== undefined)}
+              onmobilereset={resetSlideMobile}
             />
+            {/key}
           {/if}
         </div>
 

@@ -171,3 +171,42 @@ describe('parseVideoUrl', () => {
         expect(parseVideoUrl(url)).toBeNull();
     });
 });
+
+describe('parseVideoUrl file provider', () => {
+    const KEY = '0123456789abcdef0123456789abcdef';
+
+    it.each(['mp4', 'webm'])('accepts a site-relative upload (.%s)', (ext) => {
+        expect(parseVideoUrl(`/storage/videos/${KEY}.${ext}`)).toEqual({
+            provider: 'file',
+            id: `videos/${KEY}.${ext}`,
+            embedUrl: `/storage/videos/${KEY}.${ext}`,
+            mime: `video/${ext}`,
+        });
+    });
+
+    it('rejects absolute URLs, even ones that look like a bucket address', () => {
+        for (const host of ['https://cdn.example.com/media', 'http://localhost:4321']) {
+            expect(parseVideoUrl(`${host}/videos/${KEY}.mp4`)).toBeNull();
+            expect(parseVideoUrl(`${host}/storage/videos/${KEY}.mp4`)).toBeNull();
+        }
+    });
+
+    it.each([
+        ['foreign host', `https://evil.com/storage/videos/${KEY}.mp4`],
+        ['protocol-relative', `//evil.com/storage/videos/${KEY}.mp4`],
+        ['traversal', `/storage/videos/../uploads/${KEY}.mp4`],
+        ['encoded traversal', `/storage/videos/%2e%2e/${KEY}.mp4`],
+        ['nested path', `/storage/videos/a/${KEY}.mp4`],
+        ['other prefix', `/storage/images/${KEY}.mp4`],
+        ['other extension', `/storage/videos/${KEY}.mov`],
+        ['html extension', `/storage/videos/${KEY}.html`],
+        ['query string', `/storage/videos/${KEY}.mp4?x=1`],
+        ['fragment', `/storage/videos/${KEY}.mp4#t=1`],
+        ['short name', '/storage/videos/abc.mp4'],
+        ['backslash', `/storage\\videos/${KEY}.mp4`],
+        ['javascript', 'javascript:alert(1)'],
+        ['data', 'data:video/mp4;base64,AAAA'],
+    ])('rejects %s', (_name, url) => {
+        expect(parseVideoUrl(url)).toBeNull();
+    });
+});

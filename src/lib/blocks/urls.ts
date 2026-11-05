@@ -35,10 +35,21 @@ export function isExternalHref(href: string): boolean {
 }
 
 export interface VideoSource {
-    provider: 'youtube' | 'vimeo';
+    provider: 'youtube' | 'vimeo' | 'file';
     id: string;
-    /** Privacy-friendly iframe URL (youtube-nocookie / Vimeo `dnt=1`). */
+    /** Iframe URL (privacy-friendly youtube-nocookie / Vimeo `dnt=1`), or for `file` the video's own URL. */
     embedUrl: string;
+    /** Only for `file`: the `<video>` source type. */
+    mime?: 'video/mp4' | 'video/webm';
+}
+
+const VIDEO_FILE = /^\/storage\/(videos\/[0-9a-f]{32}\.(mp4|webm))$/;
+
+/** Our own uploaded videos only: the app route `/storage/videos/<32 hex>.mp4|webm` (it redirects to the bucket when one serves files directly). */
+function parseVideoFile(raw: string): VideoSource | null {
+    const match = VIDEO_FILE.exec(raw);
+    if (!match) return null;
+    return { provider: 'file', id: match[1], embedUrl: raw, mime: match[2] === 'webm' ? 'video/webm' : 'video/mp4' };
 }
 
 const YOUTUBE_HOSTS: Record<string, true> = {
@@ -51,9 +62,11 @@ const YOUTUBE_HOSTS: Record<string, true> = {
 const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
 const VIMEO_ID = /^\d{5,12}$/;
 
-/** Accepts only YouTube / Vimeo page or embed URLs; everything else is rejected. */
+/** Accepts YouTube / Vimeo page or embed URLs and our own uploaded videos; everything else is rejected. */
 export function parseVideoUrl(raw: unknown): VideoSource | null {
     if (typeof raw !== 'string') return null;
+    const file = parseVideoFile(raw.trim());
+    if (file) return file;
     let url: URL;
     try {
         url = new URL(raw.trim());

@@ -48,6 +48,7 @@ export const JUSTIFY_OPTIONS: Option[] = [
 
 export const GRID_COLUMN_OPTIONS: Option[] = [1, 2, 3, 4, 5, 6].map((n) => ({ value: n, label: String(n) }));
 export const COLUMN_COUNT_OPTIONS: Option[] = [2, 3].map((n) => ({ value: n, label: String(n) }));
+export const ALBUM_COLUMN_OPTIONS: Option[] = [2, 3, 4].map((n) => ({ value: n, label: String(n) }));
 
 export const RATIO_OPTIONS: Option[] = [
     { value: 'equal', label: 'Equal' },
@@ -98,3 +99,4 @@ export const CALLOUT_TONE_OPTIONS: Option[] = [
 ];
 
 export const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/avif';
+export const VIDEO_ACCEPT = 'video/mp4,video/webm,.mp4,.webm';

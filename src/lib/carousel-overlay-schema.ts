@@ -19,16 +19,32 @@ import {
     safeImageSrc,
     upgradeLayer,
     type Layer,
+    type SlideMobile,
 } from './carousel-overlay';
 
 const pct = z.number().min(0).max(100);
 const span = z.number().min(1).max(100);
+/** Phone overrides: percent bounds, token sizes only; a position needs both x and y. */
+const mobileOverride = z
+    .strictObject({
+        x: pct.optional(),
+        y: pct.optional(),
+        w: span.optional(),
+        h: span.optional(),
+        size: z.enum(SIZES).optional(),
+        hidden: z.boolean().optional(),
+    })
+    .refine((mobile) => (mobile.x === undefined) === (mobile.y === undefined), 'Set both the phone X and Y position.');
+
+const slideMobile = z.strictObject({ focus: z.strictObject({ x: pct, y: pct }) });
+
 const base = {
     id: z.string().regex(/^[A-Za-z0-9_-]{1,40}$/, 'Invalid layer id.'),
     x: pct,
     y: pct,
     rotation: z.number().min(-180).max(180).default(0),
     opacity: z.number().int().min(10).max(100).default(100),
+    mobile: mobileOverride.optional(),
 };
 const href = z
     .string()
@@ -112,13 +128,14 @@ export const overlaySchema = z.strictObject({
         .array(layerSchema)
         .max(MAX_LAYERS, `A slide can have at most ${MAX_LAYERS} layers.`)
         .refine(uniqueIds, 'Layer ids must be unique.'),
+    mobile: slideMobile.optional(),
 });
 
 // ---------------------------------------------------------------------------
 // Parse
 // ---------------------------------------------------------------------------
 
-export type OverlayResult = { ok: true; layers: Layer[] } | { ok: false; error: string };
+export type OverlayResult = { ok: true; layers: Layer[]; mobile: SlideMobile | null } | { ok: false; error: string };
 
 /** Strict validation for writes: any unknown property, bad URL or oversize document is an error. */
 export function parseOverlayStrict(raw: string): OverlayResult {
@@ -135,14 +152,20 @@ export function parseOverlayStrict(raw: string): OverlayResult {
         const layer = typeof issue?.path[1] === 'number' ? ` (layer ${issue.path[1] + 1})` : '';
         return { ok: false, error: `${issue?.message ?? 'The slide design is invalid.'}${layer}` };
     }
-    return { ok: true, layers: parsed.data.layers.map(rounded) };
+    return { ok: true, layers: parsed.data.layers.map(rounded), mobile: parsed.data.mobile ?? null };
+}
+
+export interface OverlayDocument {
+    layers: Layer[];
+    mobile: SlideMobile | null;
 }
 
 /**
  * Tolerant read for rendering: null means "no overlay, use the legacy title/subtitle/link".
- * Invalid layers are dropped; a document whose layers are all invalid counts as no overlay.
+ * Invalid layers are dropped (a layer with only invalid phone overrides keeps its desktop design); a document whose
+ * layers are all invalid counts as no overlay; invalid slide-level phone settings are ignored.
  */
-export function parseOverlay(raw: string | null | undefined): Layer[] | null {
+export function parseOverlayDocument(raw: string | null | undefined): OverlayDocument | null {
     if (!raw || raw.length > MAX_OVERLAY_JSON) return null;
     let data: unknown;
     try {
@@ -151,16 +174,28 @@ export function parseOverlay(raw: string | null | undefined): Layer[] | null {
         return null;
     }
     if (!data || typeof data !== 'object') return null;
-    const doc = data as { v?: unknown; layers?: unknown };
+    const doc = data as { v?: unknown; layers?: unknown; mobile?: unknown };
     if (doc.v !== OVERLAY_VERSION || !Array.isArray(doc.layers)) return null;
 
     const seen = new Set<string>();
     const layers: Layer[] = [];
     for (const candidate of doc.layers.slice(0, MAX_LAYERS)) {
-        const parsed = layerSchema.safeParse(upgradeLayer(candidate));
+        const upgraded = upgradeLayer(candidate);
+        let parsed = layerSchema.safeParse(upgraded);
+        if (!parsed.success && upgraded && typeof upgraded === 'object' && 'mobile' in upgraded) {
+            const { mobile: _drop, ...desktop } = upgraded as Record<string, unknown>;
+            parsed = layerSchema.safeParse(desktop);
+        }
         if (!parsed.success || seen.has(parsed.data.id)) continue;
         seen.add(parsed.data.id);
         layers.push(parsed.data);
     }
-    return layers.length === 0 && doc.layers.length > 0 ? null : layers;
+    if (layers.length === 0 && doc.layers.length > 0) return null;
+    const mobile = slideMobile.safeParse(doc.mobile);
+    return { layers, mobile: mobile.success ? mobile.data : null };
+}
+
+/** The layers of a stored overlay (see parseOverlayDocument); null = legacy slide. */
+export function parseOverlay(raw: string | null | undefined): Layer[] | null {
+    return parseOverlayDocument(raw)?.layers ?? null;
 }

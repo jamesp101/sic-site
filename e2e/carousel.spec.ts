@@ -9,6 +9,9 @@ const RUN = Date.now().toString(36);
 const ALPHA = { headline: `E2E Alpha ${RUN}`, label: `E2E Alpha Button ${RUN}`, href: '/posts' };
 const BETA = { headline: `E2E Beta ${RUN}`, label: `E2E Beta Button ${RUN}`, href: '/downloads' };
 
+const GAMMA = { headline: `E2E Gamma ${RUN}`, label: `E2E Gamma Button ${RUN}`, href: '/posts' };
+const YOUTUBE = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
 let alphaId = '';
 
 const saved = (page: Page, action: string) =>
@@ -288,6 +291,194 @@ test.describe('element sizes', () => {
     });
 });
 
+/** Third-party players are never loaded in tests; the iframe element is all that is asserted. */
+const blockYoutube = (page: Page) => page.route('**/*youtube-nocookie.com/**', (route) => route.abort());
+
+const heroOf = (page: Page) => page.locator('section[aria-roledescription="carousel"]');
+const slideOf = (page: Page, headline: string) =>
+    heroOf(page).locator('[aria-roledescription="slide"]', { has: page.locator('h2', { hasText: headline }) });
+
+/** Shows the slide with this headline (dot navigation) and returns its locator. */
+async function showSlide(page: Page, headline: string) {
+    await expect(heroOf(page)).toBeVisible();
+    const slide = slideOf(page, headline);
+    const position =
+        (await heroOf(page)
+            .locator('[aria-roledescription="slide"]')
+            .evaluateAll((els, text) => els.findIndex((el) => el.textContent?.includes(text)), headline)) + 1;
+    await expect(async () => {
+        await page.getByRole('button', { name: `Go to slide ${position}`, exact: true }).click({ timeout: 1500 });
+        await expect(slide).not.toHaveAttribute('inert', '', { timeout: 1500 });
+    }).toPass({ timeout: 15_000 });
+    return slide;
+}
+
+/** Top of the headline inside the hero, in percent of the hero's height. */
+async function headlineTop(page: Page, headline: string) {
+    const slide = slideOf(page, headline);
+    const hero = await heroOf(page).boundingBox();
+    const box = await slide.locator('h2', { hasText: headline }).boundingBox();
+    if (!hero || !box) throw new Error('hero or headline has no box');
+    return ((box.y - hero.y) / hero.height) * 100;
+}
+
+test.describe('background video and phone layout', () => {
+    test.use({ storageState: ADMIN });
+
+    test('a YouTube background renders a muted, controls-free nocookie embed on the active slide only', async ({
+        page,
+    }) => {
+        await blockYoutube(page);
+        await page.goto('/admin/carousels');
+        await createSlide(page, GAMMA, async (p) => {
+            await p.getByRole('button', { name: 'Slide', exact: true }).click();
+            await p.locator('#slide-video-link').fill('https://vimeo.com/123456789');
+            await p.locator('#slide-video-link').press('Enter');
+            await expect(p.locator('#slide-video-link-error')).toBeVisible();
+            await p.locator('#slide-video-link').fill(YOUTUBE);
+            await p.locator('#slide-video-link').press('Enter');
+            await expect(p.locator('#slide-video-link-error')).toHaveCount(0);
+        });
+
+        // The link is stored and comes back in the designer.
+        await page.reload();
+        await page.getByRole('button', { name: new RegExp(`^Edit slide \\d+ of \\d+: ${GAMMA.headline}`) }).click();
+        await expect(page.locator('#slide-video-link')).toHaveValue(YOUTUBE);
+
+        await page.goto('/');
+        const slide = await showSlide(page, GAMMA.headline);
+        const frame = slide.locator('iframe');
+        await expect(frame).toHaveCount(1);
+        const src = new URL((await frame.getAttribute('src')) ?? '');
+        expect(src.origin).toBe('https://www.youtube-nocookie.com');
+        expect(src.pathname).toBe('/embed/dQw4w9WgXcQ');
+        expect(Object.fromEntries(src.searchParams)).toMatchObject({
+            autoplay: '1',
+            mute: '1',
+            loop: '1',
+            playlist: 'dQw4w9WgXcQ',
+            controls: '0',
+            modestbranding: '1',
+        });
+        await expect(frame).toHaveAttribute('tabindex', '-1');
+        await expect(frame).toHaveClass(/pointer-events-none/);
+        await expect(frame.locator('xpath=ancestor::div[@aria-hidden="true"]')).toHaveCount(1);
+        // The photo stays underneath as the poster, and other slides never load a player.
+        await expect(slide.locator('img.photo')).toHaveCount(1);
+        await expect(heroOf(page).locator('iframe')).toHaveCount(1);
+    });
+
+    test('reduced motion and data saver keep the photo only', async ({ browser }) => {
+        const context = await browser.newContext({ reducedMotion: 'reduce' });
+        const page = await context.newPage();
+        await blockYoutube(page);
+        await page.goto('/');
+        await expect(heroOf(page)).toBeVisible();
+        await page.waitForTimeout(500);
+        await expect(heroOf(page).locator('iframe, video')).toHaveCount(0);
+        await context.close();
+    });
+
+    test('the server accepts only our uploads and YouTube links as a slide video', async ({ page }) => {
+        await page.goto('/admin/carousels');
+        const origin = new URL(page.url()).origin;
+        const overlay = JSON.stringify({ v: 1, layers: [] });
+        for (const video of ['https://vimeo.com/123456789', 'https://example.com/clip.mp4', 'javascript:alert(1)']) {
+            const response = await page.request.post('/_actions/carousels.update', {
+                headers: { Origin: origin },
+                multipart: { id: alphaId, overlay, video },
+            });
+            expect(response.status(), video).toBe(400);
+        }
+    });
+
+    test('on a 390x844 phone the slide is 4:5 and the heading sits inside the frame', async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+        const page = await context.newPage();
+        await blockYoutube(page);
+        await page.goto('/');
+        await showSlide(page, GAMMA.headline);
+
+        const hero = await heroOf(page).boundingBox();
+        expect(hero).not.toBeNull();
+        expect((hero?.width ?? 0) / (hero?.height ?? 1)).toBeCloseTo(0.8, 2);
+
+        const heading = heroOf(page).locator('h2', { hasText: GAMMA.headline });
+        await expect(heading).toBeVisible();
+        const box = await heading.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box?.x ?? -1).toBeGreaterThanOrEqual((hero?.x ?? 0) - 0.5);
+        expect(box?.y ?? -1).toBeGreaterThanOrEqual((hero?.y ?? 0) - 0.5);
+        expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual((hero?.x ?? 0) + (hero?.width ?? 0) + 0.5);
+        expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual((hero?.y ?? 0) + (hero?.height ?? 0) + 0.5);
+        // Text is at least 12 px.
+        expect(await heading.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(12);
+
+        // Stacked automatically: the button is below the heading and they do not overlap.
+        const button = await heroOf(page).locator('a', { hasText: GAMMA.label }).boundingBox();
+        expect(button).not.toBeNull();
+        expect(button?.y ?? 0).toBeGreaterThanOrEqual((box?.y ?? 0) + (box?.height ?? 0) - 0.5);
+        await context.close();
+    });
+
+    test('a mobile override from the designer applies on phones only', async ({ page, browser }) => {
+        await blockYoutube(page);
+        const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
+        const phonePage = await phone.newPage();
+        await blockYoutube(phonePage);
+        const wide = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+        const widePage = await wide.newPage();
+        await blockYoutube(widePage);
+
+        const measure = async () => {
+            await phonePage.goto('/');
+            await showSlide(phonePage, GAMMA.headline);
+            const onPhone = await headlineTop(phonePage, GAMMA.headline);
+            await widePage.goto('/');
+            await showSlide(widePage, GAMMA.headline);
+            return { onPhone, onDesktop: await headlineTop(widePage, GAMMA.headline) };
+        };
+        const before = await measure();
+
+        await page.goto('/admin/carousels');
+        await page.getByRole('button', { name: new RegExp(`^Edit slide \\d+ of \\d+: ${GAMMA.headline}`) }).click();
+        await page.getByRole('button', { name: 'Mobile', exact: true }).click();
+        const stage = page.locator('[data-designer-area] [role="group"][aria-label^="Phone slide canvas"]');
+        const stageBox = await stage.boundingBox();
+        expect((stageBox?.width ?? 0) / (stageBox?.height ?? 1)).toBeCloseTo(0.8, 2);
+
+        await page.getByRole('button', { name: `Text: ${GAMMA.headline}` }).focus();
+        await expect(page.getByTestId('phone-layout')).toContainText('Stacked automatically');
+        for (let i = 0; i < 5; i++) await page.keyboard.press('Shift+ArrowUp');
+        await expect(page.getByTestId('phone-layout')).toContainText('Placed by hand');
+
+        const update = saved(page, 'update');
+        await page.keyboard.press('Control+s');
+        await update;
+
+        const after = await measure();
+        expect(after.onPhone).toBeLessThan(before.onPhone - 5);
+        expect(Math.abs(after.onDesktop - before.onDesktop)).toBeLessThan(0.5);
+
+        // Reset to automatic restores the stacked position; hiding removes the heading on phones only.
+        await page.getByRole('button', { name: 'Reset to automatic' }).first().click();
+        await expect(page.getByTestId('phone-layout')).toContainText('Stacked automatically');
+        await page.getByRole('checkbox', { name: 'Hide on phones' }).check();
+        const hidden = saved(page, 'update');
+        await page.keyboard.press('Control+s');
+        await hidden;
+
+        await phonePage.goto('/');
+        await expect(heroOf(phonePage).locator('h2', { hasText: GAMMA.headline })).toBeHidden();
+        await widePage.goto('/');
+        await showSlide(widePage, GAMMA.headline);
+        await expect(heroOf(widePage).locator('h2', { hasText: GAMMA.headline })).toBeVisible();
+
+        await phone.close();
+        await wide.close();
+    });
+});
+
 test.describe('department user', () => {
     test('only sees its own slides and cannot edit another department’s slide', async ({ browser }) => {
         const context = await browser.newContext({ storageState: CIT });
@@ -327,7 +518,7 @@ test.describe('cleanup', () => {
 
     test('delete the test slides', async ({ page, browser }) => {
         await page.goto('/admin/carousels');
-        for (const headline of [ALPHA.headline, BETA.headline]) {
+        for (const headline of [ALPHA.headline, BETA.headline, GAMMA.headline]) {
             await page.getByRole('button', { name: new RegExp(`^Edit slide \\d+ of \\d+: ${headline}`) }).click();
             const position = (
                 await page.locator('[aria-current="true"][data-slide-id]').getAttribute('aria-label')

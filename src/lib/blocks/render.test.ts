@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { renderContent } from './content';
+import { hasAlbum, renderContent } from './content';
 import { createBlock, createDocument, serializeDocument } from './document';
 import { renderBlocks } from './render';
 import type { Block } from './types';
@@ -250,6 +250,127 @@ describe('renderBlocks: media', () => {
         const html = render(createBlock('video', { url: YOUTUBE, title: 'Campus tour' }), { editor: true });
         expect(html).not.toContain('<iframe');
         expect(html).toContain('Video: Campus tour');
+    });
+});
+
+describe('renderBlocks: image link', () => {
+    const image = (link: string) => render(createBlock('image', { src: '/a.png', alt: 'Poster', link }));
+
+    it('has no anchor without a link (old documents)', () => {
+        expect(image('')).not.toContain('<a ');
+        expect(render(createBlock('image', { src: '/a.png', alt: 'x', link: undefined as never }))).not.toContain(
+            '<a ',
+        );
+    });
+
+    it('opens internal links in the same tab', () => {
+        const html = image('/posts');
+        expect(html).toContain('<a href="/posts"');
+        expect(html).not.toContain('target=');
+        expect(html).not.toContain('rel=');
+        expect(html).toMatch(/<a [^>]*><img /);
+    });
+
+    it('opens external links in a new tab with rel and an accessible hint', () => {
+        const html = image('https://example.com/page');
+        expect(html).toContain('<a href="https://example.com/page" target="_blank" rel="noopener noreferrer"');
+        expect(html).toContain('<span class="sr-only"> (opens in a new tab)</span>');
+    });
+
+    it('escapes the link and drops unsafe ones', () => {
+        expect(image('/a"onmouseover="x')).toContain('href="/a&quot;onmouseover=&quot;x"');
+        for (const link of ['javascript:alert(1)', 'data:text/html;base64,AAAA', ' java\tscript:alert(1)']) {
+            const html = image(link);
+            expect(html, link).not.toContain('<a ');
+            expect(html, link).toContain('<img ');
+        }
+    });
+});
+
+describe('renderBlocks: album', () => {
+    const images = [
+        { src: '/storage/images/a.webp', alt: 'First', caption: 'Day one' },
+        { src: 'https://cdn.example.com/b.webp', alt: 'Second', caption: '' },
+    ];
+
+    it('renders a lazy grid of thumbnails that link to the full images and carries the lightbox hook', () => {
+        const html = render(createBlock('album', { images, columns: 4 }));
+        expect(html).toContain(' data-album');
+        expect(count(html, 'data-album-item')).toBe(2);
+        expect(html).toContain('<a href="/storage/images/a.webp" data-album-item data-caption="Day one"');
+        expect(html).toContain('<a href="https://cdn.example.com/b.webp" data-album-item class=');
+        expect(html).toContain('alt="First"');
+        expect(count(html, 'loading="lazy"')).toBe(2);
+        expect(html).toContain('grid-cols-2 sm:grid-cols-3 lg:grid-cols-4');
+        expect(html).not.toContain('target=');
+    });
+
+    it('renders nothing without a usable image, and a hint in the editor', () => {
+        expect(render(createBlock('album', { images: [], columns: 3 }))).toBe('');
+        expect(render(createBlock('album', { images: [{ src: 'javascript:alert(1)', alt: 'x', caption: '' }] }))).toBe(
+            '',
+        );
+        expect(render(createBlock('album', { images: [] }), { editor: true })).toContain('Add images in the inspector');
+    });
+
+    it('escapes alt, caption and source, and skips unsafe sources', () => {
+        const html = render(
+            createBlock('album', {
+                images: [
+                    { src: '/a.png"onerror="x', alt: XSS, caption: XSS },
+                    { src: 'data:image/png;base64,AAAA', alt: 'unsafe', caption: '' },
+                ],
+            }),
+        );
+        expect(html).not.toContain('<script>');
+        expect(html).toContain('alt="&lt;script&gt;');
+        expect(html).toContain('data-caption="&lt;script&gt;');
+        expect(html).not.toContain('onerror="x"');
+        expect(html).not.toContain('unsafe');
+    });
+
+    it('marks rendered content as needing the lightbox only when it has an album', () => {
+        const withAlbum = serializeDocument(createDocument([createBlock('album', { images })]));
+        const without = serializeDocument(createDocument([createBlock('image', { src: '/a.png', alt: 'x' })]));
+        expect(hasAlbum(renderContent(withAlbum))).toBe(true);
+        expect(hasAlbum(renderContent(without))).toBe(false);
+        expect(hasAlbum(renderContent('# Markdown only'))).toBe(false);
+    });
+});
+
+describe('renderBlocks: uploaded video', () => {
+    const KEY = '0123456789abcdef0123456789abcdef';
+
+    it('renders a native video with controls, metadata preload and the title as its name', () => {
+        const html = render(
+            createBlock('video', { url: `/storage/videos/${KEY}.mp4`, title: 'Open house', caption: 'Cap' }),
+        );
+        expect(html).toContain(
+            '<video controls preload="metadata" playsinline aria-label="Open house" title="Open house"',
+        );
+        expect(html).toContain(`<source src="/storage/videos/${KEY}.mp4" type="video/mp4">`);
+        expect(html).not.toContain('<iframe');
+        expect(html).toContain('Cap');
+        expect(render(createBlock('video', { url: `/storage/videos/${KEY}.webm`, title: 'W' }))).toContain(
+            'type="video/webm"',
+        );
+    });
+
+    it('escapes the title and rejects foreign or traversal URLs', () => {
+        expect(render(createBlock('video', { url: `/storage/videos/${KEY}.mp4`, title: 'a" onload="x' }))).toContain(
+            'aria-label="a&quot; onload=&quot;x"',
+        );
+        for (const url of [`https://evil.com/storage/videos/${KEY}.mp4`, `/storage/videos/../${KEY}.mp4`]) {
+            expect(render(createBlock('video', { url, title: 'Bad' })), url).toBe('');
+        }
+    });
+
+    it('keeps a placeholder instead of the player in the editor', () => {
+        const html = render(createBlock('video', { url: `/storage/videos/${KEY}.mp4`, title: 'Open house' }), {
+            editor: true,
+        });
+        expect(html).not.toContain('<video');
+        expect(html).toContain('Video: Open house');
     });
 });
 

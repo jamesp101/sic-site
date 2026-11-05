@@ -71,6 +71,16 @@ const PROPS = {
         caption: label,
         width: z.number().int().min(1).max(20_000).nullable().default(null),
         height: z.number().int().min(1).max(20_000).nullable().default(null),
+        link: url,
+    }),
+    album: z.object({
+        images: z
+            .array(z.object({ src: url, alt: label, caption: label }))
+            .max(LIMITS.albumImages, `An album holds at most ${LIMITS.albumImages} images.`)
+            .default([]),
+        columns: z
+            .union([z.literal(2), z.literal(3), z.literal(4)], { error: 'Albums have 2, 3 or 4 columns.' })
+            .default(3),
     }),
     table: z.object({
         header: z.boolean().default(true),
@@ -108,6 +118,20 @@ const RULES: { [K in BlockType]?: (props: PropsByType[K], report: Report) => voi
         if (!props.decorative && !props.alt.trim()) {
             report('Describe the image in the alt text, or mark it as decorative.', ['alt']);
         }
+        if (props.link) {
+            if (!safeHref(props.link)) report('Enter a valid link (https://, /path, mailto: or tel:).', ['link']);
+            else if (props.decorative) report('A linked image needs alt text that names the link target.', ['link']);
+        }
+    },
+    album(props, report) {
+        if (props.images.length === 0) report('Add at least one image.', ['images']);
+        props.images.forEach((image, index) => {
+            const at = ['images', index];
+            if (!image.src) report(`Image ${index + 1}: choose an image.`, [...at, 'src']);
+            else if (!safeImageSrc(image.src))
+                report(`Image ${index + 1}: this image address is not allowed.`, [...at, 'src']);
+            if (!image.alt.trim()) report(`Image ${index + 1}: describe the image in the alt text.`, [...at, 'alt']);
+        });
     },
     button(props, report) {
         if (!props.label.trim()) report('Give the button a label.', ['label']);
@@ -119,7 +143,7 @@ const RULES: { [K in BlockType]?: (props: PropsByType[K], report: Report) => voi
         if (props.linkHref && !props.linkLabel.trim()) report('Give the card link a label.', ['linkLabel']);
     },
     video(props, report) {
-        if (!parseVideoUrl(props.url)) report('Use a YouTube or Vimeo video link.', ['url']);
+        if (!parseVideoUrl(props.url)) report('Use a YouTube or Vimeo link, or an uploaded video.', ['url']);
         if (!props.title.trim()) report('Add a video title for screen readers.', ['title']);
     },
     event(props, report) {

@@ -134,6 +134,8 @@ model CarouselItem {
   imagePath    String   @map("image_path")
   linkUrl      String?  @map("link_url")
   overlay      String?  {{longtext}}
+  videoPath    String?  @map("video_path")
+  videoUrl     String?  @map("video_url")
   order        Int      @default(0)
   departmentId Int?     @map("department_id")
   showOnMain   Boolean  @default(true) @map("show_on_main")

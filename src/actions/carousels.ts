@@ -3,15 +3,23 @@ import { z } from 'astro/zod';
 import path from 'node:path';
 import { assignOrders } from '@/lib/carousel-editor';
 import { legacyFields, serializeOverlay } from '@/lib/carousel-overlay';
-import { parseOverlay } from '@/lib/carousel-overlay-schema';
-import { parseOverlayStrict } from '@/lib/carousel-overlay-schema';
+import { parseOverlayDocument, parseOverlayStrict } from '@/lib/carousel-overlay-schema';
 import { db } from '@/lib/server/db';
 import { actorOf, guarded } from '@/lib/server/action-guard';
-import { overlayImageSrcs, ownedImageKey, toDesignerSlide, unusedLayerImageKeys } from '@/lib/server/carousel-admin';
+import {
+    deleteSlide,
+    overlayImageSrcs,
+    ownedImageKey,
+    parseSlideVideo,
+    toDesignerSlide,
+    updateSlide,
+    videoClaimError,
+    type SlideVideo,
+} from '@/lib/server/carousel-admin';
 import { departmentIdField, loadScoped, loadScopedMany, resolveWriteDepartment } from '@/lib/server/department-access';
 import { imageFile } from '@/lib/server/image-file';
 import { LIMITS, publicUrl, read } from '@/lib/server/storage';
-import { commitWithFiles, deleteWithFiles, type NewFile, type NewFiles } from '@/lib/server/stored-files';
+import { commitWithFiles, type NewFile, type NewFiles } from '@/lib/server/stored-files';
 
 const overlayField = z.string().max(60_000, 'The slide design is too large.');
 
@@ -19,16 +27,35 @@ const overlayField = z.string().max(60_000, 'The slide design is too large.');
 function overlayData(raw: string) {
     const result = parseOverlayStrict(raw);
     if (!result.ok) throw new ActionError({ code: 'BAD_REQUEST', message: result.error });
-    return { overlay: serializeOverlay(result.layers), ...legacyFields(result.layers) };
+    return { overlay: serializeOverlay(result.layers, result.mobile), ...legacyFields(result.layers) };
 }
 
-/** A copy of a stored object, to be stored under `carousels/`; null when the source is missing. */
-async function copyOf(key: string): Promise<NewFile | null> {
+const videoField = z.string().max(500, 'The video link is too long.');
+
+/** Validates the designer's `video` field (our upload or a YouTube link) and checks the slide may own that file. */
+async function videoData(raw: string, slideId?: number): Promise<SlideVideo> {
+    const result = parseSlideVideo(raw);
+    if (!result.ok) throw new ActionError({ code: 'BAD_REQUEST', message: result.error });
+    const { videoPath } = result.video;
+    // A key the slide already owns is not a new claim.
+    if (videoPath) {
+        const current =
+            slideId === undefined
+                ? null
+                : await db.carouselItem.findUnique({ where: { id: slideId }, select: { videoPath: true } });
+        const error = current?.videoPath === videoPath ? null : await videoClaimError(videoPath, slideId);
+        if (error) throw new ActionError({ code: 'BAD_REQUEST', message: error });
+    }
+    return result.video;
+}
+
+/** A copy of a stored object, to be stored under `prefix`; null when the source is missing. */
+async function copyOf(key: string, prefix: NewFile['prefix'] = 'carousels'): Promise<NewFile | null> {
     const stored = await read(key);
     if (!stored) return null;
     const bytes = await new Response(stored.body).arrayBuffer();
     return {
-        prefix: 'carousels',
+        prefix,
         file: new File([bytes], path.basename(key), { type: stored.contentType ?? 'application/octet-stream' }),
     };
 }
@@ -39,6 +66,7 @@ export const carousels = {
         input: z.object({
             image: imageFile(LIMITS.image, 'slide'),
             overlay: overlayField.optional(),
+            video: videoField.optional(),
             departmentId: departmentIdField,
             showOnMain: z.boolean(),
         }),
@@ -50,13 +78,16 @@ export const carousels = {
                     ? overlayData(input.overlay)
                     : { overlay: null, title: null, subtitle: null, linkUrl: null };
 
+                const video = await videoData(input.video ?? '');
                 const last = await db.carouselItem.aggregate({ _max: { order: true } });
                 const row = await commitWithFiles({
                     files: { image: { prefix: 'carousels', file: input.image } },
+                    adopted: [video.videoPath],
                     run: ({ image }) =>
                         db.carouselItem.create({
                             data: {
                                 ...content,
+                                ...video,
                                 order: (last._max.order ?? 0) + 1,
                                 departmentId,
                                 showOnMain: input.showOnMain,
@@ -74,6 +105,8 @@ export const carousels = {
         input: z.object({
             id: z.number().int(),
             overlay: overlayField,
+            /** '' removes the video; omitted keeps it. */
+            video: videoField.optional(),
             image: imageFile(LIMITS.image, 'slide').optional(),
         }),
         handler: (input, context) =>
@@ -82,20 +115,8 @@ export const carousels = {
                 const row = await loadScoped(actor, 'carouselItem', input.id);
                 const content = overlayData(input.overlay);
 
-                const kept = overlayImageSrcs(content.overlay);
-                const droppedSrcs = overlayImageSrcs(row.overlay).filter((src) => !kept.includes(src));
-                const saved = await commitWithFiles({
-                    files: { image: input.image && { prefix: 'carousels', file: input.image } },
-                    run: ({ image }) =>
-                        db.carouselItem.update({
-                            where: { id: row.id },
-                            data: { ...content, imagePath: image ?? row.imagePath },
-                        }),
-                    stale: async () => [
-                        input.image ? row.imagePath : null,
-                        ...(await unusedLayerImageKeys(droppedSrcs)),
-                    ],
-                });
+                const video = input.video === undefined ? undefined : await videoData(input.video, row.id);
+                const saved = await updateSlide(row, { content, image: input.image, video });
                 return { slide: toDesignerSlide(saved) };
             }),
     }),
@@ -132,7 +153,11 @@ export const carousels = {
                 const row = await loadScoped(actor, 'carouselItem', id);
 
                 // Layer images are copied too, so deleting one slide never breaks its duplicate.
-                const files: NewFiles = { image: await copyOf(row.imagePath) };
+                const files: NewFiles = {
+                    image: await copyOf(row.imagePath),
+                    // The video file is owned by its slide, so a duplicate gets its own copy.
+                    video: row.videoPath ? await copyOf(row.videoPath, 'videos') : null,
+                };
                 const layerCopies = new Map<string, string>();
                 for (const [index, src] of overlayImageSrcs(row.overlay).entries()) {
                     const key = ownedImageKey(src);
@@ -140,20 +165,21 @@ export const carousels = {
                     files[`layer${index}`] = await copyOf(key);
                     layerCopies.set(src, `layer${index}`);
                 }
-                const layers = parseOverlay(row.overlay);
+                const doc = parseOverlayDocument(row.overlay);
 
                 const created = await commitWithFiles({
                     files,
                     run: async (keys) => {
-                        const overlay = layers
+                        const overlay = doc
                             ? serializeOverlay(
-                                  layers.map((layer) => {
+                                  doc.layers.map((layer) => {
                                       const copied =
                                           layer.type === 'image' ? keys[layerCopies.get(layer.src) ?? ''] : undefined;
                                       return layer.type === 'image' && copied
                                           ? { ...layer, src: publicUrl(copied) as string }
                                           : layer;
                                   }),
+                                  doc.mobile,
                               )
                             : row.overlay;
                         const [, copy] = await db.$transaction([
@@ -167,6 +193,8 @@ export const carousels = {
                                     subtitle: row.subtitle,
                                     linkUrl: row.linkUrl,
                                     overlay,
+                                    videoPath: keys.video ?? null,
+                                    videoUrl: row.videoUrl,
                                     order: row.order + 1,
                                     departmentId: row.departmentId,
                                     showOnMain: row.showOnMain,
@@ -207,13 +235,7 @@ export const carousels = {
             guarded(async () => {
                 const actor = actorOf(context);
                 const row = await loadScoped(actor, 'carouselItem', id);
-                return deleteWithFiles(
-                    async () => {
-                        await db.carouselItem.delete({ where: { id: row.id } });
-                        return { id };
-                    },
-                    async () => [row.imagePath, ...(await unusedLayerImageKeys(overlayImageSrcs(row.overlay)))],
-                );
+                return deleteSlide(row);
             }),
     }),
 };

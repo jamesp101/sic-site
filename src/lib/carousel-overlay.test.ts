@@ -14,7 +14,7 @@ import {
     DEFAULT_SIZE,
     type Layer,
 } from './carousel-overlay';
-import { parseOverlay, parseOverlayStrict } from './carousel-overlay-schema';
+import { parseOverlay, parseOverlayDocument, parseOverlayStrict } from './carousel-overlay-schema';
 
 const text = (over: Partial<Layer> = {}): Layer => ({ ...defaultLayer('text'), ...over }) as Layer;
 
@@ -75,7 +75,7 @@ describe('parseOverlayStrict', () => {
             { ...defaultLayer('image'), src: '/storage/posts/inline/logo.png', alt: 'School seal' },
         ];
         const result = parseOverlayStrict(serializeOverlay(layers));
-        expect(result).toEqual({ ok: true, layers });
+        expect(result).toEqual({ ok: true, layers, mobile: null });
     });
 
     test('rejects unknown properties, bad enums and out-of-range geometry', () => {
@@ -204,5 +204,65 @@ describe('type scale', () => {
         expect(
             parseOverlayStrict(JSON.stringify({ v: 1, layers: [{ ...defaultLayer('button'), size: 'huge' }] })).ok,
         ).toBe(false);
+    });
+});
+
+describe('phone overrides', () => {
+    const wrap = (layer: object, extra: object = {}) => JSON.stringify({ v: 1, layers: [layer], ...extra });
+    const base = defaultLayer('text');
+
+    test('a document written before phone overrides parses unchanged and serializes byte for byte', () => {
+        const stored =
+            '{"v":1,"layers":[{"type":"text","id":"a","x":6,"y":36,"rotation":0,"opacity":100,"w":55,"role":"heading","text":"Hi","size":"lg","align":"left","color":"white","font":"serif"}]}';
+        const result = parseOverlayStrict(stored);
+        expect(result.ok && result.mobile).toBeNull();
+        expect(result.ok && serializeOverlay(result.layers, result.mobile)).toBe(stored);
+        expect(parseOverlayDocument(stored)?.mobile).toBeNull();
+    });
+
+    test('accepts and round-trips per-layer overrides and the slide focal point', () => {
+        const layer = { ...base, mobile: { x: 10.123, y: 40, w: 80, size: 'md', hidden: false } } as Layer;
+        const focus = { focus: { x: 30, y: 70 } };
+        const result = parseOverlayStrict(serializeOverlay([layer], focus));
+        expect(result.ok && result.layers[0].mobile).toEqual({ x: 10.12, y: 40, w: 80, size: 'md', hidden: false });
+        expect(result.ok && result.mobile).toEqual(focus);
+        expect(parseOverlayDocument(serializeOverlay([layer], focus))?.mobile).toEqual(focus);
+    });
+
+    test('a hide-only override needs no position', () => {
+        expect(parseOverlayStrict(wrap({ ...base, mobile: { hidden: true } })).ok).toBe(true);
+        expect(parseOverlayStrict(wrap({ ...base, mobile: { size: 'sm' } })).ok).toBe(true);
+    });
+
+    test('rejects out-of-bounds, lone x or y, unknown and non-token values', () => {
+        const bad = (mobile: object) => parseOverlayStrict(wrap({ ...base, mobile })).ok;
+        expect(bad({ x: 101, y: 0 })).toBe(false);
+        expect(bad({ x: -1, y: 0 })).toBe(false);
+        expect(bad({ x: 0, y: 150 })).toBe(false);
+        expect(bad({ x: 0, y: 0, w: 0 })).toBe(false);
+        expect(bad({ x: 0, y: 0, w: 101 })).toBe(false);
+        expect(bad({ x: 0, y: 0, h: 0 })).toBe(false);
+        expect(bad({ x: 10 })).toBe(false);
+        expect(bad({ y: 10 })).toBe(false);
+        expect(bad({ size: '3xl' })).toBe(false);
+        expect(bad({ size: '22px' })).toBe(false);
+        expect(bad({ hidden: 'yes' })).toBe(false);
+        expect(bad({ color: 'white' })).toBe(false);
+        expect(bad({ x: 0, y: 0, w: 50, h: 50 })).toBe(true);
+    });
+
+    test('rejects out-of-bounds focal points and unknown slide settings', () => {
+        const slide = (mobile: object) => parseOverlayStrict(wrap(base, { mobile })).ok;
+        expect(slide({ focus: { x: 101, y: 0 } })).toBe(false);
+        expect(slide({ focus: { x: 50 } })).toBe(false);
+        expect(slide({ focus: { x: 50, y: 50 }, extra: 1 })).toBe(false);
+        expect(slide({ focus: { x: 0, y: 100 } })).toBe(true);
+    });
+
+    test('the tolerant read keeps a layer whose phone overrides are invalid, without them', () => {
+        const raw = wrap({ ...base, mobile: { x: 500, y: 0 } }, { mobile: { focus: { x: 900, y: 0 } } });
+        const doc = parseOverlayDocument(raw);
+        expect(doc?.layers).toEqual([base]);
+        expect(doc?.mobile).toBeNull();
     });
 });

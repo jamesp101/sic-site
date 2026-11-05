@@ -13,7 +13,8 @@
     type Guides,
     type Handle,
   } from '@/lib/carousel-editor';
-  import { SAFE_MARGIN, type Layer } from '@/lib/carousel-overlay';
+  import { SAFE_MARGIN, type Layer, type MobileOverride } from '@/lib/carousel-overlay';
+  import { setMobile, type MobileBox } from '@/lib/carousel-overlay-mobile';
   import SlideStage from './SlideStage.svelte';
 
   let {
@@ -21,6 +22,9 @@
     layers,
     selectedId,
     showVisibleArea = true,
+    view = 'desktop',
+    focus = { x: 50, y: 50 },
+    mobileBoxes = null,
     onselect,
     onlive,
     oncommit,
@@ -29,6 +33,10 @@
     layers: Layer[];
     selectedId: string | null;
     showVisibleArea?: boolean;
+    /** `mobile` edits the phone layout: a 4:5 frame, drags write the layers' phone overrides. */
+    view?: 'desktop' | 'mobile';
+    focus?: { x: number; y: number };
+    mobileBoxes?: Map<string, MobileBox> | null;
     onselect: (id: string | null) => void;
     /** Called continuously while dragging; replaces the current layers without an undo step. */
     onlive: (layers: Layer[]) => void;
@@ -63,6 +71,22 @@
   const hoverBox = $derived(hoverId && hoverId !== selectedId ? (boxes[hoverId] ?? null) : null);
   const handles = $derived(!selected ? [] : selected.type === 'text' ? WIDTH_HANDLES : selected.type === 'shape' ? HANDLES : selected.type === 'image' ? CORNER_HANDLES : []);
 
+  /**
+   * Writes a dragged box to the layer: desktop geometry on the desktop view, the phone override on the mobile view
+   * (a hand-placed layer always stores x, y and, where the layer has them, w and h).
+   */
+  function place(base: Layer[], id: string, box: Partial<Box>): Layer[] {
+    if (view === 'desktop') return patchLayer(base, id, box);
+    return base.map((layer) => {
+      if (layer.id !== id) return layer;
+      const current = boxes[id];
+      const patch: MobileOverride = { x: box.x ?? current?.x, y: box.y ?? current?.y };
+      if (layer.type === 'text' || layer.type === 'shape' || layer.type === 'image') patch.w = box.w ?? current?.w;
+      if (layer.type === 'shape' || layer.type === 'image') patch.h = box.h ?? current?.h;
+      return setMobile(layer, patch);
+    });
+  }
+
   /** Reads each layer's real box (text height is automatic) as percentages of the stage. */
   function measure() {
     if (!stage) return;
@@ -83,6 +107,7 @@
 
   $effect(() => {
     void layers; // re-measure after every DOM update caused by layer changes
+    void view;
     measure();
   });
 
@@ -154,7 +179,7 @@
       const snapped = event.altKey ? { x: raw.x, y: raw.y, guides: { v: [], h: [] } } : snapMove(raw, others);
       const placed = clampToSlide({ ...start, x: snapped.x, y: snapped.y });
       guides = snapped.guides;
-      onlive(patchLayer(base, id, { x: placed.x, y: placed.y }));
+      onlive(place(base, id, { x: placed.x, y: placed.y }));
       return;
     }
 
@@ -166,12 +191,12 @@
     });
     if (layer.type === 'text') {
       // Text widths snap to the Narrow / Medium / Wide presets; a west handle keeps the right edge fixed.
-      const w = snapWidth(box.w);
+      const w = view === 'mobile' ? Math.max(20, Math.round(box.w)) : snapWidth(box.w);
       const x = drag.handle.includes('w') ? start.x + start.w - w : box.x;
-      onlive(patchLayer(base, id, { x: Math.max(0, x), w }));
+      onlive(place(base, id, { x: Math.max(0, x), w }));
       return;
     }
-    onlive(patchLayer(base, id, { x: box.x, y: box.y, w: box.w, h: box.h }));
+    onlive(place(base, id, { x: box.x, y: box.y, w: box.w, h: box.h }));
   }
 
   function endDrag(event: PointerEvent) {
@@ -234,13 +259,18 @@
   };
 </script>
 
-<div class="overflow-hidden rounded-lg border border-border-strong shadow-brand-md">
+<div class="overflow-hidden rounded-lg border border-border-strong shadow-brand-md {view === 'mobile' ? 'mx-auto w-full max-w-[22rem]' : ''}">
   <SlideStage
     bind:element={stage}
     {imageUrl}
     {layers}
     interactive
-    label="Slide canvas. Tab moves between layers; arrow keys move the selected layer."
+    {view}
+    {focus}
+    boxes={mobileBoxes}
+    label={view === 'mobile'
+      ? 'Phone slide canvas. Tab moves between layers; arrow keys move the selected layer.'
+      : 'Slide canvas. Tab moves between layers; arrow keys move the selected layer.'}
   >
     {#if !imageUrl}
       <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-white">
@@ -250,7 +280,7 @@
       </div>
     {/if}
 
-    {#if showVisibleArea}
+    {#if showVisibleArea && view === 'desktop'}
       <div class="pointer-events-none absolute inset-x-0 top-0 z-40 border-b border-dashed border-white/80 bg-brand-950/45" style="height:{CROP}%"></div>
       <div class="pointer-events-none absolute inset-x-0 bottom-0 z-40 border-t border-dashed border-white/80 bg-brand-950/45" style="height:{CROP}%"></div>
     {/if}

@@ -1,8 +1,10 @@
 import 'dotenv/config';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
+import { VIDEO_MAX_BYTES, VIDEO_TYPES } from '../../video-types';
 import { storedType } from '../file-types';
-import { createLocalDriver } from './local';
+import { createLocalDriver, type LocalDriver } from './local';
+import type { ByteRange } from './range';
 import { createS3Driver, type S3Driver } from './s3';
 import type { StorageDriver, StoredObject } from './types';
 
@@ -21,7 +23,15 @@ export type { StorageDriver, StoredObject };
  */
 export type DriverName = 'local' | 's3';
 
-export const PREFIXES = ['posts', 'posts/inline', 'downloads', 'carousels', 'departments', 'members'] as const;
+export const PREFIXES = [
+    'posts',
+    'posts/inline',
+    'downloads',
+    'carousels',
+    'departments',
+    'members',
+    'videos',
+] as const;
 export type StoragePrefix = (typeof PREFIXES)[number];
 
 export const MB = 1024 * 1024;
@@ -56,6 +66,9 @@ export const LIMITS = {
     image: directUploads ? MULTIPART_BUDGET : 5 * MB,
     memberImage: 2 * MB,
     download: 20 * MB,
+    // Videos never travel through actions or multipart: `s3` uploads straight to the bucket, `local`
+    // streams the request body to disk (`/api/admin/uploads/video`).
+    video: VIDEO_MAX_BYTES,
 } as const;
 
 /** Absolute base for direct object URLs (no trailing slash), or null to serve through /storage. */
@@ -103,6 +116,15 @@ export function publicUrl(value: string | null | undefined): string | null {
     return directBaseUrl ? `${directBaseUrl}/${key}` : `/storage/${key}`;
 }
 
+/**
+ * The app route URL of a stored key (`/storage/<key>`) even when `S3_PUBLIC_URL` is set. Use it for
+ * URLs kept in content that must not depend on where files are hosted; the route redirects inline
+ * requests to the bucket base, which answers `Range` itself.
+ */
+export function storageRouteUrl(value: string): string {
+    return `/storage/${toKey(value)}`;
+}
+
 /** Inverse of `publicUrl`: the bare key of one of our own file URLs (`/storage/<key>` or the direct base), else null. */
 export function keyFromPublicUrl(url: string): string | null {
     const prefixes = directBaseUrl ? [`${directBaseUrl}/`, '/storage/'] : ['/storage/'];
@@ -114,6 +136,18 @@ export function keyFromPublicUrl(url: string): string | null {
     } catch {
         return null;
     }
+}
+
+/**
+ * Inverse of `publicUrl` for uploaded videos: the bare key when `url` is one of our file URLs
+ * directly under `videos/` with a video extension, else null.
+ */
+export function videoKeyFromUrl(url: string): string | null {
+    const key = keyFromPublicUrl(url);
+    if (!key) return null;
+    const [directory, name, ...deeper] = key.split('/');
+    if (directory !== 'videos' || !name || deeper.length > 0) return null;
+    return Object.hasOwn(VIDEO_TYPES, path.extname(name)) ? key : null;
 }
 
 /** URL that downloads the object as an attachment named `fileName` (always via the app route). */
@@ -136,15 +170,15 @@ export async function remove(value: string | null | undefined): Promise<void> {
     await driver.delete(toKey(value));
 }
 
-/** Streams a stored object, or null when missing or the key is invalid. */
-export async function read(value: string): Promise<StoredObject | null> {
+/** Streams a stored object (or only `range` of it), or null when missing or the key is invalid. Throws `RangeNotSatisfiableError` for an empty range. */
+export async function read(value: string, range?: ByteRange): Promise<StoredObject | null> {
     let key: string;
     try {
         key = toKey(value);
     } catch {
         return null;
     }
-    return driver.get(key);
+    return driver.get(key, range);
 }
 
 function directDriver(): S3Driver {
@@ -152,9 +186,19 @@ function directDriver(): S3Driver {
     return driver as S3Driver;
 }
 
-/** Size of an object the browser uploaded straight to the bucket, or null when missing. Only valid for `s3`. */
+/** Size of a stored object (e.g. one the browser uploaded straight to the bucket), or null when missing. */
 export async function headUpload(value: string): Promise<{ size: number } | null> {
-    return directDriver().head(toKey(value));
+    return driver.head(toKey(value));
+}
+
+/**
+ * Streams a request body to `key` on disk, never holding it in memory, and returns the bytes written.
+ * Throws `UploadTooLargeError` (nothing is left behind) as soon as more than `maxBytes` arrive.
+ * Only valid for `local`; `s3` uploads go straight to the bucket (`presignUpload`).
+ */
+export async function receiveUpload(key: string, body: ReadableStream<Uint8Array>, maxBytes: number): Promise<number> {
+    if (driverName !== 'local') throw new Error('Streamed uploads require STORAGE_DRIVER=local');
+    return (driver as LocalDriver).putStream(toKey(key), body, maxBytes);
 }
 
 /** Presigned PUT URL (10 minutes) for a browser upload of exactly `size` bytes of `contentType`. Only valid for `s3`. */

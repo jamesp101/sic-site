@@ -62,7 +62,8 @@ const DEFAULTS: { [K in BlockType]: () => PropsByType[K] } = {
         linkLabel: '',
         linkHref: '',
     }),
-    image: () => ({ src: '', alt: '', decorative: false, caption: '', width: null, height: null }),
+    image: () => ({ src: '', alt: '', decorative: false, caption: '', width: null, height: null, link: '' }),
+    album: () => ({ images: [], columns: 3 }),
     table: () => ({
         header: true,
         caption: '',

@@ -107,7 +107,7 @@ The rotating sequence of Slides at the top of the Main site or of a Department p
 _Avoid_: slider, gallery
 
 **Slide**:
-One picture in a Carousel, optionally with an Overlay. A Slide belongs to the Main site or to one Department, and it can also be shown on the Main site.
+One picture in a Carousel, optionally with an Overlay and a Background video. A Slide belongs to the Main site or to one Department, and it can also be shown on the Main site.
 _Avoid_: carousel item, banner
 
 **Overlay**:
@@ -117,6 +117,14 @@ _Avoid_: caption, design
 **Layer**:
 One positioned piece of an Overlay, such as a heading, a button or an image.
 _Avoid_: element, object
+
+**Mobile layout**:
+How a Slide looks on a phone: a taller 4:5 frame in which each Layer is stacked automatically, or placed, resized or hidden by hand. The designer edits it with its Desktop/Mobile switch.
+_Avoid_: responsive version, small-screen mode
+
+**Background video**:
+A muted, looping video, either uploaded or from YouTube, that plays behind the Layers of a Slide. The Slide's picture stays as its poster while the video loads and for visitors who prefer reduced motion or save data.
+_Avoid_: hero video, movie
 
 **Navigation link**:
 An entry in the site header menu. It may hold one level of nested Navigation links.
@@ -141,7 +149,7 @@ The broad family of a Download file: PDF, document, spreadsheet, image, archive 
 _Avoid_: file type, format, MIME type
 
 **Pending upload**:
-A Download file that a User has uploaded but has not yet attached to a Download.
+A file (a Download file or a video) that a User uploaded straight to storage under a server-issued key and has not yet attached to a record. It is claimed once, by that User, within an hour; the key then belongs to whatever content stores it. An expired Pending upload only loses its record: the file stays until the storage cleanup finds nothing referencing it.
 _Avoid_: draft upload, temp file
 
 ### Admin

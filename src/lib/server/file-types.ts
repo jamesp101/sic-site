@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { VIDEO_TYPES } from '../video-types';
 
 /**
  * Extensions uploads may be stored under, with the only content type each is ever stored and served
@@ -22,6 +23,7 @@ export const FILE_TYPES: Readonly<Record<string, string>> = {
     '.ppt': 'application/vnd.ms-powerpoint',
     '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     '.zip': 'application/zip',
+    ...VIDEO_TYPES,
 };
 
 const EXTENSION_BY_TYPE: Readonly<Record<string, string>> = {
@@ -51,4 +53,12 @@ export function storedType(fileName: string, declaredType: string): { ext: strin
           ? EXTENSION_BY_TYPE[declaredType]
           : '';
     return { ext, contentType: ext ? FILE_TYPES[ext] : 'application/octet-stream' };
+}
+
+/**
+ * True when an upload would be stored as a video (by file name, else by declared type). Downloads and
+ * images refuse these: a video is only accepted by the video upload flow.
+ */
+export function isVideoUpload(fileName: string, declaredType: string): boolean {
+    return Object.hasOwn(VIDEO_TYPES, storedType(fileName, declaredType).ext);
 }

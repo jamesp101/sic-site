@@ -15,10 +15,11 @@ import type {
     PostType,
 } from '@/lib/content-types';
 import { excerptOf, parseContent } from '@/lib/blocks/content';
-import { parseOverlay } from '@/lib/carousel-overlay-schema';
+import { parseOverlayDocument } from '@/lib/carousel-overlay-schema';
 import { extensionOf, fileKind } from '@/lib/files';
 import { buildOrgTree, type OrgNode } from '@/lib/org-tree';
 import { departmentPageSeo, postPageSeo, postsListSeo, type PageSeo } from '@/lib/seo';
+import { slideVideoView } from './carousel-admin';
 import { db } from './db';
 import { textContains } from './search';
 import { downloadUrl, publicUrl } from './storage';
@@ -94,16 +95,21 @@ const carouselSelect = {
     imagePath: true,
     linkUrl: true,
     overlay: true,
+    videoPath: true,
+    videoUrl: true,
 } satisfies Prisma.CarouselItemSelect;
 
 function toSlide(row: Prisma.CarouselItemGetPayload<{ select: typeof carouselSelect }>): CarouselSlide {
+    const doc = parseOverlayDocument(row.overlay);
     return {
         id: row.id,
         title: row.title,
         subtitle: row.subtitle,
         imageUrl: publicUrl(row.imagePath) ?? row.imagePath,
         linkUrl: row.linkUrl,
-        overlay: parseOverlay(row.overlay),
+        overlay: doc?.layers ?? null,
+        mobile: doc?.mobile ?? null,
+        video: slideVideoView(row),
     };
 }
 

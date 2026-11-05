@@ -25,6 +25,7 @@ export const LIMITS = {
     statItems: 12,
     badgeItems: 20,
     markdown: 100_000,
+    albumImages: 48,
 } as const;
 
 export type Gap = 'none' | 'sm' | 'md' | 'lg';
@@ -106,6 +107,17 @@ export interface ImageProps {
     caption: string;
     width: number | null;
     height: number | null;
+    /** Click-through link (`safeHref` rules); `''` = none. */
+    link: string;
+}
+export interface AlbumImage {
+    src: string;
+    alt: string;
+    caption: string;
+}
+export interface AlbumProps {
+    images: AlbumImage[];
+    columns: 2 | 3 | 4;
 }
 export interface TableProps {
     header: boolean;
@@ -171,6 +183,7 @@ export interface PropsByType {
     video: VideoProps;
     event: EventProps;
     markdown: MarkdownProps;
+    album: AlbumProps;
 }
 
 export type BlockType = keyof PropsByType;
@@ -206,6 +219,7 @@ export const BLOCK_TYPES = [
     'badges',
     'card',
     'image',
+    'album',
     'table',
     'accordion',
     'callout',
@@ -248,8 +262,9 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
     callout: { label: 'Callout', group: 'Content', description: 'Info, success or warning notice.' },
     stats: { label: 'Stats', group: 'Content', description: 'Key figures with labels.' },
     event: { label: 'Event details', group: 'Content', description: 'Date, time and location.' },
-    image: { label: 'Image', group: 'Media', description: 'Uploaded image with alt text and caption.' },
-    video: { label: 'Video', group: 'Media', description: 'YouTube or Vimeo embed.' },
+    image: { label: 'Image', group: 'Media', description: 'Uploaded or linked image with alt text, caption and link.' },
+    album: { label: 'Album', group: 'Media', description: 'Image grid that opens in a lightbox.' },
+    video: { label: 'Video', group: 'Media', description: 'YouTube, Vimeo or an uploaded video.' },
     markdown: { label: 'Markdown (legacy)', group: 'Legacy', description: 'Markdown / MDX-lite source.' },
 };
 

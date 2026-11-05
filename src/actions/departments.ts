@@ -90,7 +90,7 @@ export const departments = {
                     where: { id },
                     include: {
                         members: { select: { imagePath: true } },
-                        carouselItems: { select: { imagePath: true } },
+                        carouselItems: { select: { imagePath: true, videoPath: true } },
                         posts: { select: { highlightImagePath: true } },
                         downloads: { select: { filePath: true } },
                     },
@@ -102,7 +102,7 @@ export const departments = {
                     [
                         row.logoPath,
                         ...row.members.map((member) => member.imagePath),
-                        ...row.carouselItems.map((item) => item.imagePath),
+                        ...row.carouselItems.flatMap((item) => [item.imagePath, item.videoPath]),
                         ...row.posts.map((post) => post.highlightImagePath),
                         ...row.downloads.map((download) => download.filePath),
                     ],
