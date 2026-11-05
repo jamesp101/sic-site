@@ -341,7 +341,7 @@
       controller.setDark(isDark());
     };
     frame!.addEventListener('load', onLoad);
-    frame!.srcdoc = buildSrcdoc({ width: context === 'post' ? 'narrow' : 'wide', dark: isDark() });
+    frame!.srcdoc = buildSrcdoc({ frame: context === 'post' ? 'reading' : 'page', dark: isDark() });
     canvas = controller;
 
     const observer = new MutationObserver(() => controller.setDark(isDark()));

@@ -9,7 +9,7 @@ const { crumbs } = Astro.props;
 ---
 
 <nav aria-label="Breadcrumb" class="border-b border-border bg-surface">
-    <ol class="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-2 gap-y-1 px-6 py-1 text-sm text-muted-foreground md:py-3">
+    <ol class="page-frame flex flex-wrap items-center gap-x-2 gap-y-1 py-1 text-sm text-muted-foreground md:py-3">
         {crumbs.map((crumb, index) => (
             <li class="flex items-center gap-2">
                 {index > 0 && <span aria-hidden="true">/</span>}

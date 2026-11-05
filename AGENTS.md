@@ -12,7 +12,7 @@ San Isidro College website. Astro 7 SSR + Svelte 5 islands + Tailwind v4 + Prism
 
 - Schema: edit `prisma/schema.base.prisma` only, keep Laravel table/column names (`@@map`/`@map`); `{{longtext}}` for long text, `{{text}}` for strings that can exceed 255 characters (MySQL String is VARCHAR(255)).
 - Migrations: `vp run db:migrate`, then add the same migration to every `prisma/migrations/<provider>/` folder (sqlite, mysql, postgresql), named to sort after existing ones.
-- Design: colours only through tokens (`src/styles/tokens.css`), no hex in components.
+- Design: colours only through tokens (`src/styles/tokens.css`), no hex in components. Public page widths only through the page frame (`page-frame`, `reading-frame`, `--measure` in `app.css`), never `max-w-*` + `px-6` by hand.
 - Authorization: every action, API route and admin page calls `src/lib/server/authz.ts` first, through its adapter (`guarded()`, `adminRoute()`, `adminPage()`).
 - Rich content: render, parse, excerpt and validate only through `@/lib/blocks/content`; writers set `searchText: searchTextOf(content)`.
 - Files: only through `src/lib/server/storage`; rows that own files write and remove them through `commitWithFiles` / `deleteWithFiles` (`stored-files.ts`); store bare keys.

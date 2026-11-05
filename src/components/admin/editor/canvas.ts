@@ -43,14 +43,16 @@ const CONTAINERS: Record<string, true> = Object.fromEntries(CONTAINER_TYPES.map(
 const EDGE = 10;
 const DRAG_THRESHOLD = 5;
 
-/** Builds the iframe document: the page's own styles plus the editor chrome. */
-export function buildSrcdoc(options: { width: 'narrow' | 'wide'; dark: boolean }): string {
+/**
+ * Builds the iframe document: the page's own styles plus the editor chrome. The root uses the public page frame
+ * (`app.css`): `reading` is the Post body, `page` a content section, so the preview has the site's width and measure.
+ */
+export function buildSrcdoc(options: { frame: 'reading' | 'page'; dark: boolean }): string {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
         .map((node) => node.outerHTML)
         .join('\n');
-    // Matches the public containers: Post body (`posts/[slug].astro`) and content sections (`MarkdownSection`).
-    const container = options.width === 'narrow' ? 'max-w-3xl' : 'max-w-7xl';
-    return `<!doctype html><html lang="en" class="${options.dark ? 'dark' : ''}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${styles}<style>${EDITOR_CSS}</style></head><body class="bg-background font-sans text-foreground antialiased"><div id="sic-root" class="mx-auto w-full ${container} px-6 py-8 text-base leading-relaxed text-foreground"></div></body></html>`;
+    const frame = options.frame === 'reading' ? 'reading-frame' : 'page-frame';
+    return `<!doctype html><html lang="en" class="${options.dark ? 'dark' : ''}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${styles}<style>${EDITOR_CSS}</style></head><body class="bg-background font-sans text-foreground antialiased"><div id="sic-root" class="${frame} py-8 text-base leading-relaxed text-foreground"></div></body></html>`;
 }
 
 function blockOf(element: Element | null): HTMLElement | null {

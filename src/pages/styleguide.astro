@@ -12,10 +12,10 @@ if (!import.meta.env.DEV) return new Response(null, { status: 404, statusText: '
         title="Styleguide"
         lead="Tokens, type and components with fixture data. The first panel follows the page theme (toggle it in the header); the second is forced dark."
     />
-    <h2 class="mx-auto mt-10 w-full max-w-7xl px-6 text-2xl font-bold">Current theme</h2>
+    <h2 class="page-frame mt-10 text-2xl font-bold">Current theme</h2>
     <StyleguideSample interactive />
     <div class="dark bg-background text-foreground">
-        <h2 class="mx-auto w-full max-w-7xl px-6 pt-10 text-2xl font-bold">Dark theme</h2>
+        <h2 class="page-frame pt-10 text-2xl font-bold">Dark theme</h2>
         <StyleguideSample />
     </div>
 </PublicLayout>

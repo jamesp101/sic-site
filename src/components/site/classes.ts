@@ -25,8 +25,6 @@ export const field =
 export const card =
     'rounded-2xl border border-border bg-surface shadow-brand-sm transition duration-200 ease-out hover:shadow-brand-md motion-safe:hover:-translate-y-1 dark:border-border-strong';
 
-export const container = 'mx-auto w-full max-w-7xl px-6';
-
 /** Text link that stays a 44 px tap target on phones. */
 export const textLink =
     'inline-flex min-h-11 items-center rounded text-sm font-semibold text-link underline-offset-4 hover:underline md:min-h-8';

@@ -307,6 +307,27 @@ test.describe('visual block editor (superadmin)', () => {
         await visitor.context().close();
     });
 
+    test('the canvas previews content at the width of the public page', async ({ page, browser }) => {
+        const frameOf = (el: Element) => {
+            const style = getComputedStyle(el);
+            return { maxWidth: style.maxWidth, gutter: style.paddingLeft };
+        };
+        const visitor = await visitorPage(browser);
+        await visitor.goto('/posts');
+        await visitor.locator('main a[href^="/posts/"]').first().click();
+        const postBody = await visitor.locator('main article > div').first().evaluate(frameOf);
+        await visitor.goto('/');
+        const section = await visitor.locator('main section[data-content-section] > div').first().evaluate(frameOf);
+        await visitor.context().close();
+
+        await page.goto('/admin/posts/create');
+        await editorReady(page);
+        expect(await canvas(page).locator('#sic-root').evaluate(frameOf)).toEqual(postBody);
+        await page.goto('/admin/hero-sections/create');
+        await editorReady(page);
+        expect(await canvas(page).locator('#sic-root').evaluate(frameOf)).toEqual(section);
+    });
+
     test('rejects an invalid block document on the server', async ({ page }) => {
         await page.goto('/admin/posts/create');
         await editorReady(page);
