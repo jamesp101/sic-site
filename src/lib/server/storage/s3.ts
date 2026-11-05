@@ -58,8 +58,11 @@ export function createS3Driver(config: S3Config): S3Driver {
     return {
         name: 's3',
         async put(key, body, contentType) {
+            // Bytes, not a stream: the Node HTTP handler needs a known length, and multipart bodies on
+            // `s3` stay under ~4 MB (larger Downloads go straight to the bucket).
+            const bytes = new Uint8Array(await body.arrayBuffer());
             await client.send(
-                new PutObjectCommand({ Bucket, Key: objectKey(key), Body: body, ContentType: contentType }),
+                new PutObjectCommand({ Bucket, Key: objectKey(key), Body: bytes, ContentType: contentType }),
             );
         },
         async delete(key) {

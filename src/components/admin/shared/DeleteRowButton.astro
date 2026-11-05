@@ -1,0 +1,28 @@
+---
+import { Trash } from '@lucide/svelte';
+import { dangerIconButtonClass } from './form-utils';
+import { ROW_DELETE, ROW_DELETE_ATTR, type RowDeleteKind } from './row-delete';
+
+/** Delete trigger for one list row; the page's single `RowDeleteDialog` island handles the click. */
+interface Props {
+    kind: RowDeleteKind;
+    id: number;
+    name: string;
+}
+
+const { kind, id, name } = Astro.props;
+const label = ROW_DELETE[kind].label(name);
+---
+
+<button
+    type="button"
+    {...{ [ROW_DELETE_ATTR]: kind }}
+    data-id={id}
+    data-name={name}
+    aria-haspopup="dialog"
+    aria-label={label}
+    title={label}
+    class={dangerIconButtonClass}
+>
+    <Trash class="h-4 w-4" aria-hidden="true" />
+</button>

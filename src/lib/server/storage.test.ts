@@ -1,7 +1,9 @@
+import { readdirSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
+import { createLocalDriver } from './storage/local';
 
 const STORAGE_ENV = [
     'STORAGE_DRIVER',
@@ -79,6 +81,29 @@ describe('local driver (default)', () => {
         const storage = await loadStorage({ UPLOAD_DIR: dir });
         await expect(storage.remove('posts/missing.png')).resolves.toBeUndefined();
         await expect(storage.remove('https://example.org/x.png')).resolves.toBeUndefined();
+    });
+
+    it('streams a put to disk and leaves nothing behind when the upload stream fails', async () => {
+        const driver = createLocalDriver(dir);
+        const big = new Blob([new Uint8Array(3 * 1024 * 1024).fill(7)]);
+        await driver.put('downloads/big.bin', big, 'application/octet-stream');
+        expect((await driver.get('downloads/big.bin'))?.size).toBe(big.size);
+
+        const failing = {
+            size: 10,
+            stream: () =>
+                new ReadableStream<Uint8Array>({
+                    start(controller) {
+                        controller.enqueue(new Uint8Array([1, 2, 3]));
+                        controller.error(new Error('client went away'));
+                    },
+                }),
+        } as unknown as Blob;
+        await expect(driver.put('downloads/broken.bin', failing, 'application/octet-stream')).rejects.toThrow(
+            'client went away',
+        );
+        expect(await driver.get('downloads/broken.bin')).toBeNull();
+        expect(readdirSync(path.join(dir, 'downloads')).sort()).toEqual(['big.bin']);
     });
 });
 

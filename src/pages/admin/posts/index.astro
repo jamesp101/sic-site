@@ -1,11 +1,14 @@
 ---
 import { ArrowUpDown, Calendar, FileText, Megaphone, Pencil, Search, Star } from '@lucide/svelte';
+import Pagination from '@/components/site/Pagination.astro';
 import AddLink from '@/components/admin/shared/AddLink.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
-import DeletePostButton from '@/components/admin/posts/DeletePostButton.svelte';
+import DeleteRowButton from '@/components/admin/shared/DeleteRowButton.astro';
+import RowDeleteDialog from '@/components/admin/shared/RowDeleteDialog.svelte';
 import { cardClass, formatDate, iconLinkClass, selectClass, thClass } from '@/components/admin/ui';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { POST_TYPES } from '@/lib/content-types';
+import { parsePage } from '@/lib/pagination';
 import { listWhere } from '@/lib/server/admin-scope';
 import { requireUser } from '@/lib/server/authz';
 import { authzResponse } from '@/lib/server/authz-response';
@@ -20,6 +23,9 @@ try {
 } catch (error) {
     return authzResponse(error);
 }
+
+/** Rows per page: the list renders one row per post, so it must not grow with the whole table. */
+const PER_PAGE = 25;
 
 const params = Astro.url.searchParams;
 const q = params.get('q')?.trim() ?? '';
@@ -48,18 +54,39 @@ const orderBy: Prisma.PostOrderByWithRelationInput =
               ? { isFeatured: dir }
               : { createdAt: dir };
 
+const total = await db.post.count({ where });
+const pageCount = Math.max(1, Math.ceil(total / PER_PAGE));
+// Past the end (e.g. after deleting the last row of the last page): show the last page instead.
+const page = Math.min(parsePage(params.get('page')), pageCount);
 const posts = await db.post.findMany({
     where,
-    orderBy,
-    include: { department: { select: { name: true } }, user: { select: { name: true } } },
+    orderBy: [orderBy, { id: 'desc' }],
+    skip: (page - 1) * PER_PAGE,
+    take: PER_PAGE,
+    select: {
+        id: true,
+        title: true,
+        type: true,
+        isFeatured: true,
+        createdAt: true,
+        highlightImagePath: true,
+        department: { select: { name: true } },
+        user: { select: { name: true } },
+    },
 });
 
-function sortHref(field: string) {
+/** Same list with other query parameters kept; `page` 1 is left out of the URL. */
+function listHref(changes: Record<string, string | null>) {
     const next = new URL(Astro.url);
-    next.searchParams.set('sort', field);
-    next.searchParams.set('dir', sort === field && dir === 'asc' ? 'desc' : 'asc');
+    for (const [key, value] of Object.entries(changes)) {
+        if (value === null) next.searchParams.delete(key);
+        else next.searchParams.set(key, value);
+    }
     return `${next.pathname}${next.search}`;
 }
+const sortHref = (field: string) =>
+    listHref({ sort: field, dir: sort === field && dir === 'asc' ? 'desc' : 'asc', page: null });
+const pageHref = (target: number) => listHref({ page: target > 1 ? String(target) : null });
 const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascending' : 'descending') : undefined);
 const typeClass: Record<string, string> = {
     article: 'bg-status-article-bg text-status-article-fg',
@@ -230,7 +257,7 @@ const columns = [
                                             >
                                                 <Pencil class="h-4 w-4" aria-hidden="true" />
                                             </a>
-                                            <DeletePostButton client:visible id={post.id} name={post.title} />
+                                            <DeleteRowButton kind="post" id={post.id} name={post.title} />
                                         </div>
                                     </td>
                                 </tr>
@@ -250,5 +277,7 @@ const columns = [
                 </table>
             </div>
         </div>
+        <Pagination page={page} pageCount={pageCount} href={pageHref} label="Posts pages" />
     </div>
+    <RowDeleteDialog client:load />
 </AppLayout>

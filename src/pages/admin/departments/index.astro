@@ -2,7 +2,8 @@
 import { ArrowUpDown, Network, Pencil, Search } from '@lucide/svelte';
 import AddLink from '@/components/admin/shared/AddLink.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
-import DeleteDepartmentButton from '@/components/admin/departments/DeleteDepartmentButton.svelte';
+import DeleteRowButton from '@/components/admin/shared/DeleteRowButton.astro';
+import RowDeleteDialog from '@/components/admin/shared/RowDeleteDialog.svelte';
 import { cardClass, formatDate, iconLinkClass, selectClass, thClass } from '@/components/admin/ui';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { getInitials } from '@/lib/initials';
@@ -246,7 +247,7 @@ const filters = [
                                                 <Network class="h-4 w-4" aria-hidden="true" />
                                             </a>
                                             {superadmin && (
-                                                <DeleteDepartmentButton client:visible id={dept.id} name={dept.name} />
+                                                <DeleteRowButton kind="department" id={dept.id} name={dept.name} />
                                             )}
                                         </div>
                                     </td>
@@ -265,4 +266,5 @@ const filters = [
             </div>
         </div>
     </div>
+    {superadmin && <RowDeleteDialog client:load />}
 </AppLayout>

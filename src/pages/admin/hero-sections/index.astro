@@ -2,7 +2,8 @@
 import { ArrowUpDown, Eye, EyeOff, Pencil, Search, Sparkles } from '@lucide/svelte';
 import AddLink from '@/components/admin/shared/AddLink.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
-import DeleteHeroSectionButton from '@/components/admin/hero-sections/DeleteHeroSectionButton.svelte';
+import DeleteRowButton from '@/components/admin/shared/DeleteRowButton.astro';
+import RowDeleteDialog from '@/components/admin/shared/RowDeleteDialog.svelte';
 import { cardClass, iconLinkClass, thClass } from '@/components/admin/ui';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { listWhere } from '@/lib/server/admin-scope';
@@ -181,11 +182,7 @@ const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascendin
                                         >
                                             <Pencil class="h-4 w-4" aria-hidden="true" />
                                         </a>
-                                        <DeleteHeroSectionButton
-                                            client:visible
-                                            id={hs.id}
-                                            name={hs.title ?? `#${hs.id}`}
-                                        />
+                                        <DeleteRowButton kind="heroSection" id={hs.id} name={hs.title ?? `#${hs.id}`} />
                                     </div>
                                 </td>
                             </tr>
@@ -205,4 +202,5 @@ const ariaSort = (field: string) => (sort === field ? (dir === 'asc' ? 'ascendin
             </div>
         </div>
     </div>
+    <RowDeleteDialog client:load />
 </AppLayout>

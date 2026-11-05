@@ -126,7 +126,7 @@ export function downloadUrl(value: string, fileName: string): string {
 export async function put(prefix: StoragePrefix, file: File): Promise<string> {
     const { ext, contentType } = storedType(file.name, file.type);
     const key = `${prefix}/${randomBytes(16).toString('hex')}${ext}`;
-    await driver.put(key, new Uint8Array(await file.arrayBuffer()), contentType);
+    await driver.put(key, file, contentType);
     return key;
 }
 
