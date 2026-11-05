@@ -70,4 +70,8 @@ const ld = [
         <slot />
     </main>
     <SiteFooter {departments} />
+    {!Astro.locals.user && <script>
+        // Hover prefetch: only for anonymous visitors, whose public pages the HTTP cache can reuse.
+        import '@/scripts/public-prefetch';
+    </script>}
 </BaseLayout>

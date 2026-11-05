@@ -23,6 +23,13 @@ const matches = (list: RegExp[], pathname: string) => list.some((re) => re.test(
 export const isAssetPath = (pathname: string) => pathname.startsWith('/_astro/') || pathname.startsWith('/storage/');
 
 /**
+ * A public HTML page: not private, not an asset, not a feed. Anonymous responses for these are cacheable
+ * (`PUBLIC_CACHE_CONTROL`), so the public hover prefetch (`src/scripts/public-prefetch.ts`) only targets them.
+ */
+export const isPublicPage = (pathname: string) =>
+    !matches(PRIVATE, pathname) && !isAssetPath(pathname) && !pathname.endsWith('.xml');
+
+/**
  * Directives that hold for every response. Pages rendered by Astro send them through `security.csp.directives`
  * (`astro.config.mjs`, together with the `script-src` hashes Astro computes); every other response (API, endpoints,
  * redirects, errors) gets them from `responseHeaders`.

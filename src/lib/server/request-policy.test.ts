@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { anonymousActionResponse, guardRequest, rejectsAnonymousAction, responseHeaders } from './request-policy';
+import {
+    anonymousActionResponse,
+    guardRequest,
+    isPublicPage,
+    rejectsAnonymousAction,
+    responseHeaders,
+} from './request-policy';
 
 const CSP = "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
 const BASE = {
@@ -158,5 +164,31 @@ describe('anonymousActionResponse', () => {
             status: 401,
             message: 'Sign in required.',
         });
+    });
+});
+
+describe('isPublicPage', () => {
+    it('accepts the public pages a visitor navigates to', () => {
+        for (const path of ['/', '/posts', '/posts/enrollment-open', '/departments/cit', '/downloads', '/contact']) {
+            expect(isPublicPage(path), path).toBe(true);
+        }
+    });
+
+    it('rejects private routes, assets, API and feeds, whose responses a hover prefetch could not reuse', () => {
+        for (const path of [
+            '/login',
+            '/forgot-password',
+            '/admin/posts',
+            '/dashboard',
+            '/settings/profile',
+            '/api/auth/session',
+            '/_actions/contact.send',
+            '/storage/posts/a.webp',
+            '/_astro/app.js',
+            '/rss.xml',
+            '/sitemap.xml',
+        ]) {
+            expect(isPublicPage(path), path).toBe(false);
+        }
     });
 });
