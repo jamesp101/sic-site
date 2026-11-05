@@ -15,7 +15,7 @@ function dateRange(start: EventDate, end: EventDate | null): string {
     if (sameDay && startTime && endTime) {
         return `${time(start, `${day}, ${startTime}`)} – ${time(end, endTime)}`;
     }
-    if (sameDay && !startTime) return time(start, day);
+    if (sameDay && !startTime && !endTime) return time(start, day);
     return `${time(start, startTime ? `${day}, ${startTime}` : day)} – ${time(end, `${formatEventDay(end)}${endTime ? `, ${endTime}` : ''}`)}`;
 }
 
