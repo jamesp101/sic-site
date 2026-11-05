@@ -17,10 +17,10 @@ const { address } = SITE;
     </div>
     <div class="rounded-2xl border border-border bg-surface p-6 shadow-brand-sm">
         <h3 class="font-sans text-sm font-semibold uppercase tracking-wider text-link">Phone</h3>
-        <p class="mt-2 text-sm">
+        <p class="mt-1 text-sm">
             <a
                 href={`tel:${SITE.telephoneE164}`}
-                class="rounded font-medium text-foreground underline-offset-4 hover:underline"
+                class="inline-flex min-h-11 items-center rounded font-medium text-foreground underline-offset-4 hover:underline md:min-h-8"
             >
                 {SITE.telephone}
             </a>
@@ -28,10 +28,10 @@ const { address } = SITE;
     </div>
     <div class="rounded-2xl border border-border bg-surface p-6 shadow-brand-sm">
         <h3 class="font-sans text-sm font-semibold uppercase tracking-wider text-link">Email</h3>
-        <p class="mt-2 text-sm">
+        <p class="mt-1 text-sm">
             <a
                 href={`mailto:${SITE.email}`}
-                class="rounded font-medium text-foreground underline-offset-4 hover:underline"
+                class="inline-flex min-h-11 items-center rounded font-medium text-foreground underline-offset-4 hover:underline md:min-h-8"
             >
                 {SITE.email}
             </a>
@@ -39,13 +39,13 @@ const { address } = SITE;
     </div>
     <div class="rounded-2xl border border-border bg-surface p-6 shadow-brand-sm">
         <h3 class="font-sans text-sm font-semibold uppercase tracking-wider text-link">Follow us</h3>
-        <ul class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+        <ul class="mt-1 flex flex-wrap gap-x-5 text-sm">
             {SITE.sameAs.map((url) => (
                 <li>
                     <a
                         href={url}
                         rel="noopener"
-                        class="rounded font-medium text-foreground underline-offset-4 hover:underline"
+                        class="inline-flex min-h-11 items-center rounded font-medium text-foreground underline-offset-4 hover:underline md:min-h-8"
                     >
                         {url.includes('facebook')
                             ? 'Facebook'

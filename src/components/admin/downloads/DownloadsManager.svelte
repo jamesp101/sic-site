@@ -8,7 +8,7 @@
   } from '@lucide/svelte';
   import ConfirmDialog from '@/components/admin/ConfirmDialog.svelte';
   import { inputClass, parseActionError, primaryButtonClass, secondaryButtonClass } from '@/components/admin/shared/form-utils';
-  import { cardClass, formatDate, searchInputClass, selectClass } from '@/components/admin/ui';
+  import { cardClass, formatDate, searchInputClass, selectClass, thClass } from '@/components/admin/ui';
   import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
   import { Sheet, SheetContent } from '@/components/ui/sheet';
   import type { FileKind } from '@/lib/content-types';
@@ -142,7 +142,7 @@
 
   const chip = 'inline-flex items-center gap-1 rounded-md bg-surface-alt px-2 py-0.5 text-xs font-semibold text-muted-foreground';
   const sortLink = (active: boolean) => `font-medium hover:text-link ${active ? 'font-bold text-link' : ''}`;
-  const iconBtn = 'rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground';
+  const iconBtn = 'inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground';
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -153,7 +153,7 @@
     <p class="text-sm text-muted-foreground">
       <span class="font-semibold text-foreground">{manager.totalFiles} files</span> · {formatFileSize(manager.totalBytes)} stored
     </p>
-    <div class="flex flex-wrap items-center gap-3">
+    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
       <div class="flex items-center rounded-lg border border-border-strong bg-surface-alt p-1" role="group" aria-label="View mode">
         <button type="button" onclick={() => (viewMode = 'grid')} aria-pressed={viewMode === 'grid'} class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold {viewMode === 'grid' ? 'bg-surface text-foreground shadow-brand-sm' : 'text-muted-foreground hover:text-foreground'}">
           <LayoutGrid class="h-3.5 w-3.5" aria-hidden="true" /> Grid
@@ -178,7 +178,7 @@
     <input type="hidden" name="folder" value={manager.folder} disabled={!manager.folder} />
     <input type="hidden" name="sort" value={manager.sort} />
     <input type="hidden" name="dir" value={manager.dir} />
-    <div class="flex w-full flex-wrap items-center justify-end gap-2.5 md:w-auto">
+    <div class="flex w-full items-center gap-2 *:flex-1 md:w-auto md:*:flex-none">
       <button type="submit" class={primaryButtonClass}>Search</button>
       {#if filtered}
         <a href={manager.resetHref} class={secondaryButtonClass}><RefreshCw class="h-3 w-3" aria-hidden="true" /> Reset</a>
@@ -201,7 +201,7 @@
             <span class="min-w-0"><span class="block truncate text-xs font-semibold">{dir.name}</span><span class="block text-xs text-muted-foreground">{dir.count} items</span></span>
           </a>
           {#if dir.id && dir.canDelete}
-            <button type="button" onclick={() => askDelete('folder', dir.id!, dir.name)} class="ml-1 inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete directory ${dir.name}`}>
+            <button type="button" onclick={() => askDelete('folder', dir.id!, dir.name)} class="ml-1 inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete directory ${dir.name}`}>
               <Trash class="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           {/if}
@@ -261,7 +261,7 @@
             </div>
             <div class="flex items-center justify-between border-t border-border pt-2 text-xs">
               <span class="text-xs text-muted-foreground">{formatDate(d.createdAt)}</span>
-              <div class="flex items-center gap-1">
+              <div class="flex items-center gap-2">
                 <button type="button" onclick={() => openDetails(d)} class={iconBtn} aria-label={`Details for ${d.fileName}`}><Info class="h-4 w-4" aria-hidden="true" /></button>
                 <a href={d.url} target="_blank" rel="noopener" class={iconBtn} aria-label={`Open ${d.fileName}`}><ExternalLink class="h-4 w-4" aria-hidden="true" /></a>
                 <button type="button" onclick={() => askDelete('file', d.id, d.fileName)} class="{iconBtn} hover:!bg-destructive/10 hover:!text-destructive" aria-label={`Delete ${d.fileName}`}><Trash class="h-4 w-4" aria-hidden="true" /></button>
@@ -272,36 +272,36 @@
       </ul>
     {:else}
       <div class="{cardClass} overflow-x-auto" tabindex="0" role="region" aria-label="Files table">
-        <table class="w-full border-collapse text-left">
+        <table class="w-full min-w-3xl border-collapse text-left">
           <thead>
-            <tr class="border-b border-border bg-surface-alt text-xs font-bold text-muted-foreground">
-              <th scope="col" class="px-6 py-3.5">Name</th>
-              <th scope="col" class="px-6 py-3.5">Directory</th>
-              <th scope="col" class="px-6 py-3.5">Department</th>
-              <th scope="col" class="px-6 py-3.5">Size</th>
-              <th scope="col" class="px-6 py-3.5">Uploaded</th>
-              <th scope="col" class="px-6 py-3.5 text-right">Actions</th>
+            <tr class="border-b border-border bg-surface-alt">
+              <th scope="col" class={thClass}>Name</th>
+              <th scope="col" class={thClass}>Directory</th>
+              <th scope="col" class={thClass}>Department</th>
+              <th scope="col" class={thClass}>Size</th>
+              <th scope="col" class={thClass}>Uploaded</th>
+              <th scope="col" class="{thClass} text-right">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border text-sm">
             {#each downloads as d (d.id)}
               {@const Icon = kindIcon[d.kind]}
               <tr class="hover:bg-surface-alt">
-                <td class="px-6 py-3.5">
+                <td class="px-4 py-3">
                   <div class="flex items-center gap-3">
                     <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {kindClass[d.kind]}"><Icon class="h-4 w-4" aria-hidden="true" /></div>
-                    <div>
-                      <a href={d.url} target="_blank" rel="noopener" class="font-bold text-foreground hover:text-link">{d.fileName}</a>
+                    <div class="min-w-0">
+                      <a href={d.url} target="_blank" rel="noopener" class="block max-w-xs truncate font-bold text-foreground hover:text-link" title={d.fileName}>{d.fileName}</a>
                       {#if d.tags.length > 0}<div class="mt-0.5 flex flex-wrap gap-1">{#each d.tags as tag (tag)}<span class="text-xs text-muted-foreground">#{tag}</span>{/each}</div>{/if}
                     </div>
                   </div>
                 </td>
-                <td class="px-6 py-3.5 text-xs font-semibold">{d.directory}</td>
-                <td class="px-6 py-3.5 text-xs font-semibold text-link">{d.departmentName ?? 'General'}</td>
-                <td class="px-6 py-3.5 font-mono text-xs">{formatFileSize(d.size)}</td>
-                <td class="px-6 py-3.5 text-xs text-muted-foreground">{formatDate(d.createdAt)}</td>
-                <td class="px-6 py-3.5">
-                  <div class="flex items-center justify-end gap-1">
+                <td class="px-4 py-3 text-xs font-semibold">{d.directory}</td>
+                <td class="px-4 py-3 text-xs font-semibold text-link">{d.departmentName ?? 'General'}</td>
+                <td class="px-4 py-3 font-mono text-xs">{formatFileSize(d.size)}</td>
+                <td class="px-4 py-3 text-xs text-muted-foreground">{formatDate(d.createdAt)}</td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center justify-end gap-2">
                     <button type="button" onclick={() => openDetails(d)} class={iconBtn} aria-label={`Details for ${d.fileName}`}><Info class="h-4 w-4" aria-hidden="true" /></button>
                     <a href={d.url} target="_blank" rel="noopener" class={iconBtn} aria-label={`Open ${d.fileName}`}><ExternalLink class="h-4 w-4" aria-hidden="true" /></a>
                     <button type="button" onclick={() => askDelete('file', d.id, d.fileName)} class="{iconBtn} hover:!bg-destructive/10 hover:!text-destructive" aria-label={`Delete ${d.fileName}`}><Trash class="h-4 w-4" aria-hidden="true" /></button>

@@ -6,6 +6,7 @@ import Eyebrow from '@/components/site/Eyebrow.astro';
 import HeroCarousel from '@/components/site/HeroCarousel.svelte';
 import MarkdownSection from '@/components/site/MarkdownSection.astro';
 import PostCard from '@/components/site/PostCard.astro';
+import { textLink } from '@/components/site/classes';
 import PublicLayout from '@/layouts/PublicLayout.astro';
 import { homePageSeo, siteUrl } from '@/lib/seo';
 import { getHomeData } from '@/lib/server/queries';
@@ -67,7 +68,7 @@ const { carousel, departments, latestPosts, welcomeHero, heroSections } = await 
                     </h2>
                     <p class="mt-3 text-muted-foreground">News, campus events and announcements.</p>
                 </div>
-                <a href="/posts" class="rounded text-sm font-semibold text-link underline-offset-4 hover:underline">
+                <a href="/posts" class={textLink}>
                     View all posts &rarr;
                 </a>
             </div>

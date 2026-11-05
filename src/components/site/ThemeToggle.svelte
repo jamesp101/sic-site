@@ -38,7 +38,7 @@
   aria-label="Dark mode"
   aria-pressed={mounted ? dark : undefined}
   inert={!mounted}
-  class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/20 text-white transition-colors hover:bg-white/10 hover:text-gold-300"
+  class="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-white/20 text-white transition-colors duration-200 hover:bg-white/10 hover:text-gold-300"
   class:invisible={!mounted}
 >
   <Sun class="hidden h-[18px] w-[18px] dark:block" aria-hidden="true" />

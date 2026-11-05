@@ -108,7 +108,7 @@
   class="space-y-2 rounded-xl border border-border-strong bg-surface p-3 shadow-brand-sm md:sticky md:top-2 md:z-20"
 >
   <div class="flex flex-wrap items-center justify-between gap-2">
-    <h2 id="nav-preview-title" class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Live header preview</h2>
+    <h2 id="nav-preview-title" class="font-sans text-xs font-bold uppercase tracking-wider text-muted-foreground">Live header preview</h2>
     <label class="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
       <input type="checkbox" role="switch" bind:checked={showHidden} class="h-4 w-4 rounded border-border-strong accent-brand-800" />
       Show hidden

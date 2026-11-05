@@ -58,7 +58,7 @@
     { title: 'Dashboard', href: '/dashboard', icon: LayoutGrid },
     { title: 'Posts', href: '/admin/posts', icon: FileText },
     { title: 'Downloads', href: '/admin/downloads', icon: Download },
-    { title: 'Hero Sections', href: '/admin/hero-sections', icon: Sparkles },
+    { title: 'Hero sections', href: '/admin/hero-sections', icon: Sparkles },
     { title: 'Departments', href: '/admin/departments', icon: School },
     ...(scope.kind === 'department'
       ? [{ title: 'Org chart', href: `/admin/departments/${scope.id}/members`, icon: Network }]
@@ -66,12 +66,12 @@
     { title: 'Carousels', href: '/admin/carousels', icon: Image },
     ...(user.role === 'superadmin'
       ? [
-          { title: 'Navigation Links', href: '/admin/navlinks', icon: Link2 },
+          { title: 'Navigation links', href: '/admin/navlinks', icon: Link2 },
           { title: 'Users', href: '/admin/users', icon: UsersIcon },
-          { title: 'Landing Settings', href: '/admin/settings/landing', icon: SettingsIcon },
+          { title: 'Landing settings', href: '/admin/settings/landing', icon: SettingsIcon },
         ]
       : []),
-    { title: 'View Site', href: '/', icon: Home },
+    { title: 'View site', href: '/', icon: Home },
   ]);
 </script>
 

@@ -25,10 +25,10 @@
   <Notice kind="error" message={form.message} />
   <Field id="password" label="Password" error={form.errors.password}>
     {#snippet children(props)}
-      <PasswordInput {...props} name="password" required autocomplete="current-password" bind:value={password} />
+      <PasswordInput {...props} class="h-11" name="password" required autocomplete="current-password" bind:value={password} />
     {/snippet}
   </Field>
-  <Button type="submit" class="w-full" disabled={form.processing} data-test="confirm-password-button">
+  <Button type="submit" class="h-11 w-full" disabled={form.processing} data-test="confirm-password-button">
     {form.processing ? 'Confirming…' : 'Confirm password'}
   </Button>
 </form>

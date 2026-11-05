@@ -43,17 +43,17 @@
 
   <Field id="password" label="New password" error={errors.password}>
     {#snippet children(props)}
-      <PasswordInput {...props} name="password" required minlength={MIN_PASSWORD_LENGTH} autocomplete="new-password" placeholder="New password" bind:value={password} />
+      <PasswordInput {...props} class="h-11" name="password" required minlength={MIN_PASSWORD_LENGTH} autocomplete="new-password" placeholder="New password" bind:value={password} />
     {/snippet}
   </Field>
 
   <Field id="password_confirmation" label="Confirm password" error={errors.confirmation}>
     {#snippet children(props)}
-      <PasswordInput {...props} name="password_confirmation" required autocomplete="new-password" placeholder="Confirm password" bind:value={confirmation} />
+      <PasswordInput {...props} class="h-11" name="password_confirmation" required autocomplete="new-password" placeholder="Confirm password" bind:value={confirmation} />
     {/snippet}
   </Field>
 
-  <Button type="submit" class="w-full" disabled={processing} data-test="reset-password-button">
+  <Button type="submit" class="h-11 w-full" disabled={processing} data-test="reset-password-button">
     {processing ? 'Resetting…' : 'Reset password'}
   </Button>
 </form>

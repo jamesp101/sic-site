@@ -5,6 +5,7 @@ import MarkdownSection from '@/components/site/MarkdownSection.astro';
 import OrgChart from '@/components/site/OrgChart.astro';
 import PageBanner from '@/components/site/PageBanner.astro';
 import PostCard from '@/components/site/PostCard.astro';
+import { textLink } from '@/components/site/classes';
 import PublicLayout from '@/layouts/PublicLayout.astro';
 import { postsHref } from '@/lib/post-filters';
 import { siteUrl } from '@/lib/seo';
@@ -32,7 +33,7 @@ const { department, carousel, posts, postCount, members, heroSections, seo } = p
     {members.length > 0 && (
         <section
             id="org-chart"
-            class="scroll-mt-24 border-b border-border bg-surface-alt py-16"
+            class="scroll-mt-24 border-b border-border bg-surface-alt py-16 md:py-24"
             aria-labelledby="people-heading"
         >
             <div class="mx-auto w-full max-w-7xl px-6">
@@ -55,7 +56,7 @@ const { department, carousel, posts, postCount, members, heroSections, seo } = p
     )}
 
     {posts.length > 0 && (
-        <section class="py-16" aria-labelledby="dept-posts-heading">
+        <section class="py-16 md:py-24" aria-labelledby="dept-posts-heading">
             <div class="mx-auto w-full max-w-7xl px-6">
                 <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
                     <h2
@@ -66,7 +67,7 @@ const { department, carousel, posts, postCount, members, heroSections, seo } = p
                     </h2>
                     <a
                         href={postsHref({ departmentId: department.id })}
-                        class="rounded text-sm font-semibold text-link underline-offset-4 hover:underline"
+                        class={textLink}
                     >
                         View all {postCount} from this department &rarr;
                     </a>

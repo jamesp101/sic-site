@@ -7,6 +7,7 @@
   import Field from '../shared/Field.svelte';
   import FormActions from '../shared/FormActions.svelte';
   import { inputClass } from '../shared/form-utils';
+  import { cardClass } from '../ui';
 
   export interface UserFormValues {
     id: number;
@@ -42,7 +43,8 @@
   });
 </script>
 
-<form method="post" onsubmit={form.submit} class="space-y-6 rounded-xl border border-border bg-card p-6 shadow-brand-sm">
+<form method="post" onsubmit={form.submit} class="space-y-6">
+  <div class="{cardClass} space-y-6 p-6">
   <div class="grid gap-6 md:grid-cols-2">
     <Field id="name" label="Full name" required error={form.errors.name}>
       {#snippet children(props)}
@@ -85,6 +87,7 @@
         {/snippet}
       </Field>
     {/if}
+  </div>
   </div>
 
   <FormActions cancelHref="/admin/users" processing={form.processing} submitLabel={initial ? 'Save changes' : 'Create user'} message={form.message} />

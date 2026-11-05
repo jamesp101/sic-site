@@ -1,6 +1,6 @@
 ---
 import ErrorPanel from '@/components/site/ErrorPanel.astro';
-import { field } from '@/components/site/classes';
+import { btnPrimary, field } from '@/components/site/classes';
 import PublicLayout from '@/layouts/PublicLayout.astro';
 
 Astro.response.status = 404;
@@ -35,10 +35,7 @@ Astro.response.status = 404;
                 autocomplete="off"
                 class={field}
             />
-            <button
-                type="submit"
-                class="inline-flex shrink-0 items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
-            >
+            <button type="submit" class={`${btnPrimary} shrink-0`}>
                 Search
             </button>
         </form>

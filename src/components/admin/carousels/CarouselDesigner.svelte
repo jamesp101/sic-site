@@ -451,10 +451,10 @@
           {/each}
           <input bind:this={fileInput} type="file" accept="image/*" class="sr-only" tabindex="-1" aria-label="Choose a logo or image to add" onchange={uploadImageLayer} />
           <span class="mx-1 hidden h-6 w-px bg-border-strong sm:block" aria-hidden="true"></span>
-          <button type="button" class="{secondaryButtonClass} !px-2 !py-1.5" onclick={() => session.undo()} disabled={!designer.canUndo} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)">
+          <button type="button" class="{secondaryButtonClass} !p-2" onclick={() => session.undo()} disabled={!designer.canUndo} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)">
             <Undo2 class="h-4 w-4" aria-hidden="true" />
           </button>
-          <button type="button" class="{secondaryButtonClass} !px-2 !py-1.5" onclick={() => session.redo()} disabled={!designer.canRedo} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)">
+          <button type="button" class="{secondaryButtonClass} !p-2" onclick={() => session.redo()} disabled={!designer.canRedo} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)">
             <Redo2 class="h-4 w-4" aria-hidden="true" />
           </button>
           <div role="group" aria-label="Layout" class="flex gap-1">

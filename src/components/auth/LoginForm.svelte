@@ -53,25 +53,25 @@
 
   <Field id="email" label="Email address">
     {#snippet children(props)}
-      <Input {...props} type="email" name="email" required autocomplete="email" placeholder="email@example.com" bind:value={email} />
+      <Input {...props} class="h-11" type="email" name="email" required autocomplete="email" placeholder="email@example.com" bind:value={email} />
     {/snippet}
   </Field>
 
   <Field id="password" label="Password">
     {#snippet labelAside()}
-      <TextLink href="/forgot-password" class="text-sm">Forgot your password?</TextLink>
+      <TextLink href="/forgot-password" class="-my-2 inline-block py-2 text-sm">Forgot your password?</TextLink>
     {/snippet}
     {#snippet children(props)}
-      <PasswordInput {...props} name="password" required autocomplete="current-password" placeholder="Password" bind:value={password} />
+      <PasswordInput {...props} class="h-11" name="password" required autocomplete="current-password" placeholder="Password" bind:value={password} />
     {/snippet}
   </Field>
 
-  <label class="flex items-center gap-3 text-sm font-medium">
-    <input type="checkbox" name="remember" bind:checked={remember} class="size-4 rounded border-input accent-primary" />
+  <label class="flex min-h-11 items-center gap-3 text-sm font-medium">
+    <input type="checkbox" name="remember" bind:checked={remember} class="size-5 rounded border-input accent-primary" />
     <span>Remember me</span>
   </label>
 
-  <Button type="submit" class="w-full" disabled={processing} data-test="login-button">
+  <Button type="submit" class="h-11 w-full" disabled={processing} data-test="login-button">
     {processing ? 'Signing in…' : 'Log in'}
   </Button>
 </form>

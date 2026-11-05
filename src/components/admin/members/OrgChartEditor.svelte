@@ -911,8 +911,9 @@
   /* Same visual language as the public chart (components/site/OrgChart.astro). */
   .viewport {
     position: relative;
-    flex: 1 1 0;
+    flex: 1 1 auto;
     min-width: 0;
+    min-height: 16rem;
     border: 1px solid var(--border);
     border-radius: 0.75rem;
     background: var(--surface-alt);

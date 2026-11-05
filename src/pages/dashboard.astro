@@ -69,48 +69,50 @@ const tasks = [
             <ScopeIndicator />
         </header>
 
-        <h2 class="text-xl font-bold tracking-tight text-foreground" data-test="dashboard-scope">
-            Overview · {scopeLabel(scope)}
-        </h2>
-        <section aria-label="Overview" class="-mt-4 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {stats.map(({ label, value, note, icon: Icon }) => (
-                <div class={`${cardClass} p-6`}>
-                    <div class="flex items-center justify-between">
-                        <h3 class="font-sans text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                            {label}
-                        </h3>
-                        <div class="rounded-lg bg-gold-500/10 p-2 text-gold-600">
-                            <Icon class="h-5 w-5" aria-hidden="true" />
+        <section aria-labelledby="overview" class="space-y-4">
+            <h2 id="overview" class="text-xl font-bold tracking-tight text-foreground" data-test="dashboard-scope">
+                Overview · {scopeLabel(scope)}
+            </h2>
+            <div class="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-6">
+                {stats.map(({ label, value, note, icon: Icon }) => (
+                    <div class={`${cardClass} flex flex-col p-4 sm:p-6`}>
+                        <div class="flex items-start justify-between gap-2">
+                            <h3 class="font-sans text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                                {label}
+                            </h3>
+                            <div class="shrink-0 rounded-lg bg-gold-500/10 p-2 text-gold-600 dark:text-gold-400">
+                                <Icon class="h-5 w-5" aria-hidden="true" />
+                            </div>
                         </div>
+                        <p class="mt-4 text-3xl font-extrabold tabular-nums text-foreground">{value}</p>
+                        <p class="mt-1 text-xs text-muted-foreground">{note}</p>
                     </div>
-                    <p class="mt-4 text-3xl font-extrabold text-foreground">{value}</p>
-                    <p class="mt-1 text-xs text-muted-foreground">{note}</p>
-                </div>
-            ))}
+                ))}
+            </div>
         </section>
 
         <section aria-labelledby="quick-tasks" class="space-y-4">
             <h2 id="quick-tasks" class="text-xl font-bold tracking-tight text-foreground">
                 Quick tasks
             </h2>
-            <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
                 {tasks.map(({ href, title, text, cta, icon: Icon, external }) => (
                     <a
                         href={href}
                         target={external ? '_blank' : undefined}
                         rel={external ? 'noopener' : undefined}
-                        class={`${cardClass} group flex flex-col justify-between p-6 transition-all hover:border-gold-500 hover:shadow-brand-md`}
+                        class={`${cardClass} group flex flex-col justify-between p-4 transition-[border-color,box-shadow] duration-200 ease-out hover:border-gold-500 hover:shadow-brand-md sm:p-6`}
                     >
                         <div class="space-y-2">
-                            <div class="w-fit rounded-lg bg-gold-500/10 p-2.5 text-gold-600">
+                            <div class="w-fit rounded-lg bg-gold-500/10 p-2.5 text-gold-600 dark:text-gold-400">
                                 <Icon class="h-6 w-6" aria-hidden="true" />
                             </div>
-                            <h3 class="mt-4 font-bold text-foreground transition-colors group-hover:text-link">
+                            <h3 class="mt-3 font-bold text-foreground transition-colors group-hover:text-link">
                                 {title}
                             </h3>
-                            <p class="text-xs leading-relaxed text-muted-foreground">{text}</p>
+                            <p class="text-sm leading-relaxed text-muted-foreground">{text}</p>
                         </div>
-                        <span class="mt-6 flex items-center gap-1.5 text-xs font-bold text-link transition-all group-hover:gap-2">
+                        <span class="mt-6 flex items-center gap-1.5 text-sm font-bold text-link transition-[gap] duration-200 ease-out group-hover:gap-2.5">
                             {cta} <ArrowRight class="h-3.5 w-3.5" aria-hidden="true" />
                         </span>
                     </a>

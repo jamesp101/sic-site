@@ -10,8 +10,11 @@ export const widePageClass = 'mx-auto w-full max-w-7xl space-y-6 p-6';
 /** Page container: plain forms. */
 export const formPageClass = 'mx-auto w-full max-w-3xl space-y-6 p-6';
 export const iconLinkClass =
-    'inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground';
-export const thClass = 'px-6 py-3 text-xs font-bold tracking-wide text-muted-foreground uppercase';
+    'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 ease-out hover:bg-accent hover:text-accent-foreground';
+export const thClass = 'px-4 py-3 text-xs font-bold tracking-wide whitespace-nowrap text-muted-foreground uppercase';
+/** Status pill in a table cell: one line, never wraps. */
+export const pillClass =
+    'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap';
 export const eyebrowClass =
     'flex items-center gap-2 text-xs font-semibold tracking-widest text-link uppercase before:h-0.5 before:w-6 before:bg-gold-500 before:content-[""]';
 

@@ -35,14 +35,14 @@
   <Notice kind="success" message={status} />
   <Notice kind="error" message={error} />
   <form method="post" onsubmit={resend}>
-    <Button type="submit" variant="secondary" disabled={processing}>
+    <Button type="submit" variant="secondary" class="h-11" disabled={processing}>
       {processing ? 'Sending…' : 'Resend verification email'}
     </Button>
   </form>
   <button
     type="button"
     onclick={logout}
-    class="mx-auto text-sm text-link underline decoration-border-strong underline-offset-4 hover:text-brand-700"
+    class="mx-auto inline-flex min-h-11 items-center text-sm text-link underline decoration-border-strong underline-offset-4 hover:text-brand-700"
   >
     Log out
   </button>

@@ -8,7 +8,7 @@ import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DeleteRowButton from '@/components/admin/shared/DeleteRowButton.astro';
 import RowDeleteDialog from '@/components/admin/shared/RowDeleteDialog.svelte';
 import { primaryButtonClass, secondaryButtonClass } from '@/components/admin/shared/form-utils';
-import { cardClass, iconLinkClass, widePageClass, searchInputClass, thClass } from '@/components/admin/ui';
+import { cardClass, iconLinkClass, pillClass, widePageClass, searchInputClass, thClass } from '@/components/admin/ui';
 import SortableTh from '@/components/admin/shared/SortableTh.astro';
 import { adminPage } from '@/lib/server/admin-page';
 import { runList, sortBy } from '@/lib/server/admin-list';
@@ -95,7 +95,7 @@ const { rows: users, q, sort, dir } = list;
 
         <div class={`${cardClass} overflow-hidden`}>
             <div class="overflow-x-auto" tabindex="0" role="region" aria-label="Users table">
-                <table class="w-full border-collapse text-left text-sm">
+                <table class="w-full min-w-3xl border-collapse text-left text-sm">
                     <thead>
                         <tr class="border-b border-border bg-surface-alt">
                             <SortableTh list={list} field="name">
@@ -118,29 +118,35 @@ const { rows: users, q, sort, dir } = list;
                     <tbody class="divide-y divide-border">
                         {users.map((user) => (
                             <tr class="hover:bg-surface-alt/60">
-                                <td class="px-6 py-3 font-semibold text-foreground">
-                                    {user.name}
-                                    {user.id === actor.id && (
-                                        <span class="ml-2 text-xs font-normal text-muted-foreground">(you)</span>
-                                    )}
+                                <td class="px-4 py-3 font-semibold text-foreground">
+                                    <span class="inline-flex items-center gap-2">
+                                        <span class="max-w-64 truncate" title={user.name}>{user.name}</span>
+                                        {user.id === actor.id && (
+                                            <span class="text-xs font-normal text-muted-foreground">(you)</span>
+                                        )}
+                                    </span>
                                 </td>
-                                <td class="px-6 py-3 text-muted-foreground">{user.email}</td>
-                                <td class="px-6 py-3">
+                                <td class="px-4 py-3 text-muted-foreground">
+                                    <span class="block max-w-64 truncate" title={user.email}>{user.email}</span>
+                                </td>
+                                <td class="px-4 py-3">
                                     {user.role === 'superadmin' ? (
-                                        <span class="rounded-full bg-status-announcement-bg px-2 py-0.5 text-xs font-semibold text-status-announcement-fg">
+                                        <span class={`${pillClass} bg-status-announcement-bg text-status-announcement-fg`}>
                                             Superadmin
                                         </span>
                                     ) : (
-                                        <span class="rounded-full bg-status-article-bg px-2 py-0.5 text-xs font-semibold text-status-article-fg">
+                                        <span class={`${pillClass} bg-status-article-bg text-status-article-fg`}>
                                             Department user
                                         </span>
                                     )}
                                 </td>
-                                <td class="px-6 py-3 text-xs font-semibold text-link">
-                                    {user.department?.name ?? '—'}
+                                <td class="px-4 py-3 text-xs font-semibold text-link">
+                                    <span class="block max-w-56 truncate" title={user.department?.name ?? undefined}>
+                                        {user.department?.name ?? '—'}
+                                    </span>
                                 </td>
-                                <td class="px-6 py-3">
-                                    <div class="flex justify-end gap-1.5">
+                                <td class="px-4 py-3">
+                                    <div class="flex justify-end gap-2">
                                         <a
                                             href={`/admin/users/${user.id}/edit`}
                                             class={iconLinkClass}

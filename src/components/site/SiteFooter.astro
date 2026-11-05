@@ -17,11 +17,12 @@ const socials = SITE.sameAs.map((url) => {
     return { url, label: host.startsWith('facebook') ? 'Facebook' : host.startsWith('tiktok') ? 'TikTok' : host };
 });
 
-const linkClass = 'rounded text-white/75 transition-colors hover:text-gold-300';
+const linkClass =
+    'inline-flex min-h-11 items-center rounded text-white/75 transition-colors duration-200 hover:text-gold-300 md:min-h-8';
 const heading = 'mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-gold-400';
 ---
 
-<footer class="mt-auto border-t border-white/10 bg-brand-950 text-white">
+<footer class="on-navy-deep mt-auto border-t border-white/10 bg-brand-950 text-white">
     <div class="mx-auto w-full max-w-7xl px-6 py-14">
         <div class="grid grid-cols-1 gap-10 md:grid-cols-4">
             <div>
@@ -47,7 +48,7 @@ const heading = 'mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-gold
                 <h2 id="footer-departments" class={`${heading} font-sans`}>
                     Departments
                 </h2>
-                <ul class="space-y-2 text-sm">
+                <ul class="text-sm">
                     {footer.departments.map((link) => (
                         <li>
                             <a href={link.href} class={linkClass}>
@@ -62,7 +63,7 @@ const heading = 'mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-gold
                 <h2 id="footer-links" class={`${heading} font-sans`}>
                     Quick links
                 </h2>
-                <ul class="space-y-2 text-sm">
+                <ul class="text-sm">
                     {footer.quickLinks.map((link) => (
                         <li>
                             <a href={link.href} class={linkClass}>
@@ -75,9 +76,9 @@ const heading = 'mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-gold
 
             <div>
                 <h2 class={`${heading} font-sans`}>Contact us</h2>
-                <address class="space-y-2 text-sm not-italic text-white/75">
-                    <p>
-                        {address.streetAddress}, {address.addressLocality}, {address.addressRegion}
+                <address class="text-sm not-italic text-white/75">
+                    <p class="mb-1">
+                        {address.streetAddress}, {address.addressLocality}, {address.addressRegion}{' '}
                         {address.postalCode}
                     </p>
                     <p>
@@ -91,7 +92,7 @@ const heading = 'mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-gold
                         </a>
                     </p>
                 </address>
-                <ul class="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm" aria-label="Social media">
+                <ul class="mt-2 flex flex-wrap gap-x-5 text-sm" aria-label="Social media">
                     {socials.map((s) => (
                         <li>
                             <a href={s.url} rel="noopener" class={linkClass}>

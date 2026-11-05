@@ -44,7 +44,7 @@
 </a>
 <AppShell {sidebarOpen}>
   <AppSidebar {user} {currentPath} {scope} {scopeDepartments} {scopeLocked} />
-  <AppContent class="overflow-x-hidden">
+  <AppContent class="min-w-0 overflow-x-clip">
     <AppSidebarHeader {breadcrumbs} />
     <main id="main" tabindex="-1" class="flex flex-1 flex-col outline-none">
       {@render children?.()}

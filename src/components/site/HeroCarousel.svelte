@@ -132,7 +132,7 @@
   bind:this={root}
   aria-roledescription="carousel"
   aria-label={label}
-  class="slide-hero relative w-full overflow-hidden bg-brand-950 {tall ? '' : 'slide-hero-short'}"
+  class="slide-hero on-navy-deep relative w-full overflow-hidden bg-brand-950 {tall ? '' : 'slide-hero-short'}"
   onpointerenter={(event) => event.pointerType === 'mouse' && (hovering = true)}
   onpointerleave={(event) => event.pointerType === 'mouse' && (hovering = false)}
   onfocusin={(event) => (focused = (event.target as Element).matches(':focus-visible'))}
@@ -208,7 +208,7 @@
         {#if !reducedMotion}
           <button
             type="button"
-            class="inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/15"
+            class="inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-200 hover:bg-white/15"
             aria-label={userPaused ? (multiple ? 'Play slideshow' : 'Play video') : multiple ? 'Pause slideshow' : 'Pause video'}
             onclick={() => (userPaused = !userPaused)}
           >
@@ -226,7 +226,7 @@
           {#each slides as slide, index (slide.id)}
             <button
               type="button"
-              class="group flex h-10 items-center px-1"
+              class="group flex h-11 items-center px-1"
               aria-label="Go to slide {index + 1}"
               aria-current={index === current ? 'true' : undefined}
               onclick={() => go(index)}

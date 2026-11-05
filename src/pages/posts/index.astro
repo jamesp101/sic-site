@@ -43,7 +43,7 @@ const tabs: { label: string; type?: PostType }[] = [
         lead="Keep up to date with the latest stories and official advisories from our campus."
     />
 
-    <section class="py-12" aria-label="Posts">
+    <section class="py-12 md:py-16" aria-label="Posts">
         <div class="mx-auto w-full max-w-7xl px-6">
             <nav aria-label="Post type" class="mb-6">
                 <ul class="flex flex-wrap gap-2">
@@ -55,7 +55,7 @@ const tabs: { label: string; type?: PostType }[] = [
                                     href={postsHref({ ...filters, type: tab.type })}
                                     aria-current={current ? 'page' : undefined}
                                     class:list={[
-                                        'inline-flex rounded-lg px-4 py-2 text-sm font-semibold transition-colors',
+                                        'inline-flex min-h-11 items-center rounded-lg px-4 py-2 text-sm font-semibold transition-colors duration-200 ease-out md:min-h-10',
                                         current
                                             ? 'bg-primary text-primary-foreground'
                                             : 'text-muted-foreground hover:bg-surface hover:text-foreground',

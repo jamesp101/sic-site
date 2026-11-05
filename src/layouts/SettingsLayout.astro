@@ -16,7 +16,7 @@ const path = Astro.url.pathname.replace(/\/$/, '');
 ---
 
 <AppLayout title={`${title} settings`} breadcrumbs={[{ title: 'Settings', href: '/settings/profile' }, { title }]}>
-    <div class="px-4 py-6">
+    <div class="mx-auto w-full max-w-7xl p-6">
         <header class="mb-8 space-y-1">
             <p class="flex items-center gap-2 text-xs font-semibold tracking-widest text-link uppercase">
                 <span class="h-0.5 w-6 bg-gold-500" aria-hidden="true"></span>

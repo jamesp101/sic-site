@@ -36,11 +36,11 @@
 
   <Field id="email" label="Email address">
     {#snippet children(props)}
-      <Input {...props} type="email" name="email" required autocomplete="email" placeholder="email@example.com" bind:value={email} />
+      <Input {...props} class="h-11" type="email" name="email" required autocomplete="email" placeholder="email@example.com" bind:value={email} />
     {/snippet}
   </Field>
 
-  <Button type="submit" class="w-full" disabled={processing} data-test="email-password-reset-link-button">
+  <Button type="submit" class="h-11 w-full" disabled={processing} data-test="email-password-reset-link-button">
     {processing ? 'Sending…' : 'Email password reset link'}
   </Button>
 </form>

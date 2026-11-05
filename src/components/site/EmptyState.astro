@@ -1,4 +1,6 @@
 ---
+import { btnOutlineCompact } from './classes';
+
 interface Props {
     title: string;
     description?: string;
@@ -13,10 +15,7 @@ const { title, description, actionHref, actionLabel } = Astro.props;
     <p class="text-base font-semibold text-foreground">{title}</p>
     {description && <p class="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{description}</p>}
     {actionHref && actionLabel && (
-        <a
-            href={actionHref}
-            class="mt-6 inline-flex rounded-xl border border-border-strong px-4 py-2 text-sm font-semibold text-link hover:bg-surface-alt"
-        >
+        <a href={actionHref} class={`${btnOutlineCompact} mt-6`}>
             {actionLabel}
         </a>
     )}

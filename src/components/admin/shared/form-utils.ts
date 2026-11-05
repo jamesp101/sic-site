@@ -5,10 +5,10 @@ export const primaryButtonClass =
     'inline-flex items-center justify-center gap-2 rounded-lg bg-brand-800 px-4 py-2 text-sm font-semibold text-white shadow-brand-sm transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gold-500 dark:text-brand-950 dark:hover:bg-gold-400';
 
 export const secondaryButtonClass =
-    'inline-flex items-center justify-center gap-2 rounded-lg border border-border-strong bg-surface px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-surface-alt';
+    'inline-flex items-center justify-center gap-2 rounded-lg border border-border-strong bg-surface px-4 py-2 text-sm font-semibold text-foreground transition-colors duration-150 ease-out hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-60';
 
 export const dangerIconButtonClass =
-    'inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive';
+    'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 ease-out hover:bg-destructive/10 hover:text-destructive';
 
 export interface FormErrors {
     /** Field name -> first message. */

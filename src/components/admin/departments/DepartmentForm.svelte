@@ -8,6 +8,7 @@
   import FormActions from '../shared/FormActions.svelte';
   import ImageField from '../shared/ImageField.svelte';
   import { append, inputClass } from '../shared/form-utils';
+  import { cardClass } from '../ui';
 
   export interface DepartmentFormValues {
     id: number;
@@ -40,7 +41,8 @@
   });
 </script>
 
-<form method="post" onsubmit={form.submit} class="relative space-y-6 rounded-xl border border-border bg-card p-6 shadow-brand-sm">
+<form method="post" onsubmit={form.submit} class="space-y-6">
+  <div class="{cardClass} space-y-6 p-6">
   <Field id="name" label="Department name" required error={form.errors.name}>
     {#snippet children(props)}
       <input
@@ -75,6 +77,7 @@
 
   <div class="space-y-1.5">
     <MarkdownEditor bind:value={heroContent} id="hero-content" label="Hero content (Markdown / MDX)" rows={8} error={form.errors.heroContent ?? ''} />
+  </div>
   </div>
 
   <FormActions cancelHref="/admin/departments" processing={form.processing} submitLabel={initial ? 'Save changes' : 'Save department'} message={form.message} />

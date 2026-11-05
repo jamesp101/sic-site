@@ -1,5 +1,6 @@
 <script lang="ts">
   import { actions, isInputError } from 'astro:actions';
+  import { btnGold, field } from './classes';
 
   type Fields = 'name' | 'email' | 'subject' | 'message';
   type FieldErrors = Partial<Record<Fields, string[]>>;
@@ -56,8 +57,8 @@
     { name: 'subject', label: 'Subject', type: 'text', autocomplete: 'off' },
   ];
 
-  const input =
-    'block w-full rounded-xl border border-input-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground aria-[invalid=true]:border-destructive';
+  // Inset look: the form card is a surface, the controls use the page background.
+  const input = `${field.replace("bg-surface", "bg-background")} aria-[invalid=true]:border-destructive`;
   const label = 'mb-1.5 block text-sm font-semibold text-foreground';
 </script>
 
@@ -128,7 +129,7 @@
   <button
     type="submit"
     disabled={pending}
-    class="inline-flex w-full items-center justify-center rounded-xl bg-gold-500 px-6 py-3 text-xs font-semibold uppercase tracking-widest text-brand-950 shadow-brand-sm transition hover:-translate-y-0.5 hover:bg-gold-400 disabled:opacity-60"
+    class="{btnGold} w-full"
   >
     {pending ? 'Sending…' : 'Send message'}
   </button>

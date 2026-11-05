@@ -1,5 +1,6 @@
 ---
 import type { DepartmentSummary } from '@/lib/content-types';
+import { card } from './classes';
 import { getInitials } from '@/lib/initials';
 import { departmentHref } from '@/lib/site-nav';
 
@@ -10,7 +11,12 @@ interface Props {
 const { department } = Astro.props;
 ---
 
-<article class="group relative flex flex-col rounded-2xl border border-border bg-surface p-8 shadow-brand-sm transition duration-200 hover:-translate-y-1 hover:shadow-brand-md">
+<article
+    class:list={[
+        card,
+        'group relative flex flex-col p-8 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring has-[a:focus-visible]:ring-offset-2 has-[a:focus-visible]:ring-offset-background',
+    ]}
+>
     {department.logoUrl ? (
         <img
             src={department.logoUrl}
@@ -29,15 +35,23 @@ const { department } = Astro.props;
             {getInitials(department.name) || 'D'}
         </span>
     )}
-    <h3 class="mt-5 font-sans text-xl font-semibold text-foreground">
-        <a href={departmentHref(department.slug)} class="rounded after:absolute after:inset-0 after:content-['']">
+    <h3 class="mt-5 line-clamp-3 font-sans text-xl font-semibold leading-snug text-foreground">
+        <a
+            href={departmentHref(department.slug)}
+            class="rounded outline-none after:absolute after:inset-0 after:content-[''] focus-visible:ring-0 focus-visible:ring-offset-0 group-hover:text-link"
+        >
             {department.name}
         </a>
     </h3>
     {department.description && (
-        <p class="mt-3 line-clamp-4 flex-1 text-sm leading-relaxed text-muted-foreground">{department.description}</p>
+        <p class="mt-3 line-clamp-4 text-sm leading-relaxed text-muted-foreground">{department.description}</p>
     )}
-    <p class="mt-6 border-t border-border pt-4 text-sm font-semibold text-link" aria-hidden="true">
-        View department &rarr;
-    </p>
+    <div class="mt-auto pt-6">
+        <p class="border-t border-border pt-4 text-sm font-semibold text-link" aria-hidden="true">
+            View department{' '}
+            <span class="inline-block transition-transform duration-200 ease-out motion-safe:group-hover:translate-x-0.5">
+                &rarr;
+            </span>
+        </p>
+    </div>
 </article>

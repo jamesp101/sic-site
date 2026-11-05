@@ -9,6 +9,7 @@
   let root: HTMLElement | undefined = $state();
 
   const isCurrent = (href?: string) => href !== undefined && href === currentPath;
+  const groupCurrent = (children?: { href: string }[]) => children?.some((child) => isCurrent(child.href)) ?? false;
 
   function closeAll() {
     menuOpen = false;
@@ -25,8 +26,9 @@
     trigger?.focus();
   }
 
+  // composedPath() is fixed at dispatch time: the toggle swaps its icon on click, so `event.target` may already be detached.
   function onWindowClick(event: MouseEvent) {
-    if (root && event.target instanceof Node && !root.contains(event.target)) closeAll();
+    if (root && !event.composedPath().includes(root)) closeAll();
   }
 
   const desktop = () => matchMedia('(min-width: 768px)').matches;
@@ -44,8 +46,12 @@
     }
   }
 
-  const link =
-    'block rounded-lg px-3 py-2 text-sm font-medium text-white/90 transition-colors hover:text-gold-300 aria-[current=page]:text-gold-300';
+  // Active item: gold text plus a bar (left edge in the phone menu, underline from md up), so colour is never the only cue.
+  const marker =
+    "relative after:pointer-events-none after:absolute after:inset-y-2 after:left-0 after:w-1 after:rounded-full after:bg-gold-400 after:opacity-0 after:transition-opacity after:duration-200 md:after:inset-y-auto md:after:bottom-1 md:after:left-3 md:after:right-3 md:after:h-0.5 md:after:w-auto";
+  const itemBase =
+    'min-h-11 items-center rounded-lg px-3 py-2 text-sm font-medium text-white/90 transition-colors duration-200 ease-out hover:text-gold-300 md:min-h-10';
+  const link = `${marker} ${itemBase} flex aria-[current=page]:bg-white/10 aria-[current=page]:text-gold-300 aria-[current=page]:after:opacity-100 md:aria-[current=page]:bg-transparent`;
 </script>
 
 <svelte:window onkeydown={onKeydown} onclick={onWindowClick} />
@@ -54,7 +60,7 @@
   <button
     type="button"
     data-menu-toggle
-    class="nav-toggle inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/20 text-white hover:bg-white/10 md:hidden"
+    class="nav-toggle inline-flex h-11 w-11 items-center justify-center rounded-lg border border-white/20 text-white transition-colors duration-200 hover:bg-white/10 md:hidden"
     aria-expanded={menuOpen}
     aria-controls="primary-menu"
     aria-label={menuOpen ? 'Close menu' : 'Open menu'}
@@ -84,7 +90,8 @@
           <button
             type="button"
             data-group={item.label}
-            class="flex w-full items-center justify-between gap-1 rounded-lg px-3 py-2 text-sm font-medium text-white/90 transition-colors hover:text-gold-300 md:w-auto"
+            class="{marker} {itemBase} flex w-full justify-between gap-1 data-[active]:text-gold-300 data-[active]:after:opacity-100 md:w-auto"
+            data-active={groupCurrent(item.children) ? '' : undefined}
             aria-expanded={openGroup === item.label}
             aria-controls="submenu-{item.label.replace(/\W+/g, '-').toLowerCase()}"
             onclick={() => (openGroup = openGroup === item.label ? null : item.label)}

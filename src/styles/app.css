@@ -128,6 +128,62 @@
     }
 }
 
+/* Focus ring on the navy header/footer and over carousel photos: the blue ring is invisible there, so use gold. */
+@layer base {
+    .on-navy :focus-visible {
+        --tw-ring-color: var(--gold-400);
+        --tw-ring-offset-color: var(--brand-800);
+    }
+    .on-navy-deep :focus-visible {
+        --tw-ring-color: var(--gold-400);
+        --tw-ring-offset-color: var(--brand-950);
+    }
+}
+
+/*
+ * Reading rhythm of Block documents (posts, hero sections, Department content). The block classes only set size
+ * and colour; the flex gap between blocks is uniform, so headings, quotes and media get their extra space here.
+ * Direct children only: blocks nested in columns/cards keep their own tighter layout.
+ */
+@layer components {
+    [data-sic-blocks] > :is(h2, h3, h4) {
+        margin-top: 1rem;
+        margin-bottom: -0.375rem;
+        line-height: 1.25;
+        text-wrap: balance;
+    }
+    [data-sic-blocks] > :is(h2, h3, h4):first-child {
+        margin-top: 0;
+    }
+    /* 65-75 characters per line; centred or right-aligned text keeps its side. */
+    [data-sic-blocks] > :is(p, ul, ol, blockquote) {
+        max-width: 70ch;
+    }
+    [data-sic-blocks] > :is(p, ul, ol, blockquote):is(.text-center) {
+        margin-inline: auto;
+    }
+    [data-sic-blocks] > :is(p, ul, ol, blockquote):is(.text-right) {
+        margin-left: auto;
+    }
+    [data-sic-blocks] > blockquote {
+        margin-block: 0.5rem;
+        padding-block: 0.25rem;
+        font-size: 1.125rem;
+    }
+    [data-sic-blocks] > :is(figure, [data-album], div:has(> table)) {
+        margin-block: 0.5rem;
+    }
+    [data-sic-blocks] :is(ul, ol) > li::marker {
+        font-weight: 600;
+    }
+    [data-sic-blocks] summary {
+        min-height: 2.75rem;
+    }
+    [data-sic-blocks] summary:hover {
+        color: var(--link);
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     ::before,

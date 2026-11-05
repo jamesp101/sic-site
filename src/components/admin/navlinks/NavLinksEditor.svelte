@@ -501,7 +501,7 @@
 
   <section aria-labelledby="nav-tree-title" class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <h2 id="nav-tree-title" data-testid="nav-summary" class="flex flex-wrap items-baseline gap-x-0 text-foreground">
+      <h2 id="nav-tree-title" data-testid="nav-summary" class="flex flex-wrap items-baseline gap-x-0 font-sans text-foreground">
         <span class="text-lg font-bold">{total} {total === 1 ? 'link' : 'links'}</span>
         <span class="text-sm font-medium text-muted-foreground">{` · ${hiddenCount} hidden · ${warningList.length} ${warningList.length === 1 ? 'warning' : 'warnings'}`}</span>
         {#if saving}<span class="ml-3 text-xs font-normal text-muted-foreground" role="status">Saving…</span>{/if}

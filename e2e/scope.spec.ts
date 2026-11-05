@@ -112,7 +112,7 @@ test.describe('admin scope (superadmin)', () => {
         await expect(rows(page)).not.toContainText(CIT_POST);
 
         // The scope follows navigation (and the Org chart link appears for a department).
-        await sidebarLinks(page).getByRole('link', { name: 'Hero Sections', exact: true }).click();
+        await sidebarLinks(page).getByRole('link', { name: 'Hero sections', exact: true }).click();
         await expect(page).toHaveURL(/\/admin\/hero-sections$/);
         await expect(page.getByLabel('Filter by page')).toHaveCount(0);
         await expect(rows(page)).toContainText(CIT_HERO);

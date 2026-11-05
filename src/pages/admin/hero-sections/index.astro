@@ -7,7 +7,7 @@ import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DeleteRowButton from '@/components/admin/shared/DeleteRowButton.astro';
 import RowDeleteDialog from '@/components/admin/shared/RowDeleteDialog.svelte';
 import SortableTh from '@/components/admin/shared/SortableTh.astro';
-import { cardClass, iconLinkClass, widePageClass, searchInputClass, thClass } from '@/components/admin/ui';
+import { cardClass, iconLinkClass, pillClass, widePageClass, searchInputClass, thClass } from '@/components/admin/ui';
 import { primaryButtonClass, secondaryButtonClass } from '@/components/admin/shared/form-utils';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { adminPage } from '@/lib/server/admin-page';
@@ -105,7 +105,7 @@ const columns = [
 
         <div class={`${cardClass} overflow-hidden`}>
             <div class="overflow-x-auto" tabindex="0" role="region" aria-label="Hero sections table">
-                <table class="w-full border-collapse text-left">
+                <table class="w-full min-w-3xl border-collapse text-left">
                     <thead>
                         <tr class="border-b border-border bg-surface-alt">
                             {columns.map(([field, label]) => (
@@ -121,16 +121,16 @@ const columns = [
                     <tbody class="divide-y divide-border text-sm">
                         {sections.map((hs) => (
                             <tr class="hover:bg-surface-alt">
-                                <td class="px-6 py-4">
+                                <td class="px-4 py-3">
                                     <div class="flex items-center gap-3">
                                         <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gold-500/10 text-gold-600">
                                             <Sparkles class="h-4 w-4" aria-hidden="true" />
                                         </div>
                                         <div class="min-w-0">
-                                            <span class="block max-w-sm truncate font-semibold text-foreground">
+                                            <span class="block max-w-xs truncate font-semibold text-foreground" title={hs.title || undefined}>
                                                 {hs.title || 'Untitled section'}
                                             </span>
-                                            <span class="mt-0.5 block max-w-sm truncate text-xs text-muted-foreground">
+                                            <span class="mt-0.5 block max-w-xs truncate text-xs text-muted-foreground" title={hs.searchText || undefined}>
                                                 {hs.searchText.slice(0, 75)}
                                                 {hs.searchText.length > 75 ? '…' : ''}
                                             </span>
@@ -138,32 +138,32 @@ const columns = [
                                     </div>
                                 </td>
                                 {showLocation && (
-                                    <td class="px-6 py-4">
+                                    <td class="px-4 py-3">
                                         {hs.department ? (
-                                            <span class="rounded bg-secondary px-2 py-1 text-xs font-semibold text-secondary-foreground">
+                                            <span class={`${pillClass} max-w-48 truncate bg-secondary text-secondary-foreground`} title={hs.department.name}>
                                                 {hs.department.name}
                                             </span>
                                         ) : (
-                                            <span class="rounded bg-file-archive-bg px-2 py-1 text-xs font-semibold text-file-archive-fg">
+                                            <span class={`${pillClass} bg-file-archive-bg text-file-archive-fg`}>
                                                 Main site
                                             </span>
                                         )}
                                     </td>
                                 )}
-                                <td class="px-6 py-4 font-mono text-xs text-muted-foreground">#{hs.order}</td>
-                                <td class="px-6 py-4">
+                                <td class="px-4 py-3 font-mono text-xs text-muted-foreground">#{hs.order}</td>
+                                <td class="px-4 py-3">
                                     {hs.isActive ? (
-                                        <span class="inline-flex items-center gap-1 rounded-full bg-status-article-bg px-2 py-0.5 text-xs font-semibold text-status-article-fg">
+                                        <span class={`${pillClass} bg-status-article-bg text-status-article-fg`}>
                                             <Eye class="h-3 w-3" aria-hidden="true" /> Active
                                         </span>
                                     ) : (
-                                        <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                                        <span class={`${pillClass} bg-secondary text-muted-foreground`}>
                                             <EyeOff class="h-3 w-3" aria-hidden="true" /> Inactive
                                         </span>
                                     )}
                                 </td>
-                                <td class="px-6 py-4">
-                                    <div class="flex justify-end gap-1.5">
+                                <td class="px-4 py-3">
+                                    <div class="flex justify-end gap-2">
                                         <a
                                             href={`/admin/hero-sections/${hs.id}/edit`}
                                             class={iconLinkClass}

@@ -1,7 +1,7 @@
 ---
 import EmptyState from './EmptyState.astro';
 import FileKindBadge from './FileKindBadge.astro';
-import { btnPrimary } from './classes';
+import { btnOutlineCompact, btnPrimaryCompact } from './classes';
 import { formatDate, formatFileSize } from '@/lib/format';
 import { downloadsHref } from '@/lib/post-filters';
 import type { DownloadsPage } from '@/lib/server/downloads';
@@ -11,7 +11,7 @@ type Props = Pick<DownloadsPage, 'downloads' | 'groups' | 'folders' | 'selected'
 const { downloads, groups, folders, selected, allHref, totalCount } = Astro.props;
 
 const folderLink =
-    'flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm transition-colors hover:border-gold-500';
+    'flex min-h-11 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm transition duration-200 ease-out hover:border-gold-500 hover:shadow-brand-sm';
 ---
 
 <div class="space-y-10">
@@ -72,7 +72,7 @@ const folderLink =
                 </h2>
                 <ul class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {files.map((file) => (
-                        <li class="flex flex-col justify-between rounded-2xl border border-border bg-surface p-5 shadow-brand-sm">
+                        <li class="flex flex-col justify-between rounded-2xl border border-border bg-surface p-5 shadow-brand-sm transition duration-200 ease-out hover:border-border-strong hover:shadow-brand-md">
                             <div class="flex items-start gap-3">
                                 <FileKindBadge kind={file.kind} extension={file.extension} />
                                 <div class="min-w-0 flex-1">
@@ -94,12 +94,12 @@ const folderLink =
                                 </p>
                             )}
                             {file.tags.length > 0 && (
-                                <ul class="mt-3 flex flex-wrap gap-1.5" aria-label="Tags">
+                                <ul class="mt-3 flex flex-wrap gap-2" aria-label="Tags">
                                     {file.tags.map((tag) => (
                                         <li>
                                             <a
                                                 href={downloadsHref({ search: tag })}
-                                                class="inline-flex min-h-6 items-center rounded-md bg-surface-alt px-2 py-0.5 text-xs font-medium text-muted-foreground hover:text-link"
+                                                class="inline-flex min-h-8 items-center rounded-md bg-surface-alt px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:text-link"
                                             >
                                                 {tag}
                                             </a>
@@ -107,16 +107,11 @@ const folderLink =
                                     ))}
                                 </ul>
                             )}
-                            <div class="mt-5 flex items-center justify-end gap-2 border-t border-border pt-4">
-                                <a
-                                    href={file.url}
-                                    target="_blank"
-                                    rel="noopener"
-                                    class="rounded-lg px-3 py-2 text-xs font-semibold text-link hover:underline"
-                                >
+                            <div class="mt-5 flex items-center justify-end gap-3 border-t border-border pt-4">
+                                <a href={file.url} target="_blank" rel="noopener" class={btnOutlineCompact}>
                                     View<span class="sr-only"> {file.fileName} (opens in new tab)</span>
                                 </a>
-                                <a href={file.downloadUrl} download={file.fileName} class={`${btnPrimary} px-4! py-2!`}>
+                                <a href={file.downloadUrl} download={file.fileName} class={btnPrimaryCompact}>
                                     Download<span class="sr-only"> {file.fileName}</span>
                                 </a>
                             </div>

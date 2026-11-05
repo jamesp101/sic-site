@@ -181,8 +181,9 @@
       <span class="text-muted-foreground">{position}</span>
       {#if slide.dirty}<span class="rounded-full bg-status-event-bg px-2 py-0.5 text-status-event-fg">{slide.id === null ? 'New' : 'Unsaved'}</span>{/if}
       {#if slide.departmentId !== null}
-        <span class="rounded-full bg-status-announcement-bg px-2 py-0.5 text-status-announcement-fg">
-          {departments.find((department) => department.id === slide.departmentId)?.name ?? 'Department'}
+        {@const departmentName = departments.find((department) => department.id === slide.departmentId)?.name ?? 'Department'}
+        <span class="max-w-full truncate rounded-full bg-status-announcement-bg px-2 py-0.5 text-status-announcement-fg" title={departmentName}>
+          {departmentName}
         </span>
       {/if}
       {#if slide.showOnMain}
