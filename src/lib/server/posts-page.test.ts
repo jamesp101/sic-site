@@ -71,6 +71,19 @@ describe('Post Excerpts', () => {
     });
 });
 
+describe('hidden author', () => {
+    it('drops the author from the Post page and attributes the JSON-LD to the college', async () => {
+        await post('anonymous', { hideAuthor: true, createdAt: day(6) });
+        const hidden = await getPostPage('anonymous', site);
+        expect(hidden?.post.authorName).toBeNull();
+        expect(JSON.stringify(hidden?.seo)).not.toContain('Owner');
+
+        const shown = await getPostPage('markdown', site);
+        expect(shown?.post.authorName).toBe('Owner');
+        expect(JSON.stringify(shown?.seo)).toContain('"name":"Owner"');
+    });
+});
+
 describe('related Posts', () => {
     it('lists the newest of the same Department first, then the newest of the same type', async () => {
         await db.post.deleteMany();

@@ -131,7 +131,8 @@ export function postJsonLd(post: PostDetail, site: Site, canonical: string): Jso
         dateModified: post.updatedAt.toISOString(),
         articleSection: post.type === 'announcement' ? 'Announcements' : 'News',
         inLanguage: 'en-PH',
-        author: { '@type': 'Person', name: post.authorName },
+        // A Post that hides its author is attributed to the college.
+        author: post.authorName ? { '@type': 'Person', name: post.authorName } : { '@id': orgId(site) },
         publisher: {
             '@type': 'Organization',
             '@id': orgId(site),

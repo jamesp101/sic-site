@@ -36,7 +36,7 @@ const hasEventDates = post.type === 'event' && post.startDate;
                     {post.title}
                 </h1>
                 <p class="flex flex-wrap items-center gap-x-6 gap-y-1 border-y border-border py-4 text-sm text-muted-foreground">
-                    <span>By {post.authorName}</span>
+                    {post.authorName && <span>By {post.authorName}</span>}
                     <span>
                         Published <time datetime={post.createdAt.toISOString()}>{formatDate(post.createdAt)}</time>
                     </span>

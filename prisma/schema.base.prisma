@@ -200,6 +200,8 @@ model Post {
   departmentId       Int?      @map("department_id")
   userId             Int       @map("user_id")
   isFeatured         Boolean   @default(false) @map("is_featured")
+  /// Hides "By <author>" on the public Post page and names the college as author in JSON-LD.
+  hideAuthor         Boolean   @default(false) @map("hide_author")
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 

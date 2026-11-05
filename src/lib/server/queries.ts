@@ -267,14 +267,14 @@ export async function getPostPage(
 ): Promise<{ post: PostDetail; related: PostSummary[]; seo: PageSeo } | null> {
     const row = await db.post.findUnique({
         where: { slug },
-        select: { ...postSelect, content: true, user: { select: { name: true } } },
+        select: { ...postSelect, content: true, hideAuthor: true, user: { select: { name: true } } },
     });
     if (!row) return null;
     const content = parseContent(row.content);
     const post: PostDetail = {
         ...summaryWithExcerpt(row, content.excerpt()),
         html: content.html(),
-        authorName: row.user.name,
+        authorName: row.hideAuthor ? null : row.user.name,
     };
     return { post, related: await getRelatedPosts(post), seo: postPageSeo(post, site) };
 }

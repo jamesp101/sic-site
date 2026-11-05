@@ -75,7 +75,8 @@ export interface PostSummary {
 export interface PostDetail extends PostSummary {
     /** Public HTML of the post's Rich content. */
     html: string;
-    authorName: string;
+    /** `null` when the Post hides its author. */
+    authorName: string | null;
 }
 
 export interface MemberNode {

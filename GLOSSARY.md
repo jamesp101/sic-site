@@ -55,7 +55,7 @@ _Avoid_: child, subordinate
 ### Content
 
 **Post**:
-A dated piece of news published on the Main site or for one Department, written by a User.
+A dated piece of news published on the Main site or for one Department, written by a User. Its author can be hidden, in which case the Post is attributed to the college.
 _Avoid_: news item, entry, story
 
 **Post type**:

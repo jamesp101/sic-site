@@ -22,6 +22,7 @@
     endDate: string | null;
     departmentId: number | null;
     isFeatured: boolean;
+    hideAuthor: boolean;
     highlightImageUrl: string | null;
   }
 
@@ -54,6 +55,7 @@
   let endDate = $state(toLocalInput(initial?.endDate ?? null));
   let departmentId = $state(initial?.departmentId ? String(initial.departmentId) : isSuperAdmin ? (initial ? '' : String(untrack(() => defaultDepartmentId) ?? '')) : String(untrack(() => departments)[0]?.id ?? ''));
   let isFeatured = $state(initial?.isFeatured ?? false);
+  let hideAuthor = $state(initial?.hideAuthor ?? false);
   let highlightImage = $state<File | null>(null);
   let slugEdited = $state(initial !== null);
 
@@ -76,6 +78,7 @@
       append(data, 'endDate', type === 'event' ? isoOrEmpty(endDate) : '');
       append(data, 'departmentId', departmentId);
       append(data, 'isFeatured', isFeatured);
+      append(data, 'hideAuthor', hideAuthor);
       append(data, 'highlightImage', highlightImage);
       return post ? actions.posts.update(data) : actions.posts.create(data);
     },
@@ -165,6 +168,10 @@
       <label class="flex cursor-pointer items-center gap-2 pt-1 text-sm font-semibold text-foreground">
         <input type="checkbox" bind:checked={isFeatured} class="h-4 w-4 rounded border-border-strong accent-brand-800" />
         Feature on landing page
+      </label>
+      <label class="flex cursor-pointer items-center gap-2 text-sm font-semibold text-foreground">
+        <input type="checkbox" bind:checked={hideAuthor} class="h-4 w-4 rounded border-border-strong accent-brand-800" />
+        Hide author on the public post
       </label>
     </div>
   </div>

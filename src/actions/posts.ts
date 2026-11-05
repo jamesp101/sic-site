@@ -25,6 +25,7 @@ const fields = {
     endDate: dateString,
     departmentId: departmentIdField,
     isFeatured: z.boolean(),
+    hideAuthor: z.boolean(),
 };
 
 type DateRange = { startDate?: string | null; endDate?: string | null };
@@ -83,6 +84,7 @@ export const posts = {
                                 departmentId,
                                 userId: actor.id,
                                 isFeatured: input.isFeatured,
+                                hideAuthor: input.hideAuthor,
                             },
                         }),
                 });
@@ -124,6 +126,7 @@ export const posts = {
                                 endDate: toDate(input.endDate),
                                 departmentId,
                                 isFeatured: input.isFeatured,
+                                hideAuthor: input.hideAuthor,
                                 ...(highlight ? { highlightImagePath: highlight } : {}),
                             },
                         }),
