@@ -48,7 +48,8 @@ export function buildSrcdoc(options: { width: 'narrow' | 'wide'; dark: boolean }
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
         .map((node) => node.outerHTML)
         .join('\n');
-    const container = options.width === 'narrow' ? 'max-w-3xl' : 'max-w-4xl';
+    // Matches the public containers: Post body (`posts/[slug].astro`) and content sections (`MarkdownSection`).
+    const container = options.width === 'narrow' ? 'max-w-3xl' : 'max-w-7xl';
     return `<!doctype html><html lang="en" class="${options.dark ? 'dark' : ''}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${styles}<style>${EDITOR_CSS}</style></head><body class="bg-background font-sans text-foreground antialiased"><div id="sic-root" class="mx-auto w-full ${container} px-6 py-8 text-base leading-relaxed text-foreground"></div></body></html>`;
 }
 

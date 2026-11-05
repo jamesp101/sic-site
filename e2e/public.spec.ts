@@ -73,3 +73,24 @@ test('guests are redirected from admin areas', async ({ page }) => {
         await expect(page, path).toHaveURL(/\/login\?redirect=/);
     }
 });
+
+test('page sections line up with the header container on wide screens', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    for (const path of ['/', `/departments/${DEMO_DEPARTMENTS.cit.slug}`]) {
+        await page.goto(path);
+        const headerLeft = await page
+            .locator('[data-site-header] > div')
+            .first()
+            .evaluate((el) => {
+                const style = getComputedStyle(el);
+                return el.getBoundingClientRect().left + parseFloat(style.paddingLeft);
+            });
+        const sections = page.locator('main section[data-content-section] > div');
+        expect(await sections.count(), path).toBeGreaterThan(0);
+        for (const left of await sections.evaluateAll((els) =>
+            els.map((el) => el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft)),
+        )) {
+            expect(Math.abs(left - headerLeft), path).toBeLessThan(1);
+        }
+    }
+});

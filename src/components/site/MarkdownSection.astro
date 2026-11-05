@@ -1,6 +1,6 @@
 ---
 import AlbumLightbox from '@/components/site/AlbumLightbox.astro';
-import { hasAlbum, renderContent } from '@/lib/blocks/content';
+import { hasAlbum, parseContent } from '@/lib/blocks/content';
 
 interface Props {
     content: string | null | undefined;
@@ -11,17 +11,21 @@ interface Props {
 
 const { content, title, class: className = '' } = Astro.props;
 
-const html = renderContent(content);
+const rich = parseContent(content);
+const html = rich.html();
+// Same container as the header and banner, so the section's left edge lines up with them. Block documents
+// cap their own text at 70ch (app.css) and may use the full width for grids; Legacy Markdown is all text.
+const measure = rich.format === 'markdown' ? 'max-w-[70ch]' : '';
 ---
 
 {html && (
     <>
-        <section class:list={['border-b border-border bg-surface py-16 md:py-24', className]}>
-            <div class="mx-auto w-full max-w-4xl px-6">
+        <section data-content-section class:list={['border-b border-border bg-surface py-16 md:py-24', className]}>
+            <div class="mx-auto w-full max-w-7xl px-6">
                 {title && (
                     <h2 class="mb-6 text-3xl font-bold text-brand-800 md:text-4xl dark:text-foreground">{title}</h2>
                 )}
-                <div class="max-w-none text-base leading-relaxed text-foreground" set:html={html} />
+                <div class:list={['text-base leading-relaxed text-foreground', measure]} set:html={html} />
             </div>
         </section>
         {hasAlbum(html) && <AlbumLightbox />}
