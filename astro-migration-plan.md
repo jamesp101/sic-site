@@ -330,7 +330,7 @@ graph LR
     - Data migration script: create a `credential` account row for each existing user, holding their current `users.password` hash.
     - Password reset and verification emails go through a `sendMail` helper (SMTP via `nodemailer`). In dev it logs to the console, matching `MAIL_MAILER=log`.
     - Rate-limit sign-in to 5/min per email+IP, matching `FortifyServiceProvider`.
-- `src/middleware.ts`: resolve the session, set `Astro.locals.user`, redirect unauthenticated `/dashboard`, `/admin/*`, `/settings/*` to `/login`.
+- `src/middleware.ts` (superseded by `AGENTS.md` §SEO and Authorization: the middleware reads the session through `auth-session.ts`'s `getSession`, resolves the Admin scope, and applies `request-policy.ts`, which owns the login redirect): sets `Astro.locals.user`/`session`; unauthenticated `/dashboard`, `/admin/*`, `/settings/*` go to `/login`.
 - Pages: `/login`, `/forgot-password`, `/reset-password`, `/verify-email`, `/confirm-password`. Port the `auth/*.svelte` forms as islands and replace `<Form>`/Wayfinder with Better Auth client calls. Keep `AuthLayout`, restyled through the tokens.
 - **Exit:** the seeded superadmin logs in with the existing password hash; reset email flow works end-to-end in dev.
 

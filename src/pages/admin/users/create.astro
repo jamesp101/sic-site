@@ -2,13 +2,13 @@
 import AppLayout from '@/layouts/AppLayout.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import UserForm from '@/components/admin/users/UserForm.svelte';
-import { db } from '@/lib/server/db';
+import { departmentOptions } from '@/lib/server/department-access';
 import { adminPage } from '@/lib/server/admin-page';
 
 const page = await adminPage(Astro.locals.user, { superAdmin: true });
 if (page instanceof Response) return page;
 
-const departments = await db.department.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } });
+const departments = await departmentOptions(page.actor);
 ---
 
 <AppLayout

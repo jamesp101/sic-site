@@ -2,6 +2,7 @@
   import { actions } from 'astro:actions';
   import { navigate } from 'astro:transitions/client';
   import { untrack } from 'svelte';
+  import { MIN_PASSWORD_LENGTH, passwordMinHint } from '@/lib/password-policy';
   import { actionForm } from '../shared/action-form.svelte';
   import Field from '../shared/Field.svelte';
   import FormActions from '../shared/FormActions.svelte';
@@ -54,9 +55,9 @@
       label={initial ? 'New password' : 'Password'}
       required={!initial}
       error={form.errors.password}
-      hint={initial ? 'Leave empty to keep the current password. Minimum 8 characters.' : 'Minimum 8 characters.'}
+      hint={initial ? `Leave empty to keep the current password. ${passwordMinHint()}` : passwordMinHint()}
     >
-      <input id="password" type="password" required={!initial} minlength="8" autocomplete="new-password" bind:value={password} class={inputClass} />
+      <input id="password" type="password" required={!initial} minlength={MIN_PASSWORD_LENGTH} autocomplete="new-password" bind:value={password} class={inputClass} />
     </Field>
     <Field id="role" label="Role" required error={form.errors.role}>
       <select id="role" bind:value={role} class={inputClass}>

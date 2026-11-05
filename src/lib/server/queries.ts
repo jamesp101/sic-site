@@ -3,8 +3,6 @@ import type {
     CarouselSlide,
     DepartmentDetail,
     DepartmentSummary,
-    DownloadFilters,
-    DownloadView,
     HeroSectionView,
     MemberNode,
     NavLinkView,
@@ -14,34 +12,14 @@ import type {
     PostSummary,
     PostType,
 } from '@/lib/content-types';
-import { excerptOf, parseContent } from '@/lib/blocks/content';
+import { clampExcerpt, excerptOf, parseContent } from '@/lib/blocks/content';
 import { slideDocument } from '@/lib/carousel-overlay-schema';
-import { extensionOf, fileKind } from '@/lib/files';
 import { buildOrgTree, type OrgNode } from '@/lib/org-tree';
-import { DEFAULT_DIRECTORY, downloadsHref, hasDownloadFilters } from '@/lib/post-filters';
 import { departmentPageSeo, postPageSeo, postsListSeo, type PageSeo } from '@/lib/seo';
 import { slideVideoView } from './carousel-admin';
 import { db } from './db';
 import { textContains } from './search';
-import { downloadUrl, publicUrl } from './storage';
-
-/** What `/downloads` renders: see `getDownloadsPage`. */
-export interface DownloadsPage {
-    departments: DepartmentSummary[];
-    /** The files to list: matching the search and Department, narrowed to `selected`. */
-    downloads: DownloadView[];
-    /** `downloads` grouped by Directory, in order of first appearance. */
-    groups: { name: string; files: DownloadView[] }[];
-    /** Every Directory with the number of files matching the search and Department, and its link. */
-    folders: { name: string; count: number; href: string }[];
-    /** The selected Directory, `''` for all. */
-    selected: string;
-    /** Link that clears the Directory but keeps the search and Department. */
-    allHref: string;
-    /** Files matching the search and Department, whatever the Directory. */
-    totalCount: number;
-    seo: PageSeo;
-}
+import { publicUrl, variantUrl } from './storage';
 
 const departmentRefSelect = { id: true, name: true, slug: true } as const;
 
@@ -50,7 +28,7 @@ const postSelect = {
     title: true,
     slug: true,
     type: true,
-    content: true,
+    searchText: true,
     highlightImagePath: true,
     startDate: true,
     endDate: true,
@@ -62,8 +40,21 @@ const postSelect = {
 
 type PostRow = Prisma.PostGetPayload<{ select: typeof postSelect }>;
 
-function toPostSummary(row: PostRow): PostSummary {
-    return summaryWithExcerpt(row, excerptOf(row.content));
+/**
+ * Summaries for post cards and lists. The Excerpt is the clamped `searchText` (the plain text of the content, kept
+ * by every writer), so the content is not parsed; only rows whose `searchText` is empty (never backfilled, or no
+ * text at all) load their content and take `excerptOf(content)`.
+ */
+async function toPostSummaries(rows: PostRow[]): Promise<PostSummary[]> {
+    const blankIds = rows.filter((row) => !row.searchText).map((row) => row.id);
+    const contents = new Map<number, string>();
+    if (blankIds.length > 0) {
+        const found = await db.post.findMany({ where: { id: { in: blankIds } }, select: { id: true, content: true } });
+        for (const { id, content } of found) contents.set(id, content);
+    }
+    return rows.map((row) =>
+        summaryWithExcerpt(row, row.searchText ? clampExcerpt(row.searchText) : excerptOf(contents.get(row.id))),
+    );
 }
 
 function summaryWithExcerpt(row: PostRow, excerpt: string): PostSummary {
@@ -74,6 +65,7 @@ function summaryWithExcerpt(row: PostRow, excerpt: string): PostSummary {
         type: row.type as PostType,
         excerpt,
         imageUrl: publicUrl(row.highlightImagePath),
+        imageSmallUrl: variantUrl(row.highlightImagePath),
         startDate: row.startDate,
         endDate: row.endDate,
         isFeatured: row.isFeatured,
@@ -135,32 +127,36 @@ function heroSections(departmentId: number | null): Promise<HeroSectionView[]> {
     });
 }
 
+/** Active Navigation links with their active children: one flat query, nested in memory. */
 export async function getNavLinks(): Promise<NavLinkView[]> {
     const rows = await db.navigationLink.findMany({
-        where: { isActive: true, parentId: null },
+        where: { isActive: true },
         orderBy: [{ order: 'asc' }, { id: 'asc' }],
-        select: {
-            id: true,
-            label: true,
-            url: true,
-            children: {
-                where: { isActive: true },
-                orderBy: [{ order: 'asc' }, { id: 'asc' }],
-                select: { id: true, label: true, url: true },
-            },
-        },
+        select: { id: true, label: true, url: true, parentId: true },
     });
-    return rows.map((row) => ({
-        id: row.id,
-        label: row.label,
-        url: row.url,
-        children: row.children.map((child) => ({ ...child, children: [] })),
-    }));
+    const roots: NavLinkView[] = [];
+    const byId = new Map<number, NavLinkView>();
+    for (const { id, label, url, parentId } of rows) {
+        const link: NavLinkView = { id, label, url, children: [] };
+        if (parentId === null) {
+            roots.push(link);
+            byId.set(id, link);
+        }
+    }
+    for (const { id, label, url, parentId } of rows) {
+        if (parentId !== null) byId.get(parentId)?.children.push({ id, label, url, children: [] });
+    }
+    return roots;
 }
 
 export async function getDepartments(): Promise<DepartmentSummary[]> {
     const rows = await db.department.findMany({ orderBy: { name: 'asc' }, select: departmentSelect });
     return rows.map(toDepartmentSummary);
+}
+
+/** Every Department's name and slug, by name: what the Departments menu and the admin's link suggestions list. */
+export function getNavDepartments(): Promise<{ name: string; slug: string }[]> {
+    return db.department.findMany({ orderBy: { name: 'asc' }, select: { name: true, slug: true } });
 }
 
 export async function getHomeData(): Promise<{
@@ -184,7 +180,7 @@ export async function getHomeData(): Promise<{
     return {
         carousel: carousel.map(toSlide),
         departments,
-        latestPosts: latestPosts.map(toPostSummary),
+        latestPosts: await toPostSummaries(latestPosts),
         welcomeHero,
         heroSections: heroes,
     };
@@ -235,7 +231,7 @@ export async function getDepartmentPage(
     return {
         department,
         carousel: slides,
-        posts: posts.map(toPostSummary),
+        posts: await toPostSummaries(posts),
         members,
         heroSections: heroes,
         seo: departmentPageSeo(department, members, slides[0]?.imageUrl, site),
@@ -264,7 +260,7 @@ export async function listPosts(
         }),
     ]);
     return {
-        items: rows.map(toPostSummary),
+        items: await toPostSummaries(rows),
         total,
         page,
         perPage,
@@ -290,7 +286,7 @@ export async function getPostPage(
 ): Promise<{ post: PostDetail; related: PostSummary[]; seo: PageSeo } | null> {
     const row = await db.post.findUnique({
         where: { slug },
-        select: { ...postSelect, user: { select: { name: true } } },
+        select: { ...postSelect, content: true, user: { select: { name: true } } },
     });
     if (!row) return null;
     const content = parseContent(row.content);
@@ -302,150 +298,31 @@ export async function getPostPage(
     return { post, related: await getRelatedPosts(post), seo: postPageSeo(post, site) };
 }
 
-async function getRelatedPosts(post: PostSummary, limit = 3): Promise<PostSummary[]> {
-    const sameDepartment = post.department
-        ? await db.post.findMany({
-              where: { departmentId: post.department.id, id: { not: post.id } },
-              orderBy: { createdAt: 'desc' },
-              take: limit,
-              select: postSelect,
-          })
-        : [];
-    if (sameDepartment.length >= limit) return sameDepartment.map(toPostSummary);
-
-    const sameType = await db.post.findMany({
-        where: { type: post.type, id: { notIn: [post.id, ...sameDepartment.map((row) => row.id)] } },
-        orderBy: { createdAt: 'desc' },
-        take: limit - sameDepartment.length,
-        select: postSelect,
-    });
-    return [...sameDepartment, ...sameType].map(toPostSummary);
-}
-
-/** Tags are stored as a JSON array; tolerate comma separated strings and null. */
-function parseTags(raw: string | null): string[] {
-    if (!raw) return [];
-    const trimmed = raw.trim();
-    if (!trimmed) return [];
-    try {
-        const parsed: unknown = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) return parsed.map((tag) => String(tag).trim()).filter(Boolean);
-        if (typeof parsed === 'string') return parseTags(parsed);
-    } catch {
-        // not JSON: fall through to comma split
-    }
-    return trimmed
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean);
-}
-
-async function listDownloads(filters: Pick<DownloadFilters, 'search' | 'departmentId'>): Promise<DownloadView[]> {
-    const and: Prisma.DownloadWhereInput[] = [];
-    if (filters.departmentId) and.push({ departmentId: filters.departmentId });
-    const search = filters.search?.trim();
-    if (search) {
-        and.push({
-            OR: [
-                { fileName: textContains(search) },
-                { tags: textContains(search) },
-                { directory: textContains(search) },
-            ],
-        });
-    }
-
-    const rows = await db.download.findMany({
-        where: { AND: and },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        select: {
-            id: true,
-            fileName: true,
-            filePath: true,
-            fileSize: true,
-            tags: true,
-            directory: true,
-            createdAt: true,
-            department: { select: departmentRefSelect },
-        },
-    });
-
-    return rows.map((row) => {
-        const url = publicUrl(row.filePath) ?? row.filePath;
-        const extension = extensionOf(row.filePath) || extensionOf(row.fileName);
-        return {
-            id: row.id,
-            fileName: row.fileName,
-            url,
-            downloadUrl: downloadUrl(
-                row.filePath,
-                row.fileName + (extensionOf(row.fileName) || !extension ? '' : `.${extension}`),
-            ),
-            size: row.fileSize,
-            extension,
-            kind: fileKind(extension),
-            tags: parseTags(row.tags),
-            directory: row.directory || DEFAULT_DIRECTORY,
-            createdAt: row.createdAt,
-            department: row.department,
-        };
-    });
-}
-
-async function getDownloadDirectories(departmentId?: number): Promise<string[]> {
-    const where = departmentId ? { departmentId } : {};
-    const [custom, used] = await Promise.all([
-        db.downloadDirectory.findMany({ where, select: { name: true } }),
-        db.download.findMany({ where, distinct: ['directory'], select: { directory: true } }),
-    ]);
-    const names = new Set<string>([DEFAULT_DIRECTORY]);
-    for (const row of custom) names.add(row.name);
-    for (const row of used) if (row.directory) names.add(row.directory);
-    return [...names].sort((a, b) => a.localeCompare(b));
-}
-
 /**
- * The public `/downloads` page: the Downloads matching the search and Department, the Directories with
- * how many of those each holds, and the list narrowed to `filters.directory`. Not paginated: the page
- * groups files by Directory and shows a count per group, which a page boundary would cut through.
+ * Up to `limit` Posts: the newest of the same Department first, then the newest of the same Post type. Both are
+ * read in one round trip; the type query takes `2 × limit` so that dropping the Department's Posts from it still
+ * leaves enough.
  */
-export async function getDownloadsPage(filters: DownloadFilters): Promise<DownloadsPage> {
-    const { search, departmentId, directory } = filters;
-    const [departments, matching, directoryNames] = await Promise.all([
-        getDepartments(),
-        listDownloads({ search, departmentId }),
-        getDownloadDirectories(departmentId),
+async function getRelatedPosts(post: PostSummary, limit = 3): Promise<PostSummary[]> {
+    const [sameDepartment, sameType] = await Promise.all([
+        post.department
+            ? db.post.findMany({
+                  where: { departmentId: post.department.id, id: { not: post.id } },
+                  orderBy: { createdAt: 'desc' },
+                  take: limit,
+                  select: postSelect,
+              })
+            : [],
+        db.post.findMany({
+            where: { type: post.type, id: { not: post.id } },
+            orderBy: { createdAt: 'desc' },
+            take: post.department ? 2 * limit : limit,
+            select: postSelect,
+        }),
     ]);
-
-    const counts = new Map<string, number>(directoryNames.map((name) => [name, 0]));
-    for (const file of matching) counts.set(file.directory, (counts.get(file.directory) ?? 0) + 1);
-    const folders = [...counts].map(([name, count]) => ({
-        name,
-        count,
-        href: downloadsHref({ search, departmentId, directory: name }),
-    }));
-
-    const downloads = directory ? matching.filter((file) => file.directory === directory) : matching;
-    const groups = new Map<string, DownloadView[]>();
-    for (const file of downloads) groups.set(file.directory, [...(groups.get(file.directory) ?? []), file]);
-
-    return {
-        departments,
-        downloads,
-        groups: [...groups].map(([name, files]) => ({ name, files })),
-        folders,
-        selected: directory ?? '',
-        allHref: downloadsHref({ search, departmentId }),
-        totalCount: matching.length,
-        seo: {
-            title: 'Downloads',
-            description:
-                'Official forms, academic guides, curriculum checklists and schedules from San Isidro College, organised by folder and department.',
-            canonical: downloadsHref({}),
-            noindex: hasDownloadFilters(filters),
-            follow: true,
-            breadcrumbs: [{ label: 'Home', href: '/' }, { label: 'Downloads' }],
-        },
-    };
+    const taken = new Set(sameDepartment.map((row) => row.id));
+    const rows = [...sameDepartment, ...sameType.filter((row) => !taken.has(row.id))].slice(0, limit);
+    return toPostSummaries(rows);
 }
 
 export async function getSitemapData(): Promise<{

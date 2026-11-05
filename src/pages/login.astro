@@ -1,7 +1,7 @@
 ---
 import LoginForm from '@/components/auth/LoginForm.svelte';
 import AuthLayout from '@/layouts/AuthLayout.astro';
-import { auth, CLIENT_IP_HEADER } from '@/lib/server/auth';
+import { signIn } from '@/lib/server/auth-session';
 import { safeRedirect } from '@/lib/safe-redirect';
 
 const redirect = safeRedirect(Astro.url.searchParams.get('redirect'));
@@ -15,34 +15,21 @@ let error = '';
 if (Astro.request.method === 'POST') {
     const form = await Astro.request.formData();
     email = String(form.get('email') ?? '').trim();
-    const headers = new Headers({
-        'content-type': 'application/json',
-        origin: Astro.url.origin,
-        cookie: Astro.request.headers.get('cookie') ?? '',
-        'user-agent': Astro.request.headers.get('user-agent') ?? '',
-        [CLIENT_IP_HEADER]: Astro.clientAddress,
+    const result = await signIn({
+        request: Astro.request,
+        url: Astro.url,
+        clientAddress: Astro.clientAddress,
+        email,
+        password: String(form.get('password') ?? ''),
+        remember: form.get('remember') === 'on',
     });
-    const res = await auth.handler(
-        new Request(new URL('/api/auth/sign-in/email', Astro.url), {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-                email,
-                password: String(form.get('password') ?? ''),
-                rememberMe: form.get('remember') === 'on',
-            }),
-        }),
-    );
-    if (res.ok) {
+    if (result.ok) {
         const out = new Headers({ Location: redirect });
-        for (const cookie of res.headers.getSetCookie()) out.append('Set-Cookie', cookie);
+        for (const cookie of result.setCookies) out.append('Set-Cookie', cookie);
         return new Response(null, { status: 303, headers: out });
     }
-    Astro.response.status = res.status === 429 ? 429 : 422;
-    error =
-        res.status === 429
-            ? 'Too many attempts. Please wait a minute and try again.'
-            : 'These credentials do not match our records.';
+    Astro.response.status = result.status;
+    error = result.message;
 }
 
 const status =

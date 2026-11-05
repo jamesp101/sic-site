@@ -4,6 +4,7 @@
  */
 import { z } from 'astro/zod';
 import type { MailMessage } from './mail';
+import { contactMessage } from './mail-messages';
 import { consumeRateLimit, RATE_LIMITS } from './rate-limit';
 import { RequestError } from './request-error';
 
@@ -44,10 +45,5 @@ export async function contactMail(input: ContactInput, clientAddress: string, to
     if (!(await consumeRateLimit(`contact:${clientAddress}`, RATE_LIMITS.contact))) {
         throw new RequestError('TOO_MANY_REQUESTS', 'Too many messages from your network. Please try again later.');
     }
-    return {
-        to,
-        replyTo: `${input.name.replace(/[<>"]/g, '')} <${input.email}>`,
-        subject: `[Website contact] ${input.subject}`,
-        text: `From: ${input.name} <${input.email}>\nSubject: ${input.subject}\n\n${input.message}\n`,
-    };
+    return contactMessage(to, input);
 }

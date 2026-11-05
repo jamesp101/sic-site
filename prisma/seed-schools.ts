@@ -12,6 +12,7 @@ import { searchTextOf } from '../src/lib/blocks/content';
 import { createDocument, serializeDocument } from '../src/lib/blocks/document';
 import { markdownToBlocks } from '../src/lib/blocks/from-markdown';
 import { db } from '../src/lib/server/db';
+import { slugify } from '../src/lib/server/slug';
 
 const reset = process.argv.includes('--reset');
 
@@ -34,16 +35,6 @@ interface SchoolSeed {
 }
 
 const DAY = 24 * 60 * 60 * 1000;
-
-function slugify(value: string): string {
-    return value
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/&/g, ' and ')
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-}
 
 /** Midnight today in Manila plus `days`, at `hour` local time. */
 function manilaDay(days: number, hour: number): Date {

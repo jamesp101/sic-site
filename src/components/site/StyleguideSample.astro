@@ -49,6 +49,7 @@ const posts: PostSummary[] = (['article', 'event', 'announcement'] as const).map
     type,
     excerpt: 'Sample excerpt text. It is plain text, clamped to three lines inside the card.',
     imageUrl: null,
+    imageSmallUrl: null,
     startDate: type === 'event' ? now : null,
     endDate: type === 'event' ? new Date('2026-03-07T17:00:00+08:00') : null,
     isFeatured: false,

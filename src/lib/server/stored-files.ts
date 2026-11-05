@@ -6,18 +6,24 @@
  * is rethrown; if it succeeds the stale files are removed. Cleanup failures are logged and never
  * undo a new file or fail the request.
  */
+import { putCardVariant } from './image-variant';
 import { put, remove, type StoragePrefix } from './storage';
+import { variantKeyOf } from './storage/variants';
 
 export type StoredKey = string | null | undefined;
 
 export interface FileStore {
     put(prefix: StoragePrefix, file: File): Promise<string>;
     remove(key: string): Promise<void>;
+    /** Stores the derived variant of the stored image `key` (`variants.ts`); resolves to its key, or null when it has none. */
+    putVariant?(key: string, file: File): Promise<string | null>;
 }
 
 export interface NewFile {
     prefix: StoragePrefix;
     file: File;
+    /** Also store the image's card variant in the same commit (a failure is logged; the page falls back to the original). */
+    variant?: boolean;
 }
 
 /** Keys to delete once the commit succeeded; a function runs after the commit (e.g. to find files no row references any more). */
@@ -44,14 +50,16 @@ export interface Commit<F extends NewFiles, T> {
 export function createStoredFiles(store: FileStore) {
     async function removeAll(keys: readonly StoredKey[], context: string): Promise<void> {
         await Promise.all(
-            keys.map(async (key) => {
-                if (!key) return;
-                try {
-                    await store.remove(key);
-                } catch (error) {
-                    console.error(`Stored file cleanup failed (${context}): ${key}`, error);
-                }
-            }),
+            keys
+                .flatMap((key) => (key ? [key, variantKeyOf(key)] : []))
+                .map(async (key) => {
+                    if (!key) return;
+                    try {
+                        await store.remove(key);
+                    } catch (error) {
+                        console.error(`Stored file cleanup failed (${context}): ${key}`, error);
+                    }
+                }),
         );
     }
 
@@ -61,6 +69,14 @@ export function createStoredFiles(store: FileStore) {
             await removeAll(typeof stale === 'function' ? await stale() : stale, context);
         } catch (error) {
             console.error(`Stored file cleanup failed (${context})`, error);
+        }
+    }
+
+    async function storeVariant(key: string, file: File): Promise<void> {
+        try {
+            await store.putVariant?.(key, file);
+        } catch (error) {
+            console.error(`Image variant failed: ${key}`, error);
         }
     }
 
@@ -80,6 +96,7 @@ export function createStoredFiles(store: FileStore) {
                 const key = await store.put(upload.prefix, upload.file);
                 stored.push(key);
                 keys[name] = key;
+                if (upload.variant) await storeVariant(key, upload.file);
             }
             const result = await run(keys as StoredKeys<F>);
             await cleanup(stale, 'replaced');
@@ -106,4 +123,8 @@ export function createStoredFiles(store: FileStore) {
     return { commitWithFiles, deleteWithFiles, discardFiles };
 }
 
-export const { commitWithFiles, deleteWithFiles, discardFiles } = createStoredFiles({ put, remove });
+export const { commitWithFiles, deleteWithFiles, discardFiles } = createStoredFiles({
+    put,
+    remove,
+    putVariant: putCardVariant,
+});

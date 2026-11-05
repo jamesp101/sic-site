@@ -1,3 +1,5 @@
 inputs:
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
+# Fail when a port (MariaDB 3306) is taken instead of silently moving it: .env points at the fixed port.
+strict_ports: true

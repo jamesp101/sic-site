@@ -1,12 +1,16 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
+import { DEMO_DEPARTMENTS, DEMO_MEMBERS } from '../prisma/demo-data';
+import { postAction } from './actions';
 import { ADMIN, CIT } from './auth-state';
+import { RUN, islandHydrated, visitorPage } from './support';
 
 // Names are unique per run; every member this spec adds is deleted again before it ends,
 // so the seeded chart (and other specs that read it) is left as it was found.
-const RUN = Date.now().toString(36);
-const DEAN = 'Prof. Juan Dela Cruz';
+const DEAN = DEMO_MEMBERS.citDean.name;
+const TURING = DEMO_MEMBERS.citCsHead.name;
+const HOPPER = DEMO_MEMBERS.citIsHead.name;
 const MGR = `Mgr ${RUN}`;
 const ALBA = `Alba ${RUN}`;
 const ALBA_RENAMED = `Alba Renamed ${RUN}`;
@@ -37,15 +41,14 @@ const roots = (page: Page) =>
 
 /** Reports of `name` as the public page's server-rendered HTML shows them (no JavaScript). */
 async function publicReports(browser: Browser, name: string) {
-    const context = await browser.newContext({ javaScriptEnabled: false });
-    const page = await context.newPage();
-    await page.goto('/departments/cit#org-chart');
+    const page = await visitorPage(browser);
+    await page.goto(`/departments/${DEMO_DEPARTMENTS.cit.slug}#org-chart`);
     const result = await page.evaluate((target) => {
         const nameOf = (li: Element) => li.querySelector(':scope > .org-card .min-w-0 > span')?.textContent?.trim();
         const li = [...document.querySelectorAll('#org-chart li.org-item')].find((el) => nameOf(el) === target);
         return li ? [...li.querySelectorAll(':scope > ul > li')].map((child) => nameOf(child) ?? '') : null;
     }, name);
-    await context.close();
+    await page.context().close();
     return result;
 }
 
@@ -59,8 +62,8 @@ async function departmentIds(browser: Browser) {
             /(\d+)\/members/,
         )![1];
     const ids = {
-        cit: await idOf('College of Information Technology'),
-        cba: await idOf('College of Business Administration'),
+        cit: await idOf(DEMO_DEPARTMENTS.cit.name),
+        cba: await idOf(DEMO_DEPARTMENTS.cba.name),
     };
     await context.close();
     return ids;
@@ -70,7 +73,7 @@ async function departmentIds(browser: Browser) {
 async function openChart(page: Page, id: string) {
     await page.goto(`/admin/departments/${id}/members`);
     await expect(page.getByRole('tree', { name: /organization chart/i })).toBeVisible();
-    await expect(page.locator('astro-island[component-url*="OrgChartEditor"]:not([ssr])')).toHaveCount(1);
+    await islandHydrated(page, 'OrgChartEditor');
     if (await page.getByRole('button', { name: 'Fit chart to view' }).isVisible()) await fit(page);
 }
 
@@ -133,7 +136,7 @@ test.describe('org chart editor (superadmin)', () => {
         await expect(page.getByTestId('member-count')).toHaveText('5 members');
         await expect(page.getByRole('tree', { name: /organization chart/i })).toBeVisible();
         expect(await roots(page)).toEqual([DEAN]);
-        expect(await reports(page, DEAN)).toEqual(['Dr. Alan Turing', 'Dr. Grace Hopper']);
+        expect(await reports(page, DEAN)).toEqual([TURING, HOPPER]);
         await expect(page.getByRole('link', { name: /View public page/ })).toHaveAttribute(
             'href',
             '/departments/cit#org-chart',
@@ -151,7 +154,7 @@ test.describe('org chart editor (superadmin)', () => {
 
         // A peer is slotted right after the card it was added beside.
         await expect.poll(() => reports(page, MGR)).toEqual([ALBA, CORA, BETA]);
-        expect(await reports(page, DEAN)).toEqual(['Dr. Alan Turing', 'Dr. Grace Hopper', MGR]);
+        expect(await reports(page, DEAN)).toEqual([TURING, HOPPER, MGR]);
         await page.reload();
         expect(await reports(page, MGR)).toEqual([ALBA, CORA, BETA]);
     });
@@ -310,7 +313,7 @@ test.describe('org chart editor (superadmin)', () => {
         expect(await reports(page, MGR)).toEqual([BETA, ALBA_RENAMED]);
         expect(await reports(page, ALBA_RENAMED)).toEqual([CORA]);
 
-        expect(await publicReports(browser, DEAN)).toEqual(['Dr. Alan Turing', 'Dr. Grace Hopper', MGR]);
+        expect(await publicReports(browser, DEAN)).toEqual([TURING, HOPPER, MGR]);
         expect(await publicReports(browser, MGR)).toEqual([BETA, ALBA_RENAMED]);
         expect(await publicReports(browser, ALBA_RENAMED)).toEqual([CORA]);
     });
@@ -346,8 +349,8 @@ test.describe('org chart editor (superadmin)', () => {
         await item(page, MGR).focus();
         await page.keyboard.press('Delete');
         await confirmDelete(page, new RegExp(`2 direct reports will move up to ${DEAN}`));
-        expect(await reports(page, DEAN)).toEqual(['Dr. Alan Turing', 'Dr. Grace Hopper', BETA, CORA]);
-        expect(await publicReports(browser, DEAN)).toEqual(['Dr. Alan Turing', 'Dr. Grace Hopper', BETA, CORA]);
+        expect(await reports(page, DEAN)).toEqual([TURING, HOPPER, BETA, CORA]);
+        expect(await publicReports(browser, DEAN)).toEqual([TURING, HOPPER, BETA, CORA]);
 
         for (const name of [BETA, CORA]) {
             await fit(page);
@@ -357,33 +360,33 @@ test.describe('org chart editor (superadmin)', () => {
         }
         await expect(page.getByTestId('member-count')).toHaveText('5 members');
         await page.reload();
-        expect(await reports(page, DEAN)).toEqual(['Dr. Alan Turing', 'Dr. Grace Hopper']);
+        expect(await reports(page, DEAN)).toEqual([TURING, HOPPER]);
     });
 
     test('reorder validates membership and cycles on the server', async ({ page }) => {
         await openChart(page, ids.cit);
         const idOf = async (name: string) => Number(await item(page, name).getAttribute('data-member-id'));
         const dean = await idOf(DEAN);
-        const head = await idOf('Dr. Alan Turing');
-        const post = (data: unknown) => page.request.post('/_actions/members.reorder', { data });
+        const head = await idOf(TURING);
+        const post = (json: unknown) => postAction(page, 'members.reorder', { json });
 
         const foreign = await post({
             departmentId: Number(ids.cit),
             placements: [{ id: 999_999, parentId: null, order: 1 }],
         });
-        expect(foreign.status()).toBe(400);
+        expect(foreign.status).toBe(400);
         const cycle = await post({
             departmentId: Number(ids.cit),
             placements: [{ id: dean, parentId: head, order: 1 }],
         });
-        expect(cycle.status()).toBe(400);
+        expect(cycle.status).toBe(400);
         const badParent = await post({
             departmentId: Number(ids.cit),
             placements: [{ id: head, parentId: 999_999, order: 1 }],
         });
-        expect(badParent.status()).toBe(400);
+        expect(badParent.status).toBe(400);
         const ok = await post({ departmentId: Number(ids.cit), placements: [{ id: head, parentId: dean, order: 1 }] });
-        expect(ok.status()).toBe(200);
+        expect(ok.status).toBe(200);
     });
 
     test('has no serious axe violations (light, dark, inspector open)', async ({ page }) => {
@@ -406,7 +409,7 @@ test.describe('org chart editor (superadmin)', () => {
         await openChart(page, ids.cit);
         await expect(page.getByRole('button', { name: 'Zoom in' })).toBeHidden();
         const dean = (await card(page, DEAN).boundingBox())!;
-        const child = (await card(page, 'Dr. Alan Turing').boundingBox())!;
+        const child = (await card(page, TURING).boundingBox())!;
         expect(child.y).toBeGreaterThan(dean.y);
         expect(child.x).toBeGreaterThan(dean.x);
     });
@@ -428,29 +431,27 @@ test.describe('org chart editor (department user)', () => {
         const created = page.waitForResponse(isAction('create'));
         await inspector.getByRole('button', { name: 'Add member' }).click();
         await created;
-        expect(await reports(page, DEAN)).toEqual(['Dr. Alan Turing', 'Dr. Grace Hopper', DEPT]);
+        expect(await reports(page, DEAN)).toEqual([TURING, HOPPER, DEPT]);
 
         await saving(page, () =>
             item(page, DEPT)
                 .focus()
                 .then(() => page.keyboard.press('Alt+ArrowUp')),
         );
-        expect(await reports(page, DEAN)).toEqual(['Dr. Alan Turing', DEPT, 'Dr. Grace Hopper']);
+        expect(await reports(page, DEAN)).toEqual([TURING, DEPT, HOPPER]);
 
         await page.getByTestId('member-inspector').getByRole('button', { name: 'Delete' }).click();
         await confirmDelete(page);
-        expect(await reports(page, DEAN)).toEqual(['Dr. Alan Turing', 'Dr. Grace Hopper']);
+        expect(await reports(page, DEAN)).toEqual([TURING, HOPPER]);
     });
 
     test('cannot open or reorder another department chart', async ({ page }) => {
         expect((await page.goto(`/admin/departments/${ids.cba}/members`))?.status()).toBe(403);
-        const response = await page.request.post('/_actions/members.reorder', {
-            data: { departmentId: Number(ids.cba), placements: [{ id: 1, parentId: null, order: 1 }] },
+        const response = await postAction(page, 'members.reorder', {
+            json: { departmentId: Number(ids.cba), placements: [{ id: 1, parentId: null, order: 1 }] },
         });
-        expect(response.status()).toBe(403);
-        const del = await page.request.post('/_actions/members.delete', {
-            data: { departmentId: Number(ids.cba), id: 1 },
-        });
-        expect(del.status()).toBe(403);
+        expect(response.status).toBe(403);
+        const del = await postAction(page, 'members.delete', { json: { departmentId: Number(ids.cba), id: 1 } });
+        expect(del.status).toBe(403);
     });
 });

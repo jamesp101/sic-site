@@ -9,8 +9,7 @@
 import { db } from '../src/lib/server/db';
 import { hashPassword } from '../src/lib/server/password';
 import { setPasswordLogin } from '../src/lib/server/password-login';
-
-const MIN_PASSWORD_LENGTH = 12;
+import { MIN_ADMIN_PASSWORD_LENGTH, passwordTooShort } from '../src/lib/password-policy';
 
 function promptHidden(question: string): Promise<string> {
     const { stdin, stdout } = process;
@@ -60,9 +59,7 @@ async function main() {
     if (!existing && !name) throw new Error('Set ADMIN_NAME to create a new user.');
 
     const password = await readPassword();
-    if (password.length < MIN_PASSWORD_LENGTH) {
-        throw new Error(`The password must have at least ${MIN_PASSWORD_LENGTH} characters.`);
-    }
+    if (password.length < MIN_ADMIN_PASSWORD_LENGTH) throw new Error(passwordTooShort(MIN_ADMIN_PASSWORD_LENGTH));
     const hash = await hashPassword(password);
 
     const user = await db.$transaction(async (tx) => {

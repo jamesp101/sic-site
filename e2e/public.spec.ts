@@ -1,11 +1,14 @@
 import { expect, test } from '@playwright/test';
 
+import { DEMO_DEPARTMENTS } from '../prisma/demo-data';
+import { visitorPage } from './support';
+
 test('home → department → post navigation works with server-rendered links', async ({ page }) => {
     const res = await page.goto('/');
     expect(res?.status()).toBe(200);
     await expect(page.locator('h1')).toHaveCount(1);
 
-    await page.goto('/departments/cit');
+    await page.goto(`/departments/${DEMO_DEPARTMENTS.cit.slug}`);
     await expect(page.locator('h1')).toHaveCount(1);
     await expect(page.locator('main')).toContainText(/Information Technology/i);
 
@@ -19,7 +22,14 @@ test('home → department → post navigation works with server-rendered links',
 });
 
 test('public pages render for every route', async ({ page }) => {
-    for (const path of ['/', '/posts', '/downloads', '/contact', '/departments/cba', '/departments/coe']) {
+    for (const path of [
+        '/',
+        '/posts',
+        '/downloads',
+        '/contact',
+        `/departments/${DEMO_DEPARTMENTS.cba.slug}`,
+        `/departments/${DEMO_DEPARTMENTS.coe.slug}`,
+    ]) {
         const res = await page.goto(path);
         expect(res?.status(), path).toBe(200);
         await expect(page.locator('main#main'), path).toBeVisible();
@@ -32,13 +42,12 @@ test('unknown post and department return 404', async ({ page }) => {
 });
 
 test('post filters work without JavaScript', async ({ browser }) => {
-    const context = await browser.newContext({ javaScriptEnabled: false });
-    const page = await context.newPage();
+    const page = await visitorPage(browser);
     await page.goto('/posts?type=event');
     const pills = page.locator('main [data-post-type]');
     const types = await pills.evaluateAll((els) => els.map((el) => el.getAttribute('data-post-type')));
     expect(types.every((t) => t === 'event')).toBe(true);
-    await context.close();
+    await page.context().close();
 });
 
 test('guests are redirected from admin areas', async ({ page }) => {

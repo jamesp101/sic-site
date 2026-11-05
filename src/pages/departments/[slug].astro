@@ -18,12 +18,7 @@ const { department, carousel, posts, members, heroSections, seo } = page;
 
 <PublicLayout {...seo}>
     {carousel.length > 0 && (
-        <HeroCarousel
-            client:visible
-            slides={carousel}
-            tall={false}
-            label={`${department.name} highlights`}
-        />
+        <HeroCarousel client:visible slides={carousel} tall={false} label={`${department.name} highlights`} />
     )}
 
     <PageBanner eyebrow="Academic department" title={department.name} lead={department.description} />

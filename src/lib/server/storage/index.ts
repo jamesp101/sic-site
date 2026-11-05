@@ -7,6 +7,7 @@ import { createLocalDriver, type LocalDriver } from './local';
 import type { ByteRange } from './range';
 import { createS3Driver, type S3Driver } from './s3';
 import type { StorageDriver, StoredObject } from './types';
+import { isVariantKey, originalCandidates, variantKeyOf } from './variants';
 
 export type { StorageDriver, StoredObject };
 
@@ -117,6 +118,17 @@ export function publicUrl(value: string | null | undefined): string | null {
 }
 
 /**
+ * URL of the card variant of a stored image that has one (a Highlight image), else null. Always the app route:
+ * it serves the original when the variant is missing (not backfilled yet, or never made), which a direct bucket
+ * URL could not.
+ */
+export function variantUrl(value: string | null | undefined): string | null {
+    if (!value || isExternal(value) || (value.startsWith('/') && !value.startsWith('/storage/'))) return null;
+    const variantKey = variantKeyOf(toKey(value));
+    return variantKey ? `/storage/${variantKey}` : null;
+}
+
+/**
  * The app route URL of a stored key (`/storage/<key>`) even when `S3_PUBLIC_URL` is set. Use it for
  * URLs kept in content that must not depend on where files are hosted; the route redirects inline
  * requests to the bucket base, which answers `Range` itself.
@@ -168,6 +180,21 @@ export async function put(prefix: StoragePrefix, file: File): Promise<string> {
 export async function remove(value: string | null | undefined): Promise<void> {
     if (!value || isExternal(value)) return;
     await driver.delete(toKey(value));
+}
+
+/**
+ * The key to serve for a request: `key` itself, except for a variant that is missing, which is served by its
+ * original. When neither exists (or the key is invalid) it returns `key`, so the route answers 404.
+ */
+export async function servedKey(key: string): Promise<string> {
+    if (!isVariantKey(key)) return key;
+    try {
+        if (await driver.head(toKey(key))) return key;
+        for (const candidate of originalCandidates(key)) if (await driver.head(candidate)) return candidate;
+    } catch {
+        // invalid key: let the route answer 404
+    }
+    return key;
 }
 
 /** Streams a stored object (or only `range` of it), or null when missing or the key is invalid. Throws `RangeNotSatisfiableError` for an empty range. */

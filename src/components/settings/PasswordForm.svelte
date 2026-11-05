@@ -1,6 +1,7 @@
 <script lang="ts">
   import { actions } from 'astro:actions';
   import { reloadView } from '@/lib/navigation';
+  import { MIN_PASSWORD_LENGTH } from '@/lib/password-policy';
   import { actionForm } from '@/components/admin/shared/action-form.svelte';
   import Field from '@/components/auth/Field.svelte';
   import Notice from '@/components/auth/Notice.svelte';
@@ -39,7 +40,7 @@
 
   <Field id="password" label="New password" error={form.errors.password}>
     {#snippet children(props)}
-      <PasswordInput {...props} name="password" required minlength={8} autocomplete="new-password" placeholder="New password" bind:value={password} />
+      <PasswordInput {...props} name="password" required minlength={MIN_PASSWORD_LENGTH} autocomplete="new-password" placeholder="New password" bind:value={password} />
     {/snippet}
   </Field>
 

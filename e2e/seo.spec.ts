@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { DEMO_DEPARTMENTS } from '../prisma/demo-data';
 
-const PAGES = ['/', '/posts', '/downloads', '/contact', '/departments/cit'];
+const PAGES = ['/', '/posts', '/downloads', '/contact', `/departments/${DEMO_DEPARTMENTS.cit.slug}`];
 
 test('each public page has unique title, description, canonical and OG tags', async ({ page }) => {
     const titles = new Set<string>();
@@ -53,7 +54,7 @@ test('sitemap lists public pages, departments and posts', async ({ request }) =>
     expect(res.headers()['content-type']).toContain('xml');
     const xml = await res.text();
     expect(xml).toContain('<urlset');
-    expect(xml).toMatch(/<loc>[^<]+\/departments\/cit<\/loc>/);
+    expect(xml).toMatch(new RegExp(`<loc>[^<]+/departments/${DEMO_DEPARTMENTS.cit.slug}</loc>`));
     expect(xml).toMatch(/<loc>[^<]+\/posts\/[^<]+<\/loc>/);
     expect(xml).not.toMatch(/\/admin|\/dashboard|\/login/);
 });

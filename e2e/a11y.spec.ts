@@ -1,7 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { DEMO_DEPARTMENTS } from '../prisma/demo-data';
 
-const PAGES = ['/', '/posts', '/downloads', '/contact', '/departments/cit', '/login'];
+const PAGES = ['/', '/posts', '/downloads', '/contact', `/departments/${DEMO_DEPARTMENTS.cit.slug}`, '/login'];
 
 for (const scheme of ['light', 'dark'] as const) {
     for (const path of PAGES) {

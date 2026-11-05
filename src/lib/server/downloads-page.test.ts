@@ -4,7 +4,16 @@ import { closeTestDb } from './test-db';
 vi.mock('./db', async () => ({ db: await (await import('./test-db')).openTestDb(), dbProvider: 'sqlite' }));
 
 const { db } = await import('./db');
-const { getDownloadsPage } = await import('./queries');
+const {
+    DEFAULT_DIRECTORY,
+    directoryWhere,
+    encodeTags,
+    getAdminFolders,
+    getDirectoryNames,
+    getDownloadsPage,
+    parseTags,
+    toAdminDownload,
+} = await import('./downloads');
 
 const names = (files: { fileName: string }[]) => files.map((file) => file.fileName).sort();
 
@@ -84,5 +93,77 @@ describe('getDownloadsPage', () => {
         const page = await getDownloadsPage({ directory: 'Nope' });
         expect(page.downloads).toEqual([]);
         expect(page.groups).toEqual([]);
+    });
+});
+
+describe('getDirectoryNames', () => {
+    it('lists each stored Directory name once, by name', async () => {
+        const extra = await db.downloadDirectory.create({ data: { name: 'Empty folder', departmentId: 10 } });
+        try {
+            expect(await getDirectoryNames()).toEqual(['Empty folder']);
+        } finally {
+            await db.downloadDirectory.delete({ where: { id: extra.id } });
+        }
+    });
+});
+
+describe('Tags', () => {
+    it('encodes the comma-separated field as a JSON array and decodes it back', () => {
+        expect(encodeTags(' a, b ,,c')).toBe('["a","b","c"]');
+        expect(encodeTags(null)).toBe('[]');
+        expect(parseTags(encodeTags('freshman, 2026'))).toEqual(['freshman', '2026']);
+    });
+
+    it('tolerates legacy comma-separated, double-encoded and empty values', () => {
+        expect(parseTags('a, b')).toEqual(['a', 'b']);
+        expect(parseTags('"a,b"')).toEqual(['a', 'b']);
+        expect(parseTags('  ')).toEqual([]);
+        expect(parseTags(null)).toEqual([]);
+    });
+});
+
+describe('admin Downloads', () => {
+    const superadmin = { id: 1, role: 'superadmin', departmentId: null };
+    const cit = { id: 2, role: 'department_user', departmentId: 10 };
+    const all = { kind: 'all' } as const;
+    const href = (name: string) => `?folder=${name}`;
+
+    it('names a Download without a Directory General in the file view', async () => {
+        const row = await db.download.findFirstOrThrow({
+            where: { fileName: 'Enrolment form' },
+            include: { department: { select: { name: true } } },
+        });
+        expect(row.directory).toBeNull();
+        expect(toAdminDownload(row)).toMatchObject({ directory: DEFAULT_DIRECTORY, tags: [], departmentName: null });
+    });
+
+    it('merges files stored without a Directory into General in the folder map', async () => {
+        const view = await getAdminFolders(superadmin, all, href);
+        expect(view.totalFiles).toBe(4);
+        expect(view.totalBytes).toBe(400);
+        expect(view.folders.map(({ name, count, id, canDelete }) => [name, count, id !== null, canDelete])).toEqual([
+            ['Empty folder', 0, true, true],
+            ['General', 2, false, false],
+            ['Academics', 2, false, false],
+        ]);
+        expect(view.folders.find((f) => f.name === 'Academics')?.href).toBe('?folder=Academics');
+    });
+
+    it('limits a department user to their Department but keeps shared folders listed', async () => {
+        const view = await getAdminFolders(cit, { kind: 'department', id: 10, name: 'CIT', slug: 'cit' }, href);
+        expect(view.totalFiles).toBe(2);
+        expect(view.folders.map((f) => [f.name, f.count])).toEqual([
+            ['Academics', 1],
+            ['General', 1],
+        ]);
+    });
+
+    it('filters General to files stored without a Directory as well as those stored as General', async () => {
+        const rows = await db.download.findMany({ where: directoryWhere(DEFAULT_DIRECTORY) });
+        expect(names(rows)).toEqual(['Enrolment form', 'Handbook']);
+        expect(names(await db.download.findMany({ where: directoryWhere('Academics') }))).toEqual([
+            'Schedule',
+            'Syllabus',
+        ]);
     });
 });

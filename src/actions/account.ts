@@ -1,14 +1,15 @@
 import { defineAction, type ActionAPIContext } from 'astro:actions';
 import { z } from 'astro/zod';
-import { auth } from '@/lib/server/auth';
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, passwordTooShort } from '@/lib/password-policy';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
+import { currentSessionId as currentSessionIdOf, signOut } from '@/lib/server/auth-session';
 import { db } from '@/lib/server/db';
 import { sendMail } from '@/lib/server/mail';
+import { emailChangedMessage } from '@/lib/server/mail-messages';
 import { hashPassword } from '@/lib/server/password';
-import { assertPassword, setPasswordLogin } from '@/lib/server/password-login';
+import { assertPassword, endSessions, setPasswordLogin } from '@/lib/server/password-login';
 import { RequestError } from '@/lib/server/request-error';
-
-const MIN_PASSWORD = 8;
+import { deleteUserWithFiles } from '@/lib/server/user-rules';
 
 export const account = {
     updateProfile: defineAction({
@@ -40,7 +41,7 @@ export const account = {
                     }
                     await assertPassword(actor.id, input.currentPassword);
                 }
-                const currentSessionId = context.locals.session ? Number(context.locals.session.id) : null;
+                const currentSessionId = currentSessionIdOf(context.locals.session);
                 await db.$transaction(async (tx) => {
                     await tx.user.update({
                         where: { id: actor.id },
@@ -50,22 +51,10 @@ export const account = {
                             ...(emailChanged ? { emailVerified: false, emailVerifiedAt: null } : {}),
                         },
                     });
-                    if (!emailChanged) return;
                     // Sign out every other device; keep this one.
-                    await tx.session.deleteMany({
-                        where: {
-                            userId: actor.id,
-                            ...(currentSessionId === null ? {} : { NOT: { id: currentSessionId } }),
-                        },
-                    });
+                    if (emailChanged) await endSessions(tx, actor.id, currentSessionId);
                 });
-                if (emailChanged) {
-                    await sendMail({
-                        to: current.email,
-                        subject: 'Your San Isidro College email address was changed',
-                        text: `The email address of your San Isidro College account was changed to ${input.email}.\n\nIf you did not make this change, contact the site administrator immediately.`,
-                    });
-                }
+                if (emailChanged) await sendMail(emailChangedMessage(current.email, input.email));
                 flash(context, 'Profile updated.');
                 return { emailChanged };
             }),
@@ -75,10 +64,7 @@ export const account = {
         input: z
             .object({
                 currentPassword: z.string().min(1, 'Enter your current password.'),
-                password: z
-                    .string()
-                    .min(MIN_PASSWORD, `Password must be at least ${MIN_PASSWORD} characters.`)
-                    .max(128),
+                password: z.string().min(MIN_PASSWORD_LENGTH, passwordTooShort()).max(MAX_PASSWORD_LENGTH),
                 passwordConfirmation: z.string(),
             })
             .refine((value) => value.password === value.passwordConfirmation, {
@@ -91,7 +77,7 @@ export const account = {
                 await assertPassword(actor.id, input.currentPassword);
 
                 const next = await hashPassword(input.password);
-                const currentSessionId = context.locals.session ? Number(context.locals.session.id) : null;
+                const currentSessionId = currentSessionIdOf(context.locals.session);
 
                 await db.$transaction((tx) =>
                     setPasswordLogin(tx, actor.id, next, { endSessions: { except: currentSessionId } }),
@@ -109,15 +95,9 @@ export const account = {
                 const actor = actorOf(context);
                 await assertPassword(actor.id, input.password);
 
-                if (actor.role === 'superadmin') {
-                    const others = await db.user.count({ where: { role: 'superadmin', NOT: { id: actor.id } } });
-                    if (others === 0) {
-                        throw new RequestError('FORBIDDEN', 'The last superadmin account cannot be deleted.');
-                    }
-                }
-
+                await deleteUserWithFiles(actor.id);
+                // Only once the account is gone: a refused or failed delete keeps the user signed in.
                 await clearAuthCookies(context);
-                await db.user.delete({ where: { id: actor.id } });
                 return { redirect: '/' };
             }),
     }),
@@ -135,9 +115,5 @@ export const account = {
 
 /** Signs out through Better Auth and mirrors its cookie-clearing Set-Cookie headers onto the action response. */
 async function clearAuthCookies(context: ActionAPIContext): Promise<void> {
-    const { headers } = await auth.api.signOut({ headers: context.request.headers, returnHeaders: true });
-    for (const cookie of headers.getSetCookie()) {
-        const name = cookie.slice(0, cookie.indexOf('=')).trim();
-        if (name) context.cookies.delete(name, { path: '/' });
-    }
+    for (const name of await signOut(context.request.headers)) context.cookies.delete(name, { path: '/' });
 }

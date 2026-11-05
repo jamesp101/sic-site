@@ -1,7 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
+import { DEMO_DEPARTMENTS, DEMO_USERS, seedPassword } from '../prisma/demo-data';
 import { ADMIN, CIT } from './auth-state';
+import { visitorPage } from './support';
 
 test.describe('as superadmin', () => {
     test.use({ storageState: ADMIN });
@@ -141,7 +143,7 @@ test.describe('as superadmin', () => {
         const names = () => page.locator('tbody tr td:first-child a').allTextContents();
 
         await page.goto('/admin/departments?q=business');
-        expect(await names()).toEqual(['College of Business Administration']);
+        expect(await names()).toEqual([DEMO_DEPARTMENTS.cba.name]);
 
         await page.goto('/admin/departments?sort=name&dir=desc');
         const desc = await names();
@@ -155,9 +157,9 @@ test.describe('as superadmin', () => {
 
         // Seeded College of Education has no org chart members yet.
         await page.goto('/admin/departments?members=no');
-        expect(await names()).toEqual(['College of Education']);
+        expect(await names()).toEqual([DEMO_DEPARTMENTS.coe.name]);
         await page.goto('/admin/departments?members=yes');
-        expect(await names()).not.toContain('College of Education');
+        expect(await names()).not.toContain(DEMO_DEPARTMENTS.coe.name);
         await page.goto('/admin/departments?q=no-such-department');
         await expect(page.getByText('No departments match your filters.')).toBeVisible();
         await page.getByRole('link', { name: 'Reset' }).click();
@@ -175,7 +177,7 @@ test.describe('as department user', () => {
     test('departments table only lists their own department, even with filters', async ({ page }) => {
         const names = page.locator('tbody tr td:first-child a');
         await page.goto('/admin/departments');
-        await expect(names).toHaveText(['College of Information Technology']);
+        await expect(names).toHaveText([DEMO_DEPARTMENTS.cit.name]);
         await page.goto('/admin/departments?q=business');
         await expect(names).toHaveCount(0);
         await expect(page.getByRole('link', { name: 'Add department' })).toHaveCount(0);
@@ -200,7 +202,7 @@ test.describe('as department user', () => {
 
 test('wrong password shows an error', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel(/email/i).fill('admin@sic.edu.ph');
+    await page.getByLabel(/email/i).fill(DEMO_USERS.superAdmin.email);
     await page.getByLabel(/^password$/i).fill('not-the-password');
     await page.getByRole('button', { name: /log in|sign in/i }).click();
     await expect(page).toHaveURL(/\/login/);
@@ -208,22 +210,21 @@ test('wrong password shows an error', async ({ page }) => {
 });
 
 test('login works without JavaScript and never puts credentials in the URL', async ({ browser }) => {
-    const context = await browser.newContext({ javaScriptEnabled: false });
-    const page = await context.newPage();
+    const page = await visitorPage(browser);
     const urls: string[] = [];
     page.on('request', (request) => urls.push(request.url()));
 
     await page.goto('/login?redirect=/admin/posts');
-    await page.getByLabel(/email/i).fill('admin@sic.edu.ph');
+    await page.getByLabel(/email/i).fill(DEMO_USERS.superAdmin.email);
     await page.getByLabel(/^password$/i).fill('not-the-password');
     await page.getByRole('button', { name: /log in/i }).click();
     await expect(page.getByRole('alert')).toContainText('These credentials do not match our records.');
-    await expect(page.getByLabel(/email/i)).toHaveValue('admin@sic.edu.ph');
+    await expect(page.getByLabel(/email/i)).toHaveValue(DEMO_USERS.superAdmin.email);
 
-    await page.getByLabel(/^password$/i).fill(process.env.SEED_SUPERADMIN_PASSWORD ?? 'password');
+    await page.getByLabel(/^password$/i).fill(seedPassword('SEED_SUPERADMIN_PASSWORD'));
     await page.getByRole('button', { name: /log in/i }).click();
     await expect(page).toHaveURL(/\/admin\/posts$/);
 
     expect(urls.filter((url) => /password=|not-the-password/.test(url))).toEqual([]);
-    await context.close();
+    await page.context().close();
 });

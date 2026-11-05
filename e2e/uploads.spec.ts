@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test, type APIResponse, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
+import { postAction } from './actions';
 import { ADMIN } from './auth-state';
 import { UPLOADS } from './env';
 
@@ -12,16 +13,9 @@ test.use({ storageState: ADMIN });
 
 const listDownloads = () => new Set(fs.existsSync(DOWNLOADS) ? fs.readdirSync(DOWNLOADS) : []);
 
-/** Action results are devalue-serialised: `{ id: 5 }` arrives as `[{"id":1},5]`. */
-async function resultId(response: APIResponse): Promise<number> {
-    const [root, ...values] = (await response.json()) as [{ id: number }, ...unknown[]];
-    return values[root.id - 1] as number;
-}
-
 async function createDownload(page: Page, name: string, size: number) {
     await page.goto('/admin/downloads');
-    return page.request.post('/_actions/downloads.create', {
-        headers: { Origin: new URL(page.url()).origin },
+    return postAction<{ id: number }>(page, 'downloads.create', {
         multipart: {
             fileName: name,
             file: { name: `${name}.pdf`, mimeType: 'application/pdf', buffer: Buffer.alloc(size, 0x25) },
@@ -36,8 +30,8 @@ test('local driver stores a multipart download up to the 20 MB limit on disk, se
     const before = listDownloads();
 
     const created = await createDownload(page, `Large ${Date.now().toString(36)}`, size);
-    expect(created.ok(), await created.text()).toBe(true);
-    const id = await resultId(created);
+    expect(created.ok, created.text).toBe(true);
+    const { id } = created.data;
 
     // Other specs may upload in parallel; only this test writes a 19 MB file.
     const stored = [...listDownloads()].find(
@@ -49,19 +43,16 @@ test('local driver stores a multipart download up to the 20 MB limit on disk, se
     expect(served.status()).toBe(200);
     expect(served.headers()['content-length']).toBe(String(size));
 
-    const deleted = await page.request.post('/_actions/downloads.delete', {
-        headers: { Origin: new URL(page.url()).origin },
-        data: { id },
-    });
-    expect(deleted.ok(), await deleted.text()).toBe(true);
+    const deleted = await postAction(page, 'downloads.delete', { json: { id } });
+    expect(deleted.ok, deleted.text).toBe(true);
     expect(fs.existsSync(path.join(DOWNLOADS, stored!))).toBe(false);
 });
 
 test('local driver rejects a download over 20 MB with the size message and stores nothing', async ({ page }) => {
     const size = 21 * MB;
     const response = await createDownload(page, `Too large ${Date.now().toString(36)}`, size);
-    expect(response.ok()).toBe(false);
-    expect(await response.text()).toContain('must not be larger than 20 MB');
+    expect(response.ok).toBe(false);
+    expect(response.text).toContain('must not be larger than 20 MB');
     const oversized = [...listDownloads()].filter((file) => fs.statSync(path.join(DOWNLOADS, file)).size === size);
     expect(oversized).toEqual([]);
 });

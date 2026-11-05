@@ -13,6 +13,7 @@
   let {
     departments,
     directories,
+    defaultDirectory,
     isSuperAdmin,
     defaultDepartmentId = null,
     maxMb = 20,
@@ -20,6 +21,8 @@
   }: {
     departments: { id: number; name: string }[];
     directories: string[];
+    /** Directory a Download without one is stored in. */
+    defaultDirectory: string;
     isSuperAdmin: boolean;
     /** Admin scope's department, preselected (superadmins may change it). */
     defaultDepartmentId?: number | null;
@@ -99,7 +102,7 @@
   </Field>
 
   <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-    <Field label="Category / folder" id="directory" error={form.errors.directoryName} hint="Defaults to General.">
+    <Field label="Category / folder" id="directory" error={form.errors.directoryName} hint={`Defaults to ${defaultDirectory}.`}>
       <div class="relative">
         <Folder class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <input id="directory" type="text" list="directory-list" bind:value={directory} class="{inputClass} pl-10" placeholder="e.g. Handbook, Enrollment" />

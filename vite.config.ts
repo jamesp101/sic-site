@@ -53,6 +53,7 @@ export default defineConfig({
             'db:reset': { command: 'node scripts/prisma-schema.mjs && prisma migrate reset --force', cache: false },
             'db:create-admin': { command: 'tsx prisma/create-admin.ts', cache: false },
             'storage:cleanup': { command: 'tsx scripts/storage-cleanup.ts', cache: false },
+            'storage:variants': { command: 'tsx scripts/storage-variants.ts', cache: false },
             'db:studio': { command: 'prisma studio', cache: false },
             e2e: { command: 'playwright test', dependsOn: ['build'], cache: false },
             ci: {

@@ -1,11 +1,9 @@
-import path from 'node:path';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
+import { postAction } from './actions';
 import { ADMIN, CIT } from './auth-state';
-const SEAL = path.resolve('public/sic-seal.png');
+import { RUN, SEAL, clickUntilVisible, visitorPage } from './support';
 
-// Unique per run so retries and other specs never collide with these slides.
-const RUN = Date.now().toString(36);
 const ALPHA = { headline: `E2E Alpha ${RUN}`, label: `E2E Alpha Button ${RUN}`, href: '/posts' };
 const BETA = { headline: `E2E Beta ${RUN}`, label: `E2E Beta Button ${RUN}`, href: '/downloads' };
 
@@ -19,10 +17,10 @@ const saved = (page: Page, action: string) =>
 
 /** Clicks "Add slide", retrying until the island has hydrated and the new slide's Create button shows. */
 async function addSlide(page: Page) {
-    await expect(async () => {
-        await page.getByRole('button', { name: 'Add slide' }).first().click({ timeout: 2000 });
-        await expect(page.getByRole('button', { name: 'Create slide' })).toBeVisible({ timeout: 2000 });
-    }).toPass({ timeout: 15_000 });
+    await clickUntilVisible(
+        page.getByRole('button', { name: 'Add slide' }).first(),
+        page.getByRole('button', { name: 'Create slide' }),
+    );
 }
 
 async function createSlide(page: Page, slide: typeof ALPHA, extra?: (page: Page) => Promise<void>) {
@@ -45,8 +43,7 @@ async function createSlide(page: Page, slide: typeof ALPHA, extra?: (page: Page)
 
 /** The home page carousel as server-rendered HTML shows it (no JavaScript). */
 async function publicHome(browser: Browser) {
-    const context = await browser.newContext({ javaScriptEnabled: false });
-    const page = await context.newPage();
+    const page = await visitorPage(browser);
     await page.goto('/');
     const section = page.locator('section[aria-roledescription="carousel"]');
     const result = {
@@ -62,7 +59,7 @@ async function publicHome(browser: Browser) {
         text: (await section.count()) ? await section.textContent() : '',
         injected: await section.locator('b').count(),
     };
-    await context.close();
+    await page.context().close();
     return result;
 }
 
@@ -189,7 +186,6 @@ test.describe('slide designer (superadmin)', () => {
 
     test('the server rejects unsafe designs', async ({ page }) => {
         await page.goto('/admin/carousels');
-        const origin = new URL(page.url()).origin;
         const layer = (extra: object) =>
             JSON.stringify({
                 v: 1,
@@ -212,11 +208,10 @@ test.describe('slide designer (superadmin)', () => {
             });
 
         for (const bad of [{ href: 'javascript:alert(1)' }, { color: '#ff0000' }, { onclick: 'x' }]) {
-            const response = await page.request.post('/_actions/carousels.update', {
-                headers: { Origin: origin },
+            const response = await postAction(page, 'carousels.update', {
                 multipart: { id: alphaId, overlay: layer(bad) },
             });
-            expect(response.status(), `${JSON.stringify(bad)} id=${alphaId} ${await response.text()}`).toBe(400);
+            expect(response.status, `${JSON.stringify(bad)} id=${alphaId} ${response.text}`).toBe(400);
         }
     });
 });
@@ -229,7 +224,6 @@ test.describe('element sizes', () => {
         browser,
     }) => {
         await page.goto('/admin/carousels');
-        const origin = new URL(page.url()).origin;
         const base = { rotation: 0, opacity: 100 };
         const button = (id: string, label: string, y: number) => ({
             type: 'button',
@@ -264,11 +258,8 @@ test.describe('element sizes', () => {
                 button('b2x', `${ALPHA.label} two`, 75),
             ],
         });
-        const response = await page.request.post('/_actions/carousels.update', {
-            headers: { Origin: origin },
-            multipart: { id: alphaId, overlay },
-        });
-        expect(response.status()).toBe(200);
+        const response = await postAction(page, 'carousels.update', { multipart: { id: alphaId, overlay } });
+        expect(response.status).toBe(200);
 
         // Saved in the new form: the button is Large and the heading Medium.
         await page.goto('/admin/carousels');
@@ -279,15 +270,14 @@ test.describe('element sizes', () => {
             'true',
         );
 
-        const context = await browser.newContext({ javaScriptEnabled: false });
-        const home = await context.newPage();
+        const home = await visitorPage(browser);
         await home.goto('/');
         const links = home.locator('section[aria-roledescription="carousel"] a', { hasText: ALPHA.label });
         await expect(links).toHaveCount(2);
         const [a, b] = await links.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
         expect(a).toBeGreaterThan(10);
         expect(Math.abs(a - b)).toBeLessThan(0.5);
-        await context.close();
+        await home.context().close();
     });
 });
 
@@ -381,14 +371,10 @@ test.describe('background video and phone layout', () => {
 
     test('the server accepts only our uploads and YouTube links as a slide video', async ({ page }) => {
         await page.goto('/admin/carousels');
-        const origin = new URL(page.url()).origin;
         const overlay = JSON.stringify({ v: 1, layers: [] });
         for (const video of ['https://vimeo.com/123456789', 'https://example.com/clip.mp4', 'javascript:alert(1)']) {
-            const response = await page.request.post('/_actions/carousels.update', {
-                headers: { Origin: origin },
-                multipart: { id: alphaId, overlay, video },
-            });
-            expect(response.status(), video).toBe(400);
+            const response = await postAction(page, 'carousels.update', { multipart: { id: alphaId, overlay, video } });
+            expect(response.status, video).toBe(400);
         }
     });
 
@@ -489,26 +475,16 @@ test.describe('department user', () => {
         await expect(page.locator(`[data-slide-id][aria-label*="${RUN}"]`)).toHaveCount(0);
         await expect(page.getByTestId('scope-static')).toBeVisible();
 
-        const origin = new URL(page.url()).origin;
         const overlay = JSON.stringify({ v: 1, layers: [] });
-        const update = await page.request.post('/_actions/carousels.update', {
-            headers: { Origin: origin },
-            multipart: { id: alphaId, overlay },
-        });
-        expect(update.status()).toBe(403);
-        expect(await update.text()).toContain('FORBIDDEN');
+        const update = await postAction(page, 'carousels.update', { multipart: { id: alphaId, overlay } });
+        expect(update.status).toBe(403);
+        expect(update.text).toContain('FORBIDDEN');
 
-        const remove = await page.request.post('/_actions/carousels.delete', {
-            headers: { Origin: origin },
-            data: { id: Number(alphaId) },
-        });
-        expect(remove.status()).toBe(403);
+        const remove = await postAction(page, 'carousels.delete', { json: { id: Number(alphaId) } });
+        expect(remove.status).toBe(403);
 
-        const reorder = await page.request.post('/_actions/carousels.reorder', {
-            headers: { Origin: origin },
-            data: { ids: [Number(alphaId)] },
-        });
-        expect(reorder.status()).toBe(403);
+        const reorder = await postAction(page, 'carousels.reorder', { json: { ids: [Number(alphaId)] } });
+        expect(reorder.status).toBe(403);
         await context.close();
     });
 });

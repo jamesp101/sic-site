@@ -1,24 +1,16 @@
 import { defineMiddleware } from 'astro:middleware';
 import { parseScope, resolveScope, SCOPE_COOKIE } from '@/lib/server/admin-scope';
-import { auth } from '@/lib/server/auth';
+import { getSession } from '@/lib/server/auth-session';
+import { isSuperAdmin } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
-
-const PROTECTED = [
-    /^\/dashboard(\/|$)/,
-    /^\/admin(\/|$)/,
-    /^\/settings(\/|$)/,
-    /^\/confirm-password$/,
-    /^\/verify-email$/,
-];
-const SCOPED = [/^\/dashboard(\/|$)/, /^\/admin(\/|$)/, /^\/settings(\/|$)/];
-const PRIVATE = [...PROTECTED, /^\/api\//, /^\/login$/, /^\/forgot-password$/, /^\/reset-password$/];
+import { guardRequest, isAssetPath, responseHeaders } from '@/lib/server/request-policy';
 
 export const onRequest = defineMiddleware(async (context, next) => {
     const { pathname } = context.url;
-    const isAsset = pathname.startsWith('/_astro/') || pathname.startsWith('/storage/');
+    const isAsset = isAssetPath(pathname);
 
     if (!isAsset) {
-        const session = await auth.api.getSession({ headers: context.request.headers });
+        const session = await getSession(context.request.headers);
         context.locals.user = session
             ? {
                   id: Number(session.user.id),
@@ -35,14 +27,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
         context.locals.session = null;
     }
 
-    if (!context.locals.user && PROTECTED.some((re) => re.test(pathname))) {
-        const target = `/login?redirect=${encodeURIComponent(pathname + context.url.search)}`;
-        return context.redirect(target, 302);
-    }
+    const guard = guardRequest(context.url, context.locals.user !== null);
+    if (guard.redirect !== null) return context.redirect(guard.redirect, 302);
 
-    if (context.locals.user && SCOPED.some((re) => re.test(pathname))) {
+    if (context.locals.user && guard.scoped) {
         // Validated on every request: unknown ids fall back to `all`, department users ignore the cookie.
+        // Only Superadmins get the switcher's full list; a Department user loads just their own Department.
+        const user = context.locals.user;
         const departments = await db.department.findMany({
+            where: isSuperAdmin(user) ? {} : { id: user.departmentId ?? -1 },
             orderBy: { name: 'asc' },
             select: { id: true, name: true, slug: true, logoPath: true },
         });
@@ -56,28 +49,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     const response = await next();
 
-    if (!response.headers.has('Cache-Control') && !isAsset) {
-        const isPrivate =
-            PRIVATE.some((re) => re.test(pathname)) || context.locals.user !== null || context.request.method !== 'GET';
-        response.headers.set(
-            'Cache-Control',
-            isPrivate ? 'no-store' : 'public, max-age=60, stale-while-revalidate=600',
-        );
-    }
-    if (PRIVATE.some((re) => re.test(pathname))) response.headers.set('X-Robots-Tag', 'noindex, nofollow');
-
-    // No page may be framed. /storage sets its own per-type policy (PDFs must stay viewable).
-    if (!pathname.startsWith('/storage/') && !response.headers.has('Content-Security-Policy')) {
-        response.headers.set(
-            'Content-Security-Policy',
-            "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'",
-        );
-    }
-    response.headers.set('X-Frame-Options', 'DENY');
-    response.headers.set('X-Content-Type-Options', 'nosniff');
-    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-    if (context.url.protocol === 'https:') {
-        response.headers.set('Strict-Transport-Security', 'max-age=31536000');
-    }
+    const headers = responseHeaders({
+        method: context.request.method,
+        url: context.url,
+        signedIn: context.locals.user !== null,
+        hasCacheControl: response.headers.has('Cache-Control'),
+        hasContentSecurityPolicy: response.headers.has('Content-Security-Policy'),
+    });
+    for (const [name, value] of Object.entries(headers)) response.headers.set(name, value);
     return response;
 });

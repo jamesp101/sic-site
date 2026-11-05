@@ -3,8 +3,8 @@ import { z } from 'astro/zod';
 import { actorOf, flash, guarded } from '@/lib/server/action-guard';
 import { db } from '@/lib/server/db';
 import { departmentIdField, loadScoped, resolveWriteDepartment } from '@/lib/server/department-access';
-import { DEFAULT_DIRECTORY } from '@/lib/post-filters';
 import { acceptDownloadFile, downloadFile } from '@/lib/server/download-intake';
+import { DEFAULT_DIRECTORY, encodeTags } from '@/lib/server/downloads';
 import { commitWithFiles, deleteWithFiles } from '@/lib/server/stored-files';
 
 export const downloads = {
@@ -25,11 +25,6 @@ export const downloads = {
                 const actor = actorOf(context);
                 const departmentId = await resolveWriteDepartment(actor, input.departmentId);
 
-                const tags = (input.tags ?? '')
-                    .split(',')
-                    .map((tag) => tag.trim())
-                    .filter(Boolean);
-
                 const { key, size } = await acceptDownloadFile(actor.id, input);
                 const download = await commitWithFiles({
                     adopted: [key],
@@ -39,7 +34,7 @@ export const downloads = {
                                 fileName: input.fileName,
                                 filePath: key,
                                 fileSize: size,
-                                tags: JSON.stringify(tags),
+                                tags: encodeTags(input.tags),
                                 directory: input.directoryName || DEFAULT_DIRECTORY,
                                 departmentId,
                                 userId: actor.id,

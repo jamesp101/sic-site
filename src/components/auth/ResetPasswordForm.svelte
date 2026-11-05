@@ -2,6 +2,7 @@
   import PasswordInput from '@/components/PasswordInput.svelte';
   import { Button } from '@/components/ui/button';
   import { authClient } from '@/lib/auth-client';
+  import { MIN_PASSWORD_LENGTH, passwordTooShort } from '@/lib/password-policy';
   import Field from './Field.svelte';
   import Notice from './Notice.svelte';
 
@@ -17,7 +18,7 @@
     event.preventDefault();
     error = '';
     errors = {};
-    if (password.length < 8) errors.password = 'Password must be at least 8 characters.';
+    if (password.length < MIN_PASSWORD_LENGTH) errors.password = passwordTooShort();
     if (confirmation !== password) errors.confirmation = 'The password confirmation does not match.';
     if (errors.password || errors.confirmation) return;
 
@@ -42,7 +43,7 @@
 
   <Field id="password" label="New password" error={errors.password}>
     {#snippet children(props)}
-      <PasswordInput {...props} name="password" required minlength={8} autocomplete="new-password" placeholder="New password" bind:value={password} />
+      <PasswordInput {...props} name="password" required minlength={MIN_PASSWORD_LENGTH} autocomplete="new-password" placeholder="New password" bind:value={password} />
     {/snippet}
   </Field>
 

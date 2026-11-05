@@ -5,12 +5,10 @@ import Pagination from '@/components/site/Pagination.astro';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { adminPage } from '@/lib/server/admin-page';
 import { runList, sortBy } from '@/lib/server/admin-list';
-import { departmentWhere } from '@/lib/server/admin-scope';
 import { isSuperAdmin } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
 import { departmentOptions } from '@/lib/server/department-access';
-import { extensionOf, fileKind } from '@/lib/files';
-import { publicUrl } from '@/lib/server/storage';
+import { directoryWhere, getAdminFolders, toAdminDownload } from '@/lib/server/downloads';
 import type { Prisma } from '@/generated/prisma/client';
 
 const access = await adminPage(Astro.locals.user);
@@ -18,23 +16,6 @@ if (access instanceof Response) return access;
 const { actor } = access;
 const superadmin = isSuperAdmin(actor);
 const scope = Astro.locals.adminScope;
-
-/** Folder filter value for files without a folder. */
-const UNCATEGORIZED = 'Uncategorized';
-
-function parseTags(raw: string | null): string[] {
-    if (!raw) return [];
-    try {
-        const parsed: unknown = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed.map((t) => String(t).trim()).filter(Boolean);
-    } catch {
-        // legacy comma-separated value
-    }
-    return raw
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean);
-}
 
 const folder = Astro.url.searchParams.get('folder') ?? '';
 
@@ -57,63 +38,21 @@ const list = await runList<
         search: ['fileName', 'directory', 'tags'],
         perPage: 24,
     },
-    filters: [folder && { directory: folder === UNCATEGORIZED ? null : folder }],
+    filters: [folder && directoryWhere(folder)],
     count: (where) => db.download.count({ where }),
     fetch: (args) => db.download.findMany({ ...args, include: { department: { select: { name: true } } } }),
 });
 
-const [groups, departments, directories] = await Promise.all([
-    // Folder counts and the stored total cover the whole scope, not just the page or the search.
-    db.download.groupBy({
-        by: ['directory'],
-        where: departmentWhere(actor, scope),
-        _count: { _all: true },
-        _sum: { fileSize: true },
-    }),
+const [{ totalFiles, totalBytes, folders }, departments] = await Promise.all([
+    getAdminFolders(actor, scope, (name) => list.href({ folder: name })),
     departmentOptions(actor),
-    // General folders (no department) are shared, so a department scope still lists them.
-    db.downloadDirectory.findMany({
-        where: departmentWhere(actor, scope, { includeGeneral: true }),
-        orderBy: { name: 'asc' },
-    }),
 ]);
 
-const downloads = list.rows.map((row) => {
-    const extension = extensionOf(row.filePath);
-    return {
-        id: row.id,
-        fileName: row.fileName,
-        url: publicUrl(row.filePath) ?? '',
-        size: row.fileSize,
-        extension,
-        kind: fileKind(extension),
-        directory: row.directory,
-        tags: parseTags(row.tags),
-        departmentId: row.departmentId,
-        departmentName: row.department?.name ?? null,
-        createdAt: row.createdAt.toISOString(),
-    };
-});
-
-const folderMap = new Map<string, { name: string; count: number; id: number | null; canDelete: boolean }>();
-for (const d of directories) {
-    folderMap.set(d.name, {
-        name: d.name,
-        count: 0,
-        id: d.id,
-        canDelete: superadmin || d.departmentId === actor.departmentId,
-    });
-}
-for (const group of groups) {
-    const name = group.directory || UNCATEGORIZED;
-    const existing = folderMap.get(name) ?? { name, count: 0, id: null, canDelete: false };
-    folderMap.set(name, { ...existing, count: existing.count + group._count._all });
-}
-const folders = [...folderMap.values()].map((f) => ({ ...f, href: list.href({ folder: f.name }) }));
+const downloads = list.rows.map(toAdminDownload);
 
 const manager = {
-    totalFiles: groups.reduce((sum, g) => sum + g._count._all, 0),
-    totalBytes: groups.reduce((sum, g) => sum + (g._sum.fileSize ?? 0), 0),
+    totalFiles,
+    totalBytes,
     matching: list.total,
     q: list.q,
     folder,

@@ -62,7 +62,13 @@ export const posts = {
                 const slug = await resolveSlug(input);
 
                 const post = await commitWithFiles({
-                    files: { highlight: input.highlightImage && { prefix: 'posts', file: input.highlightImage } },
+                    files: {
+                        highlight: input.highlightImage && {
+                            prefix: 'posts',
+                            file: input.highlightImage,
+                            variant: true,
+                        },
+                    },
                     run: ({ highlight }) =>
                         db.post.create({
                             data: {
@@ -98,7 +104,13 @@ export const posts = {
                 const slug = await resolveSlug(input, post.id);
 
                 await commitWithFiles({
-                    files: { highlight: input.highlightImage && { prefix: 'posts', file: input.highlightImage } },
+                    files: {
+                        highlight: input.highlightImage && {
+                            prefix: 'posts',
+                            file: input.highlightImage,
+                            variant: true,
+                        },
+                    },
                     run: ({ highlight }) =>
                         db.post.update({
                             where: { id: post.id },

@@ -1,14 +1,11 @@
 import { expect, test as setup } from '@playwright/test';
+import { DEMO_USERS, seedPassword } from '../prisma/demo-data';
 import { ADMIN, CIT } from './auth-state';
 
 // Sign in once per role and reuse the cookies: sign-in is rate limited to 5/min per IP.
 const USERS = [
-    {
-        file: ADMIN,
-        email: 'admin@sic.edu.ph',
-        password: process.env.SEED_SUPERADMIN_PASSWORD ?? 'password',
-    },
-    { file: CIT, email: 'cit@sic.edu.ph', password: process.env.SEED_DEPARTMENT_PASSWORD ?? 'password' },
+    { file: ADMIN, email: DEMO_USERS.superAdmin.email, password: seedPassword('SEED_SUPERADMIN_PASSWORD') },
+    { file: CIT, email: DEMO_USERS.cit.email, password: seedPassword('SEED_DEPARTMENT_PASSWORD') },
 ];
 
 for (const user of USERS) {

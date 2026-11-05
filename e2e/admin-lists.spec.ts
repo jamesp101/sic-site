@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { postAction } from './actions';
 import { ADMIN } from './auth-state';
 
 const RUN = `Paged ${Date.now().toString(36)}`;
@@ -14,19 +15,15 @@ test.describe.configure({ mode: 'serial' });
 test('admin posts list is paginated and deletes rows through the one shared dialog', async ({ page }) => {
     test.slow();
     await page.goto('/admin/posts');
-    const origin = new URL(page.url()).origin;
     const ids: number[] = [];
     try {
         // Sequential: concurrent creates would race for unique slugs.
         for (let n = 1; n <= TOTAL; n++) {
-            const created = await page.request.post('/_actions/posts.create', {
-                headers: { Origin: origin },
+            const created = await postAction<{ id: number }>(page, 'posts.create', {
                 multipart: { title: title(n), content: 'Paged body.', type: 'article', isFeatured: 'false' },
             });
-            expect(created.ok(), await created.text()).toBe(true);
-            // Action results are devalue-serialised: `{ id: 5 }` arrives as `[{"id":1},5]`.
-            const [root, ...values] = (await created.json()) as [{ id: number }, ...number[]];
-            ids.push(values[root.id - 1]);
+            expect(created.ok, created.text).toBe(true);
+            ids.push(created.data.id);
         }
 
         await page.goto(listUrl);
@@ -61,7 +58,7 @@ test('admin posts list is paginated and deletes rows through the one shared dial
         // Remove every post this test created, even after a failure, so other specs see the seeded list.
         // Posts already deleted above answer NOT_FOUND, which is fine here.
         for (const id of ids) {
-            await page.request.post('/_actions/posts.delete', { headers: { Origin: origin }, data: { id } });
+            await postAction(page, 'posts.delete', { json: { id } });
         }
     }
 });

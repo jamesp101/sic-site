@@ -1,29 +1,24 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
+import { DEMO_DEPARTMENTS, DEMO_HERO_SECTIONS, DEMO_POSTS } from '../prisma/demo-data';
+import { postAction } from './actions';
 import { ADMIN, CIT } from './auth-state';
+import { RUN, SEAL_BYTES, clickUntilVisible } from './support';
 
-const SEAL = path.resolve('public/sic-seal.png');
-const SEAL_BYTES = fs.readFileSync(SEAL);
-const RUN = Date.now().toString(36);
-const CIT_NAME = 'College of Information Technology';
-const CIT_POST = 'CIT Unveils New AI Research Laboratory';
-const CBA_POST = 'CBA Students Win National Entrepreneurship Award';
-const MAIN_POST = '74th Foundation Week Celebration';
-const MAIN_HERO = 'Welcome Introduction';
-const CIT_HERO = 'CIT Tech Spotlight';
-const CBA_HERO = 'CBA Commerce Highlight';
+const CIT_NAME = DEMO_DEPARTMENTS.cit.name;
+const CIT_POST = DEMO_POSTS.aiLab.title;
+const CBA_POST = DEMO_POSTS.entrepreneurshipAward.title;
+const MAIN_POST = DEMO_POSTS.foundationWeek.title;
+const MAIN_HERO = DEMO_HERO_SECTIONS.welcome.title;
+const CIT_HERO = DEMO_HERO_SECTIONS.cit.title;
+const CBA_HERO = DEMO_HERO_SECTIONS.cba.title;
 
 const switcher = (page: Page) => page.getByRole('button', { name: /^Department scope:/ });
 
 async function chooseScope(page: Page, option: string | RegExp) {
     await expect(switcher(page)).toBeVisible();
     // The island must be hydrated before the menu opens.
-    await expect(async () => {
-        await switcher(page).click({ timeout: 2000 });
-        await expect(page.getByRole('menuitemradio', { name: option })).toBeVisible({ timeout: 2000 });
-    }).toPass({ timeout: 15_000 });
+    await clickUntilVisible(switcher(page), page.getByRole('menuitemradio', { name: option }));
     await page.getByRole('menuitemradio', { name: option }).click();
 }
 
@@ -41,7 +36,6 @@ test.describe('admin scope (superadmin)', () => {
 
     test('seeds scoped downloads and slides', async ({ page }) => {
         await page.goto('/admin/posts');
-        const origin = new URL(page.url()).origin;
         const layer = (text: string) =>
             JSON.stringify({
                 v: 1,
@@ -73,18 +67,16 @@ test.describe('admin scope (superadmin)', () => {
             [`Scope Main ${RUN}`, null],
             [`Scope CIT ${RUN}`, citId!],
         ] as const) {
-            const download = await page.request.post('/_actions/downloads.create', {
-                headers: { Origin: origin },
+            const download = await postAction(page, 'downloads.create', {
                 multipart: {
                     fileName: `${name} file`,
                     file: { name: 'seal.png', mimeType: 'image/png', buffer: SEAL_BYTES },
                     ...(departmentId ? { departmentId } : {}),
                 },
             });
-            expect(download.ok()).toBe(true);
+            expect(download.ok, download.text).toBe(true);
 
-            const slide = await page.request.post('/_actions/carousels.create', {
-                headers: { Origin: origin },
+            const slide = await postAction(page, 'carousels.create', {
                 multipart: {
                     image: { name: 'seal.png', mimeType: 'image/png', buffer: SEAL_BYTES },
                     overlay: layer(`${name} slide`),
@@ -92,7 +84,7 @@ test.describe('admin scope (superadmin)', () => {
                     ...(departmentId ? { departmentId } : {}),
                 },
             });
-            expect(slide.ok(), await slide.text()).toBe(true);
+            expect(slide.ok, slide.text).toBe(true);
         }
     });
 

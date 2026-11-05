@@ -4,7 +4,7 @@ import FileKindBadge from './FileKindBadge.astro';
 import { btnPrimary } from './classes';
 import { formatDate, formatFileSize } from '@/lib/format';
 import { downloadsHref } from '@/lib/post-filters';
-import type { DownloadsPage } from '@/lib/server/queries';
+import type { DownloadsPage } from '@/lib/server/downloads';
 
 type Props = Pick<DownloadsPage, 'downloads' | 'groups' | 'folders' | 'selected' | 'allHref' | 'totalCount'>;
 
@@ -68,8 +68,7 @@ const folderLink =
         groups.map(({ name, files }, index) => (
             <section aria-labelledby={`folder-${index}`}>
                 <h2 id={`folder-${index}`} class="mb-4 text-2xl font-bold text-brand-800 dark:text-foreground">
-                    {name}{' '}
-                    <span class="font-sans text-base font-normal text-muted-foreground">({files.length})</span>
+                    {name} <span class="font-sans text-base font-normal text-muted-foreground">({files.length})</span>
                 </h2>
                 <ul class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {files.map((file) => (

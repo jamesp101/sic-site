@@ -61,10 +61,18 @@ const { rows: users, page, pageCount, pageHref } = list;
                 <table class="w-full border-collapse text-left text-sm">
                     <thead>
                         <tr class="border-b border-border bg-surface-alt">
-                            <SortableTh list={list} field="name">Name</SortableTh>
-                            <SortableTh list={list} field="email">Email</SortableTh>
-                            <SortableTh list={list} field="role">Role</SortableTh>
-                            <SortableTh list={list} field="department">Department</SortableTh>
+                            <SortableTh list={list} field="name">
+                                Name
+                            </SortableTh>
+                            <SortableTh list={list} field="email">
+                                Email
+                            </SortableTh>
+                            <SortableTh list={list} field="role">
+                                Role
+                            </SortableTh>
+                            <SortableTh list={list} field="department">
+                                Department
+                            </SortableTh>
                             <th scope="col" class={`${thClass} w-28 text-right`}>
                                 Actions
                             </th>

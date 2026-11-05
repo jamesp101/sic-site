@@ -2,8 +2,10 @@ import 'dotenv/config';
 import { waitUntil } from '@vercel/functions';
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
+import { MIN_PASSWORD_LENGTH } from '../password-policy';
 import { db, dbProvider } from './db';
 import { sendMail } from './mail';
+import { resetPasswordMessage, verifyEmailMessage } from './mail-messages';
 import { hashPassword, verifyPassword } from './password';
 
 export const CLIENT_IP_HEADER = 'x-sic-client-ip';
@@ -37,7 +39,7 @@ export const auth = betterAuth({
         // Users are created by a superadmin only.
         disableSignUp: true,
         requireEmailVerification: false,
-        minPasswordLength: 8,
+        minPasswordLength: MIN_PASSWORD_LENGTH,
         revokeSessionsOnPasswordReset: true,
         password: {
             hash: hashPassword,
@@ -45,22 +47,14 @@ export const auth = betterAuth({
         },
         sendResetPassword: async ({ user, url }) => {
             requireBaseUrl();
-            await sendMail({
-                to: user.email,
-                subject: 'Reset your San Isidro College password',
-                text: `Use this link to reset your password:\n\n${url}\n\nIf you did not request a reset, ignore this email.`,
-            });
+            await sendMail(resetPasswordMessage(user.email, url));
         },
     },
     emailVerification: {
         sendOnSignUp: false,
         sendVerificationEmail: async ({ user, url }) => {
             requireBaseUrl();
-            await sendMail({
-                to: user.email,
-                subject: 'Verify your email address',
-                text: `Verify your email:\n\n${url}`,
-            });
+            await sendMail(verifyEmailMessage(user.email, url));
         },
     },
     user: {
@@ -69,7 +63,7 @@ export const auth = betterAuth({
             departmentId: { type: 'number', required: false, input: false },
         },
         // No changeEmail/deleteUser endpoints: email changes and account deletion go through
-        // actions/account.ts, which require the current password and keep the last superadmin.
+        // actions/account.ts, which require the current password and keep the last superadmin (user-rules.ts).
     },
     session: {
         // Fresh window for sensitive actions (password confirmation parity with Fortify: 3 h).

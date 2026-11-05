@@ -1,14 +1,15 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
+import { DEMO_DEPARTMENTS, DEMO_DOWNLOAD_NAV_CHILDREN } from '../prisma/demo-data';
+import { postAction } from './actions';
 import { ADMIN, CIT } from './auth-state';
-const RUN = Date.now().toString(36);
+import { RUN, islandHydrated, visitorPage } from './support';
+
 const LABEL = `Zeta ${RUN}`;
 const CHILD = `Eta ${RUN}`;
 
-/** Resolves once the editor island has hydrated (Astro removes `ssr` from the island element). */
-const hydrated = (page: Page) =>
-    page.waitForFunction(() => !!document.querySelector('astro-island[component-url*="NavLinksEditor"]:not([ssr])'));
+const hydrated = (page: Page) => islandHydrated(page, 'NavLinksEditor');
 
 async function gotoEditor(page: Page) {
     await page.goto('/admin/navlinks');
@@ -43,14 +44,13 @@ const handle = (page: Page, label: string) => page.getByRole('button', { name: n
 
 /** Top-level header labels as server-rendered HTML shows them (no JavaScript). */
 async function publicHeader(browser: Browser) {
-    const context = await browser.newContext({ javaScriptEnabled: false });
-    const page = await context.newPage();
+    const page = await visitorPage(browser);
     await page.goto('/');
     const labels = await page
         .locator('#primary-menu > li > a, #primary-menu > li > button')
         .evaluateAll((els) => els.map((el) => el.textContent?.trim() ?? ''));
     const nested = await page.locator('#primary-menu li li a').allTextContents();
-    await context.close();
+    await page.context().close();
     return { labels, nested };
 }
 
@@ -127,7 +127,7 @@ test.describe('as superadmin', () => {
                 .getByTestId('nav-preview')
                 .getByRole('button', { name: /^Departments/ })
                 .click();
-            await expect(page.getByRole('button', { name: 'College of Education' })).toBeVisible();
+            await expect(page.getByRole('button', { name: DEMO_DEPARTMENTS.coe.name })).toBeVisible();
             await scan('preview dropdown open');
             await page.keyboard.press('Escape');
             await page.getByRole('button', { name: 'More actions for Home' }).click();
@@ -150,9 +150,9 @@ test.describe('as superadmin', () => {
         await expect(departments).toHaveAttribute('aria-expanded', 'true');
         const panel = page.locator(`#${await departments.getAttribute('aria-controls')}`);
         await expect(panel.getByRole('button')).toContainText([
-            'College of Business Administration',
-            'College of Education',
-            'College of Information Technology',
+            DEMO_DEPARTMENTS.cba.name,
+            DEMO_DEPARTMENTS.coe.name,
+            DEMO_DEPARTMENTS.cit.name,
         ]);
         await page.keyboard.press('Escape');
         await expect(departments).toBeFocused();
@@ -168,12 +168,12 @@ test.describe('as superadmin', () => {
         await downloads.focus();
         await expect(
             page.locator(`#${await downloads.getAttribute('aria-controls')}`).getByRole('button'),
-        ).toContainText(['Student Handbook', 'Academic Calendars']);
+        ).toContainText([...DEMO_DOWNLOAD_NAV_CHILDREN]);
         await page
             .locator(`#${await downloads.getAttribute('aria-controls')}`)
-            .getByRole('button', { name: 'Student Handbook' })
+            .getByRole('button', { name: DEMO_DOWNLOAD_NAV_CHILDREN[0] })
             .click();
-        await expect(page.locator('[data-testid="nav-child"]', { hasText: 'Student Handbook' })).toHaveClass(
+        await expect(page.locator('[data-testid="nav-child"]', { hasText: DEMO_DOWNLOAD_NAV_CHILDREN[0] })).toHaveClass(
             /border-brand-600/,
         );
         await preview.getByRole('button', { name: 'Home', exact: true }).click();
@@ -213,16 +213,16 @@ test.describe('as superadmin', () => {
         await expect(list.getByRole('option').first()).toHaveAttribute('aria-selected', 'true');
         await expect(url).toHaveAttribute('aria-activedescendant', /-option-0$/);
         await page.keyboard.press('Enter');
-        await expect(url).toHaveValue('/departments/cba');
-        await expect(form.getByLabel('Label')).toHaveValue('College of Business Administration');
+        await expect(url).toHaveValue(`/departments/${DEMO_DEPARTMENTS.cba.slug}`);
+        await expect(form.getByLabel('Label')).toHaveValue(DEMO_DEPARTMENTS.cba.name);
         await expect(form.getByTestId('nav-kind')).toHaveText('Department');
         await expect(list).toBeHidden();
 
         // A label typed first is kept; picking with the mouse works too.
         await form.getByLabel('Label').fill(`Pick ${RUN}`);
-        await url.fill('coe');
-        await list.getByRole('option', { name: /College of Education/ }).click();
-        await expect(url).toHaveValue('/departments/coe');
+        await url.fill(DEMO_DEPARTMENTS.coe.slug);
+        await list.getByRole('option', { name: DEMO_DEPARTMENTS.coe.name }).click();
+        await expect(url).toHaveValue(`/departments/${DEMO_DEPARTMENTS.coe.slug}`);
         await expect(form.getByLabel('Label')).toHaveValue(`Pick ${RUN}`);
 
         await form.getByRole('button', { name: 'Add link', exact: true }).click();
@@ -479,9 +479,9 @@ test.describe('as department user', () => {
 
     test('cannot open or call the navigation editor', async ({ page }) => {
         expect((await page.goto('/admin/navlinks'))?.status()).toBe(403);
-        const response = await page.request.post('/_actions/navlinks.reorder', {
-            data: { items: [{ id: 1, parentId: null, order: 1 }] },
+        const response = await postAction(page, 'navlinks.reorder', {
+            json: { items: [{ id: 1, parentId: null, order: 1 }] },
         });
-        expect(response.status()).toBe(403);
+        expect(response.status).toBe(403);
     });
 });

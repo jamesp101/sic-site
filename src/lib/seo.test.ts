@@ -20,6 +20,7 @@ const post = (over: Partial<PostDetail> = {}): PostDetail => ({
     type: 'article',
     excerpt: 'A day to remember.',
     imageUrl: '/storage/a.webp',
+    imageSmallUrl: null,
     startDate: null,
     endDate: null,
     isFeatured: false,

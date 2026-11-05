@@ -91,6 +91,33 @@ export async function encodeWebp(
     return { blob, width, height, resized: width !== source.width || height !== source.height };
 }
 
+/** Canvas the cropper renders a selection into; can be re-encoded as WebP or JPEG. */
+export type CropCanvas = CanvasImageSource & Pick<HTMLCanvasElement, 'width' | 'height' | 'toBlob'>;
+
+export interface EncodedCrop {
+    blob: Blob;
+    type: 'image/webp' | 'image/jpeg';
+    extension: 'webp' | 'jpg';
+}
+
+/**
+ * Encodes a cropped canvas as WebP at the target quality; when the browser cannot encode WebP,
+ * falls back to JPEG at the same size. `webp` is injectable for tests.
+ */
+export async function encodeCrop(
+    canvas: CropCanvas,
+    target: ImageTarget,
+    webp: typeof encodeWebp = encodeWebp,
+): Promise<EncodedCrop> {
+    const encoded = await webp(canvas, target);
+    if (encoded) return { blob: encoded.blob, type: 'image/webp', extension: 'webp' };
+    const { promise, resolve } = Promise.withResolvers<Blob | null>();
+    canvas.toBlob(resolve, 'image/jpeg', target.quality);
+    const blob = await promise;
+    if (!blob) throw new Error('Failed to encode the cropped image');
+    return { blob, type: 'image/jpeg', extension: 'jpg' };
+}
+
 /** Compresses an uploaded file to WebP for `target`; returns the original file when the browser cannot. */
 export async function compressImage(file: File, targetName: ImageTargetName): Promise<File> {
     if (!file.type.startsWith('image/') || PASS_THROUGH.has(file.type)) return file;

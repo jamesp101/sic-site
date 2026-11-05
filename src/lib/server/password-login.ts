@@ -37,10 +37,15 @@ export async function setPasswordLogin(
             data: { userId, providerId: 'credential', accountId: String(userId), password: hash },
         });
     }
-    if (options.endSessions) {
-        const except = options.endSessions.except ?? null;
-        await client.session.deleteMany({ where: { userId, ...(except === null ? {} : { NOT: { id: except } }) } });
-    }
+    if (options.endSessions) await endSessions(client, userId, options.endSessions.except);
+}
+
+/**
+ * Ends the user's sessions in one write: all of them, or all but `except` (the session the caller is
+ * using). The one place that does it; also used when a changed email address must sign out other devices.
+ */
+export async function endSessions(client: Client, userId: number, except?: number | null): Promise<void> {
+    await client.session.deleteMany({ where: { userId, ...(except == null ? {} : { NOT: { id: except } }) } });
 }
 
 /** The stored hash of the user's password login: the credential Account's, else the legacy `users.password`. */

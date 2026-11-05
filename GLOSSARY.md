@@ -29,7 +29,7 @@ The email-and-password way a User signs in, kept as one stored password hash. Ch
 _Avoid_: credentials, credential account, login
 
 **Superadmin**:
-A User who can work on the Main site and on every Department.
+A User who can work on the Main site and on every Department. There is always at least one: the last Superadmin cannot be deleted or changed to a Department user.
 _Avoid_: admin, owner
 
 **Department user**:
@@ -74,6 +74,10 @@ _Avoid_: pinned, highlighted
 The lead image of a Post.
 _Avoid_: cover, thumbnail, banner
 
+**Image variant**:
+The smaller copy (640 px WebP) of a Highlight image, stored next to the original and used by Post cards.
+_Avoid_: thumbnail, resized image
+
 **Rich content**:
 Formatted body text for a Post, a Hero section or the Welcome hero. It is either a Block document or Legacy Markdown.
 _Avoid_: body, HTML, markup
@@ -99,7 +103,7 @@ Rich content written in Markdown before Block documents existed.
 _Avoid_: old content, plain content
 
 **Excerpt**:
-A short plain-text summary of a Post, taken from its Rich content.
+A short plain-text summary of a Post, taken from its stored plain text (the `searchText` kept in step with its Rich content), never from parsing the content.
 _Avoid_: preview, snippet, teaser
 
 **Welcome hero**:

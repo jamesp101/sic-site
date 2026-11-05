@@ -3,7 +3,7 @@ import path from 'node:path';
 import { FILE_TYPES } from '@/lib/server/file-types';
 import { RangeNotSatisfiableError } from '@/lib/server/storage/errors';
 import { parseRangeHeader } from '@/lib/server/storage/range';
-import { directBaseUrl, publicUrl, read } from '@/lib/server/storage';
+import { directBaseUrl, publicUrl, read, servedKey } from '@/lib/server/storage';
 
 export const prerender = false;
 
@@ -17,13 +17,16 @@ const INLINE = /^(image\/(jpeg|png|webp|gif|avif|svg\+xml)|video\/(mp4|webm)|app
  * A single `Range: bytes=…` request gets a 206 slice (video seeking), an unsatisfiable one a 416.
  */
 export const GET: APIRoute = async ({ params, url, request, redirect }) => {
-    const key = params.path ?? '';
+    const requested = params.path ?? '';
+    // A missing image variant is answered with its original (and a short cache time, so the variant is picked up once it exists).
+    const key = await servedKey(requested);
+    const fallback = key !== requested;
     const name = url.searchParams.get('download');
     const ext = path.extname(key).toLowerCase();
 
     if (directBaseUrl && name === null && Object.hasOwn(FILE_TYPES, ext)) {
         const target = publicUrl(key);
-        if (target) return redirect(target, 301);
+        if (target) return redirect(target, fallback ? 302 : 301);
     }
 
     let file;
@@ -42,7 +45,7 @@ export const GET: APIRoute = async ({ params, url, request, redirect }) => {
     const type = ext === '.svg' ? 'image/svg+xml' : (FILE_TYPES[ext] ?? 'application/octet-stream');
     const headers = new Headers({
         'Content-Type': type.startsWith('text/') ? `${type}; charset=utf-8` : type,
-        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Cache-Control': fallback ? 'public, max-age=300' : 'public, max-age=31536000, immutable',
         'Accept-Ranges': 'bytes',
         'X-Content-Type-Options': 'nosniff',
     });

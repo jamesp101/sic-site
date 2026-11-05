@@ -19,7 +19,7 @@
     size: number;
     extension: string;
     kind: FileKind;
-    directory: string | null;
+    directory: string;
     tags: string[];
     departmentId: number | null;
     departmentName: string | null;
@@ -238,7 +238,7 @@
             </div>
             <div class="my-3 space-y-2 border-t border-border pt-2">
               <div class="flex items-center justify-between text-xs">
-                {#if d.directory}<span class={chip}><Folder class="h-3 w-3 text-gold-500" aria-hidden="true" /> {d.directory}</span>{:else}<span class="text-xs text-muted-foreground italic">Root</span>{/if}
+                <span class={chip}><Folder class="h-3 w-3 text-gold-500" aria-hidden="true" /> {d.directory}</span>
                 <span class="max-w-[120px] truncate text-xs font-semibold text-link">{d.departmentName ?? 'General'}</span>
               </div>
               {#if d.tags.length > 0}
@@ -282,7 +282,7 @@
                     </div>
                   </div>
                 </td>
-                <td class="px-6 py-3.5 text-xs font-semibold">{d.directory ?? 'Root'}</td>
+                <td class="px-6 py-3.5 text-xs font-semibold">{d.directory}</td>
                 <td class="px-6 py-3.5 text-xs font-semibold text-link">{d.departmentName ?? 'General'}</td>
                 <td class="px-6 py-3.5 font-mono text-xs">{formatFileSize(d.size)}</td>
                 <td class="px-6 py-3.5 text-xs text-muted-foreground">{formatDate(d.createdAt)}</td>
@@ -359,7 +359,7 @@
           </div>
         </div>
         <dl class="space-y-3 text-xs">
-          <div class="flex justify-between border-b border-border py-2"><dt class="text-muted-foreground">Folder</dt><dd class="font-semibold">{d.directory ?? 'Root / General'}</dd></div>
+          <div class="flex justify-between border-b border-border py-2"><dt class="text-muted-foreground">Folder</dt><dd class="font-semibold">{d.directory}</dd></div>
           <div class="flex justify-between border-b border-border py-2"><dt class="text-muted-foreground">Department</dt><dd class="font-semibold text-link">{d.departmentName ?? 'General public'}</dd></div>
           <div class="flex justify-between border-b border-border py-2"><dt class="text-muted-foreground">Uploaded</dt><dd class="font-mono">{formatDate(d.createdAt, true)}</dd></div>
           {#if d.tags.length > 0}

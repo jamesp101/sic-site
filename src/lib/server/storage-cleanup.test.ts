@@ -149,4 +149,36 @@ describe('cleanupStorage', () => {
         expect(report.keys).toContain(key);
         expect(exists(key)).toBe(true);
     });
+
+    it('keeps a variant while its original is referenced, deletes both together, and deletes a variant without original', async () => {
+        file('posts/hl.webp', 48);
+        file('posts/hl.w640.webp', 48);
+        file('posts/gone.webp', 48);
+        file('posts/gone.w640.webp', 48);
+        file('posts/solo.w640.webp', 48);
+        const user = await db.user.findFirstOrThrow();
+        await db.post.create({
+            data: {
+                title: 'H',
+                type: 'article',
+                userId: user.id,
+                slug: 'hl',
+                content: 'x',
+                highlightImagePath: 'posts/hl.webp',
+            },
+        });
+
+        const dry = await cleanupStorage(deps(), { dryRun: true });
+        expect(dry.keys).toContain('posts/gone.webp');
+        expect(dry.keys).toContain('posts/solo.w640.webp');
+        expect(dry.keys).not.toContain('posts/hl.webp');
+        expect(dry.keys).not.toContain('posts/hl.w640.webp');
+        expect(dry.keys).not.toContain('posts/gone.w640.webp');
+
+        await cleanupStorage(deps());
+        for (const key of ['posts/hl.webp', 'posts/hl.w640.webp']) expect(exists(key)).toBe(true);
+        for (const key of ['posts/gone.webp', 'posts/gone.w640.webp', 'posts/solo.w640.webp']) {
+            expect(exists(key)).toBe(false);
+        }
+    });
 });

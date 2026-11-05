@@ -16,6 +16,8 @@ Requires [devenv](https://devenv.sh) (Nix). Everything else (Node 24, pnpm, Mari
 
 Site: <http://localhost:4321>. Seeded logins: `admin@sic.edu.ph` (superadmin), `cit@sic.edu.ph`, `cba@sic.edu.ph` (department users); passwords come from `SEED_SUPERADMIN_PASSWORD` / `SEED_DEPARTMENT_PASSWORD` in `.env` (created from `.env.example`).
 
+`devenv up` refuses to start when port 3306 is already taken (`strict_ports: true` in `devenv.yaml`), for example by a system MariaDB/MySQL or another project's `devenv up`. Stop whatever holds the port (`ss -ltnp 'sport = :3306'` shows it) and run `devenv up` again. Do not edit the port: `.env.example` and the e2e databases expect 3306.
+
 ## Daily commands (inside `devenv shell`)
 
 | Task                                                                                                           | Command                                                   |
@@ -31,6 +33,7 @@ Site: <http://localhost:4321>. Seeded logins: `admin@sic.edu.ph` (superadmin), `
 | Apply migrations / seed / reset                                                                                | `vp run db:deploy` / `vp run db:seed` / `vp run db:reset` |
 | Sample schools: 5 departments, 20 posts and 7–15 members each (recreate: `tsx prisma/seed-schools.ts --reset`) | `vp run db:seed:schools`                                  |
 | Recompute post / hero-section search text (once after `db:deploy` added `search_text`)                         | `vp run db:backfill-search`                               |
+| Create the 640 px card variants of existing Highlight images (once after deploying variants; safe to repeat)   | `vp run storage:variants`                                 |
 | Copy an SQLite database into the empty, migrated `DATABASE_URL` database (default source `storage/dev.db`)     | `vp run db:copy` (`-- --from file:./other.db`)            |
 | Create or reset a superadmin                                                                                   | `ADMIN_EMAIL=… ADMIN_NAME=… vp run db:create-admin`       |
 | Prisma Studio                                                                                                  | `vp run db:studio`                                        |
@@ -41,6 +44,7 @@ Site: <http://localhost:4321>. Seeded logins: `admin@sic.edu.ph` (superadmin), `
 
 - Edit `prisma/schema.base.prisma` only. `scripts/prisma-schema.mjs` renders the gitignored `prisma/schema.prisma` with the provider taken from `DATABASE_URL` (`file:` → sqlite, `mysql://`/`mariadb://` → mysql, `postgres(ql)://` → postgresql) and runs on install and every `db:*` task.
 - Runtime picks the matching driver adapter (`src/lib/server/db.ts`): better-sqlite3, mariadb or pg.
+- MariaDB/MySQL connection pool: `connectionLimit` defaults to 5 per process (`MYSQL_POOL_SIZE` in `src/lib/server/db.ts`); override it with `DATABASE_POOL_SIZE=<n>` or `?connectionLimit=<n>` in `DATABASE_URL`. Measured on the dev data (production build, 10 concurrent requests, all 14 benchmark routes, a CPU-contended machine): mean p95 was 212 ms with 5 connections, 273 ms with 10 and 425 ms with 20, so a larger pool only adds contention here. Keep `instances × pool size` below the server's `max_connections` (151 by default on MariaDB); on serverless every function instance has its own pool, so use 1–3 or a pooling proxy.
 - Migrations are provider-specific: `prisma/migrations/<provider>/` (sqlite, mysql, postgresql); a schema change gets a migration in each.
 - MySQL column types: `{{longtext}}` columns are LONGTEXT, `{{text}}` columns (URLs, user agents, tokens) TEXT, every other String VARCHAR(255). The `search_text` columns use a literal `DEFAULT ''` on LONGTEXT, which MariaDB (10.2+, devenv runs 11.4) accepts and Oracle MySQL 8 rejects: use MariaDB.
 - Dev runs on the MariaDB from `devenv up` (`mysql://sic:sic@127.0.0.1:3306/sic`, data in `.devenv/state/mysql`). To bring an existing SQLite dev database across: `devenv up` (or `devenv up mysql`), `vp run db:deploy`, then `vp run db:copy` (refuses a target that already has rows; uploads stay where they are). Back to SQLite: set `DATABASE_URL="file:./storage/dev.db"` and run `vp run db:schema`.
@@ -69,6 +73,8 @@ Posts, hero sections and the landing page setting (`welcome_hero_content`) are e
 | `s3`              | `S3_BUCKET` on AWS S3 or any S3-compatible service (`S3_ENDPOINT`, `S3_FORCE_PATH_STYLE=true` for self-hosted ones such as Garage/SeaweedFS) | `/storage/<key>` streamed from the bucket; with `S3_PUBLIC_URL` set, `<S3_PUBLIC_URL>/<key>` directly and `/storage/<key>` 301-redirects there |
 
 Legacy Laravel `/storage/...` links keep working with every driver. `?download=<name>` always streams through the app so the attachment name applies. Switching drivers does not move existing files: copy `UPLOAD_DIR` into the bucket under `S3_PREFIX` with the same keys (e.g. `aws s3 sync storage/uploads s3://<bucket>/<prefix>`).
+
+Highlight images have a second, 640 px wide WebP next to the original under `<key without extension>.w640.webp` (e.g. `posts/abc.webp` → `posts/abc.w640.webp`). Post cards use it in a `srcset`; it is written in the same `commitWithFiles` commit as the original, removed when the original is replaced or deleted, and kept or deleted together with it by `storage:cleanup`. A variant that does not exist yet (images uploaded before variants) is not an error: `/storage/<variant>` serves the original instead. After deploying, run `vp run storage:variants` once to create the missing variants of existing images (safe to repeat). The variant URL always goes through the app route, also with `S3_PUBLIC_URL`, so the fallback keeps working; the route then redirects to the bucket.
 
 Uploads are only stored and served as the types in `src/lib/server/file-types.ts` (raster images, PDF, text/CSV, Office documents, ZIP, MP4/WebM video): `put` derives extension and content type from that list, never from the browser's declared type, and the storage route sets the type from the extension with a sandboxing CSP (PDFs excepted) and sends anything else as an `application/octet-stream` attachment. Videos are accepted only by the video upload below: image uploads keep their own image-type list and Downloads refuse videos. Uploads not yet attached to a record (inline images, layer images, presigned URLs, videos) are rate-limited per user. `/storage/*` honours `Range: bytes=…` (206 with `Content-Range`, 416 when unsatisfiable, `Accept-Ranges: bytes` on every response) for both drivers, so videos can seek; with `S3_PUBLIC_URL` the bucket or CDN answers ranges itself.
 

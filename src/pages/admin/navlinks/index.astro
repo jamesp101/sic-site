@@ -3,8 +3,9 @@ import AppLayout from '@/layouts/AppLayout.astro';
 import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import NavLinksEditor from '@/components/admin/navlinks/NavLinksEditor.svelte';
 import { db } from '@/lib/server/db';
+import { getNavDepartments } from '@/lib/server/queries';
 import { adminPage } from '@/lib/server/admin-page';
-import { PAGE_SUGGESTIONS, type LinkSuggestion, type NavNode } from '@/lib/nav-tree';
+import { PAGE_SUGGESTIONS, postSlugsLinked, type LinkSuggestion, type NavNode } from '@/lib/nav-tree';
 import { DEPARTMENTS_MENU_URL, STATIC_PATHS, departmentHref } from '@/lib/site-nav';
 
 const page = await adminPage(Astro.locals.user, { superAdmin: true });
@@ -26,9 +27,17 @@ const links: NavNode[] = all
         children: all.filter((child) => child.parentId === top.id).map(toNode),
     }));
 
-const [departments, posts] = await Promise.all([
-    db.department.findMany({ orderBy: { name: 'asc' }, select: { name: true, slug: true } }),
-    db.post.findMany({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { title: true, slug: true } }),
+const linkedSlugs = postSlugsLinked(all.map((link) => link.url));
+const [departments, newestPosts, linkedPosts] = await Promise.all([
+    getNavDepartments(),
+    db.post.findMany({
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 30,
+        select: { title: true, slug: true },
+    }),
+    linkedSlugs.length > 0
+        ? db.post.findMany({ where: { slug: { in: linkedSlugs } }, select: { slug: true } })
+        : Promise.resolve([]),
 ]);
 
 // Suggestions for the link picker: pages, the auto departments menu, every department, the 30 newest posts.
@@ -36,12 +45,14 @@ const suggestions: LinkSuggestion[] = [
     ...PAGE_SUGGESTIONS,
     { group: 'Pages', label: 'Departments menu (auto)', url: DEPARTMENTS_MENU_URL },
     ...departments.map((d): LinkSuggestion => ({ group: 'Departments', label: d.name, url: departmentHref(d.slug) })),
-    ...posts.slice(0, 30).map((p): LinkSuggestion => ({ group: 'Posts', label: p.title, url: `/posts/${p.slug}` })),
+    ...newestPosts.map((p): LinkSuggestion => ({ group: 'Posts', label: p.title, url: `/posts/${p.slug}` })),
 ];
+// Paths the editor may treat as existing. Links only change through actions that reload this page, so the Posts
+// to check are exactly those the stored links point at; no other slug is sent to the client.
 const knownPaths = [
     ...STATIC_PATHS,
     ...departments.map((d) => departmentHref(d.slug)),
-    ...posts.map((p) => `/posts/${p.slug}`),
+    ...linkedPosts.map((p) => `/posts/${p.slug}`),
 ];
 ---
 

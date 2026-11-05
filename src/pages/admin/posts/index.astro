@@ -235,7 +235,9 @@ const columns = [
                                 </tr>
                             );
                         })}
-                        {posts.length === 0 && <EmptyRow colspan={columns.length + 2}>No posts match your filters.</EmptyRow>}
+                        {posts.length === 0 && (
+                            <EmptyRow colspan={columns.length + 2}>No posts match your filters.</EmptyRow>
+                        )}
                     </tbody>
                 </table>
             </div>

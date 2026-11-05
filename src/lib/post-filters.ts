@@ -7,9 +7,6 @@ import { POST_TYPES, type DownloadFilters, type PostFilters, type PostType } fro
 const SEARCH_MAX = 100;
 const DIRECTORY_MAX = 255;
 
-/** The Directory of a Download stored without one. */
-export const DEFAULT_DIRECTORY = 'General';
-
 /** A `department_id` value: a positive integer, otherwise no filter. */
 export function parseDepartmentId(value: string | null): number | undefined {
     const id = Number(value);

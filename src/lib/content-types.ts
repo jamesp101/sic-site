@@ -60,6 +60,8 @@ export interface PostSummary {
     /** Plain-text excerpt (markdown/MDX-lite stripped), ≤ 200 chars. */
     excerpt: string;
     imageUrl: string | null;
+    /** Smaller version of `imageUrl` for cards (640 px wide), when the image has one; the server falls back to the original if it is missing. */
+    imageSmallUrl: string | null;
     startDate: Date | null;
     endDate: Date | null;
     isFeatured: boolean;

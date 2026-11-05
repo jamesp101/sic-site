@@ -175,7 +175,9 @@ const columns = [
                                 </td>
                             </tr>
                         ))}
-                        {sections.length === 0 && <EmptyRow colspan={columns.length + 1}>No hero sections found.</EmptyRow>}
+                        {sections.length === 0 && (
+                            <EmptyRow colspan={columns.length + 1}>No hero sections found.</EmptyRow>
+                        )}
                     </tbody>
                 </table>
             </div>

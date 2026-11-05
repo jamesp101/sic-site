@@ -3,7 +3,10 @@ import path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
+import { AI_LAB_HEADING, AI_LAB_QUOTE, DEMO_POSTS } from '../prisma/demo-data';
+import { postAction } from './actions';
 import { ADMIN, CIT } from './auth-state';
+import { visitorPage } from './support';
 
 const canvas = (page: Page) => page.frameLocator('iframe[title="Visual canvas"]');
 const add = (page: Page, label: string) => page.getByRole('button', { name: `Add ${label}`, exact: true });
@@ -126,8 +129,7 @@ test.describe('visual block editor (superadmin)', () => {
         expect(href).toMatch(/^\/posts\//);
 
         // Public page: rendered on the server (JavaScript disabled), semantic HTML, one h1.
-        const context = await browser.newContext({ javaScriptEnabled: false });
-        const visitor = await context.newPage();
+        const visitor = await visitorPage(browser);
         await visitor.goto(href!);
         await expect(visitor.locator('h1')).toHaveCount(1);
         await expect(visitor.getByRole('heading', { level: 2, name: headline })).toBeVisible();
@@ -147,7 +149,7 @@ test.describe('visual block editor (superadmin)', () => {
         });
         expect(buttonBeforeTable).toBe(true);
         expect(await visitor.content()).not.toContain('sic-blocks"');
-        await context.close();
+        await visitor.context().close();
     });
 
     test('builds a post with a 3-image album and opens its lightbox on the public page', async ({ page, browser }) => {
@@ -174,13 +176,12 @@ test.describe('visual block editor (superadmin)', () => {
         expect(href).toMatch(/^\/posts\//);
 
         // Without JavaScript the thumbnails are plain links to the full images.
-        const plain = await browser.newContext({ javaScriptEnabled: false });
-        const noScript = await plain.newPage();
+        const noScript = await visitorPage(browser);
         await noScript.goto(href!);
         const noScriptLinks = noScript.locator('[data-album] a[data-album-item]');
         await expect(noScriptLinks).toHaveCount(3);
         expect(await noScriptLinks.first().getAttribute('href')).toMatch(/^\/storage\/posts\/inline\/[0-9a-f]+\.webp$/);
-        await plain.close();
+        await noScript.context().close();
 
         const context = await browser.newContext();
         const visitor = await context.newPage();
@@ -231,22 +232,20 @@ test.describe('visual block editor (superadmin)', () => {
     test('opens an existing Markdown post as a legacy block and keeps it rendering unchanged', async ({ page }) => {
         const slug = 'cit-unveils-new-ai-research-laboratory';
         await page.goto(`/posts/${slug}`);
-        await expect(page.getByRole('heading', { level: 2, name: 'Leading the Future of AI' })).toBeVisible();
-        await expect(page.locator('blockquote')).toContainText(
-            'This laboratory provides our software engineering students',
-        );
+        await expect(page.getByRole('heading', { level: 2, name: AI_LAB_HEADING })).toBeVisible();
+        await expect(page.locator('blockquote')).toContainText(AI_LAB_QUOTE);
         await expect(page.locator('h1')).toHaveCount(1);
 
-        await page.goto('/admin/posts?q=CIT Unveils New AI Research Laboratory');
-        await page.getByRole('link', { name: 'Edit post CIT Unveils New AI Research Laboratory' }).click();
+        await page.goto(`/admin/posts?q=${DEMO_POSTS.aiLab.title}`);
+        await page.getByRole('link', { name: `Edit post ${DEMO_POSTS.aiLab.title}` }).click();
         await editorReady(page);
         await expect(page.getByText(/contains.*Markdown \(legacy\).*blocks/)).toBeVisible();
         await canvas(page).locator('[data-block-type="markdown"]').click();
-        await expect(page.getByLabel('Markdown source')).toHaveValue(/# Leading the Future of AI/);
+        await expect(page.getByLabel('Markdown source')).toHaveValue(new RegExp(`# ${AI_LAB_HEADING}`));
 
         // Converting keeps the content, as editable blocks.
         await page.getByRole('button', { name: 'Convert to blocks' }).first().click();
-        await expect(canvas(page).getByRole('heading', { level: 2, name: 'Leading the Future of AI' })).toBeVisible();
+        await expect(canvas(page).getByRole('heading', { level: 2, name: AI_LAB_HEADING })).toBeVisible();
         await expect(canvas(page).locator('blockquote')).toBeVisible();
         await expect(canvas(page).locator('[data-block-type="markdown"]')).toHaveCount(0);
         // Leave without saving: the seeded post stays Markdown for the other tests.
@@ -263,12 +262,11 @@ test.describe('visual block editor (superadmin)', () => {
         await page.getByRole('button', { name: 'Create section' }).click();
         await expect(page).toHaveURL(/\/admin\/hero-sections$/);
 
-        const context = await browser.newContext({ javaScriptEnabled: false });
-        const visitor = await context.newPage();
+        const visitor = await visitorPage(browser);
         await visitor.goto('/');
         await expect(visitor.getByRole('heading', { level: 2, name: headline })).toBeVisible();
         await expect(visitor.locator('h1')).toHaveCount(1);
-        await context.close();
+        await visitor.context().close();
     });
 
     test('landing settings save a block document that the home page renders', async ({ page, browser }) => {
@@ -283,43 +281,33 @@ test.describe('visual block editor (superadmin)', () => {
         await page.getByRole('button', { name: 'Save settings' }).click();
         await expect(page.getByText('Landing page settings updated successfully.')).toBeVisible();
 
-        const context = await browser.newContext({ javaScriptEnabled: false });
-        const visitor = await context.newPage();
+        const visitor = await visitorPage(browser);
         await visitor.goto('/');
         await expect(visitor.getByText(text)).toBeVisible();
         await expect(
             visitor.getByRole('heading', { level: 2, name: 'Welcome to San Isidro College' }).first(),
         ).toBeVisible();
         expect(await visitor.content()).not.toContain('sic-blocks"');
-        await context.close();
+        await visitor.context().close();
     });
 
     test('rejects an invalid block document on the server', async ({ page }) => {
         await page.goto('/admin/posts/create');
         await editorReady(page);
-        const result = await page.evaluate(async () => {
-            const response = await fetch('/_actions/posts.create', {
-                method: 'POST',
-                body: (() => {
-                    const form = new FormData();
-                    form.set('title', 'Bad doc');
-                    form.set('type', 'article');
-                    form.set('isFeatured', 'false');
-                    form.set(
-                        'content',
-                        JSON.stringify({
-                            type: 'sic-blocks',
-                            version: 1,
-                            blocks: [{ id: 'b1', type: 'image', props: { src: '/storage/x.png', alt: '' } }],
-                        }),
-                    );
-                    return form;
-                })(),
-            });
-            return { status: response.status, body: await response.text() };
+        const result = await postAction(page, 'posts.create', {
+            multipart: {
+                title: 'Bad doc',
+                type: 'article',
+                isFeatured: 'false',
+                content: JSON.stringify({
+                    type: 'sic-blocks',
+                    version: 1,
+                    blocks: [{ id: 'b1', type: 'image', props: { src: '/storage/x.png', alt: '' } }],
+                }),
+            },
         });
         expect(result.status).toBe(400);
-        expect(result.body).toMatch(/alt text/i);
+        expect(result.text).toMatch(/alt text/i);
     });
 });
 

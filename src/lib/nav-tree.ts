@@ -285,6 +285,18 @@ export function internalPath(url: string): string {
     return decoded.length > 1 ? decoded.replace(/\/+$/, '') || '/' : decoded;
 }
 
+/** Slugs of the Posts that internal `/posts/<slug>` URLs point at, once each. */
+export function postSlugsLinked(urls: Iterable<string>): string[] {
+    const slugs = new Set<string>();
+    for (const url of urls) {
+        const trimmed = url.trim();
+        if (!trimmed.startsWith('/') || trimmed.startsWith('//')) continue;
+        const match = /^\/posts\/([^/]+)$/.exec(internalPath(trimmed));
+        if (match) slugs.add(match[1]);
+    }
+    return [...slugs];
+}
+
 export type NavWarningKind = 'internal-missing' | 'duplicate';
 
 export interface NavWarning {

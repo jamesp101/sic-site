@@ -4,6 +4,7 @@ import {
     classifyUrl,
     internalPath,
     navWarnings,
+    postSlugsLinked,
     indent,
     moveDown,
     moveUp,
@@ -143,6 +144,23 @@ describe('classifyUrl', () => {
         expect(internalPath('/posts/?type=event#x')).toBe('/posts');
         expect(internalPath('/')).toBe('/');
         expect(internalPath('/?a=1')).toBe('/');
+    });
+});
+
+describe('postSlugsLinked', () => {
+    it('lists each linked Post slug once, ignoring query, hash, slashes and other URLs', () => {
+        expect(
+            postSlugsLinked([
+                '/posts/hello',
+                '/posts/hello/?x=1#y',
+                '/posts/other',
+                '/posts',
+                '/posts/a/b',
+                '//posts/evil',
+                'https://example.com/posts/ext',
+                '/departments/cba',
+            ]),
+        ).toEqual(['hello', 'other']);
     });
 });
 

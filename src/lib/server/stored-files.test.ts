@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 import { createStoredFiles, type FileStore } from './stored-files';
+import { variantKeyOf } from './storage/variants';
 
 /** In-memory storage: keys that exist, with switchable failures. */
 function fakeStore() {
     const keys = new Set<string>();
     let counter = 0;
-    const failing = { put: false, removeKeys: new Set<string>() };
+    const failing = { put: false, variant: false, removeKeys: new Set<string>() };
     const store: FileStore = {
         async put(prefix) {
             if (failing.put) throw new Error('put failed');
@@ -17,6 +18,12 @@ function fakeStore() {
             if (failing.removeKeys.has(key)) throw new Error(`remove failed: ${key}`);
             keys.delete(key);
         },
+        async putVariant(key) {
+            if (failing.variant) throw new Error('variant failed');
+            const variant = variantKeyOf(key);
+            if (variant) keys.add(variant);
+            return variant;
+        },
     };
     return { keys, failing, files: createStoredFiles(store) };
 }
@@ -25,6 +32,53 @@ const file = (name = 'a.webp') => new File(['x'], name, { type: 'image/webp' });
 
 afterEach(() => {
     vi.restoreAllMocks();
+});
+
+describe('image variants', () => {
+    it('stores the variant in the same commit and removes the old original with its variant', async () => {
+        const { keys, files } = fakeStore();
+        keys.add('posts/old.webp');
+        keys.add('posts/old.w640.webp');
+        await files.commitWithFiles({
+            files: { image: { prefix: 'posts', file: file(), variant: true } },
+            run: async ({ image }) => image,
+            stale: ['posts/old.webp'],
+        });
+        expect([...keys].sort()).toEqual(['posts/new-1.w640.webp', 'posts/new-1.webp']);
+    });
+
+    it('removes the original and its variant when the commit fails', async () => {
+        const { keys, files } = fakeStore();
+        await expect(
+            files.commitWithFiles({
+                files: { image: { prefix: 'posts', file: file(), variant: true } },
+                run: async () => {
+                    throw new Error('db down');
+                },
+            }),
+        ).rejects.toThrow('db down');
+        expect([...keys]).toEqual([]);
+    });
+
+    it('still commits when the variant cannot be made', async () => {
+        const { keys, failing, files } = fakeStore();
+        failing.variant = true;
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const key = await files.commitWithFiles({
+            files: { image: { prefix: 'posts', file: file(), variant: true } },
+            run: async ({ image }) => image,
+        });
+        expect(key).toBe('posts/new-1.webp');
+        expect([...keys]).toEqual(['posts/new-1.webp']);
+    });
+
+    it('removes the variant with an owned file', async () => {
+        const { keys, files } = fakeStore();
+        keys.add('posts/a.webp');
+        keys.add('posts/a.w640.webp');
+        await files.deleteWithFiles(async () => 1, ['posts/a.webp']);
+        expect([...keys]).toEqual([]);
+    });
 });
 
 describe('commitWithFiles', () => {

@@ -3,6 +3,20 @@ import type { SqlDriverAdapterFactory } from '@prisma/client/runtime/client';
 import { PrismaClient } from '@/generated/prisma/client';
 import { providerFromUrl } from '../../../prisma/provider.mjs';
 
+/**
+ * Connections per process in the MariaDB/MySQL pool. Overridden by `DATABASE_POOL_SIZE` or a `connectionLimit`
+ * query parameter in `DATABASE_URL`. Keep `instances × pool size` below the server's `max_connections`, and on
+ * serverless (one pool per function instance) use a small value such as 1-3 or a pooling proxy.
+ */
+const MYSQL_POOL_SIZE = 5;
+
+function mariadbUrl(url: string): string {
+    const base = url.replace(/^mysql:/, 'mariadb:');
+    if (/[?&]connectionLimit=/.test(base)) return base;
+    const size = Number.parseInt(process.env.DATABASE_POOL_SIZE ?? '', 10) || MYSQL_POOL_SIZE;
+    return `${base}${base.includes('?') ? '&' : '?'}connectionLimit=${size}`;
+}
+
 /** Driver adapter for the provider implied by DATABASE_URL; only the matching driver is loaded. */
 async function createAdapter(url: string): Promise<SqlDriverAdapterFactory> {
     switch (providerFromUrl(url)) {
@@ -12,7 +26,7 @@ async function createAdapter(url: string): Promise<SqlDriverAdapterFactory> {
         }
         case 'mysql': {
             const { PrismaMariaDb } = await import('@prisma/adapter-mariadb');
-            return new PrismaMariaDb(url.replace(/^mysql:/, 'mariadb:'));
+            return new PrismaMariaDb(mariadbUrl(url));
         }
         case 'postgresql': {
             const { PrismaPg } = await import('@prisma/adapter-pg');
