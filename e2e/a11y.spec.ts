@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { DEMO_DEPARTMENTS } from '../prisma/demo-data';
 import { postAction } from './actions';
 import { ADMIN } from './auth-state';
@@ -20,13 +20,20 @@ for (const scheme of ['light', 'dark'] as const) {
     }
 }
 
-test('skip link moves focus to main', async ({ page }) => {
-    await page.goto('/');
+/** After the skip link, the next Tab lands inside <main> (the browser moves its focus starting point there). */
+async function expectSkipLinkReachesMain(page: Page) {
     await page.keyboard.press('Tab');
-    const skip = page.locator('a[href="#main"]');
+    const skip = page.getByRole('link', { name: 'Skip to main content' });
     await expect(skip).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/#main$/);
+    await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => document.querySelector('main#main')!.contains(document.activeElement))).toBe(true);
+}
+
+test('skip link moves keyboard focus into main', async ({ page }) => {
+    await page.goto('/');
+    await expectSkipLinkReachesMain(page);
 });
 
 test('keyboard focus is never hidden under the sticky header (WCAG 2.4.11)', async ({ page }) => {
@@ -134,12 +141,8 @@ test.describe('printing accordions', () => {
 test.describe('admin', () => {
     test.use({ storageState: ADMIN });
 
-    test('skip link moves focus to the main landmark', async ({ page }) => {
+    test('skip link moves keyboard focus into main', async ({ page }) => {
         await page.goto('/admin/posts');
-        await page.keyboard.press('Tab');
-        const skip = page.getByRole('link', { name: 'Skip to main content' });
-        await expect(skip).toBeFocused();
-        await page.keyboard.press('Enter');
-        await expect(page.locator('main#main')).toBeFocused();
+        await expectSkipLinkReachesMain(page);
     });
 });

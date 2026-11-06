@@ -73,7 +73,7 @@ const ld = [
     </a>
     <SiteHeader {navLinks} {departments} />
     {breadcrumbs && breadcrumbs.length > 0 && <SiteBreadcrumbs crumbs={breadcrumbs} />}
-    <main id="main" tabindex="-1" class="flex-1 outline-none">
+    <main id="main" class="flex-1">
         <slot />
     </main>
     <SiteFooter {departments} />
