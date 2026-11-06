@@ -5,7 +5,7 @@ import ListPagination from '@/components/admin/shared/ListPagination.astro';
 import { widePageClass } from '@/components/admin/ui';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { adminPage } from '@/lib/server/admin-page';
-import { runList, sortBy } from '@/lib/server/admin-list';
+import { listFilter, runList, sortBy } from '@/lib/server/admin-list';
 import { isSuperAdmin } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
 import { departmentOptions } from '@/lib/server/department-access';
@@ -18,12 +18,16 @@ const { actor } = access;
 const superadmin = isSuperAdmin(actor);
 const scope = Astro.locals.adminScope;
 
-const folder = Astro.url.searchParams.get('folder') ?? '';
+// Each filter is declared once: its query parameter, how it parses, how a value narrows the `where`.
+const filters = {
+    folder: listFilter<Prisma.DownloadWhereInput, string>((raw) => raw || null, directoryWhere),
+};
 
 const list = await runList<
     Prisma.DownloadWhereInput,
     Prisma.DownloadOrderByWithRelationInput,
-    Prisma.DownloadGetPayload<{ include: { department: { select: { name: true } } } }>
+    Prisma.DownloadGetPayload<{ include: { department: { select: { name: true } } } }>,
+    typeof filters
 >({
     url: Astro.url,
     actor,
@@ -39,8 +43,7 @@ const list = await runList<
         search: ['fileName', 'directory', 'tags'],
         perPage: 24,
     },
-    filterParams: ['folder'],
-    filters: [folder && directoryWhere(folder)],
+    filters,
     count: (where) => db.download.count({ where }),
     fetch: (args) => db.download.findMany({ ...args, include: { department: { select: { name: true } } } }),
 });
@@ -57,7 +60,8 @@ const manager = {
     totalBytes,
     matching: list.total,
     q: list.q,
-    folder,
+    folder: list.values.folder ?? '',
+    filtered: list.filtered,
     sort: list.sort,
     dir: list.dir,
     sorts: [

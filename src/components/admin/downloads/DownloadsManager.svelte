@@ -42,6 +42,8 @@
     matching: number;
     q: string;
     folder: string;
+    /** The list's `filtered`: a search or the folder narrows it. */
+    filtered: boolean;
     sort: string;
     dir: string;
     sorts: { label: string; field: string; href: string; active: boolean }[];
@@ -102,7 +104,7 @@
   let view = $state.raw(session.snapshot());
   const pending = $derived(view.delete.target);
 
-  const filtered = $derived(Boolean(manager.q || manager.folder));
+  const filtered = $derived(manager.filtered);
 
   function openDetails(row: DownloadRow) {
     selected = row;

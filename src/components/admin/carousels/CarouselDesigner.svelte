@@ -18,7 +18,7 @@
   } from '@lucide/svelte';
   import { onMount, tick, untrack } from 'svelte';
   import { toast } from 'svelte-sonner';
-  import { NUDGE, NUDGE_BIG, type Box, type ZMove } from '@/lib/carousel-editor';
+  import type { Box, ZMove } from '@/lib/carousel-editor';
   import { measureLayerBox } from '@/lib/carousel-layout';
   import {
     MAX_LAYERS,
@@ -37,6 +37,7 @@
   import { postImage } from '../editor/upload';
   import { append, inputClass, parseActionError, primaryButtonClass, secondaryButtonClass } from '../shared/form-utils';
   import UnsavedChangesGuard from '../shared/UnsavedChangesGuard.svelte';
+  import { ariaKeys, nudgeDelta, resolveDesignerKey } from './designer-keymap';
   import LayerInspector from './LayerInspector.svelte';
   import SlideCanvas from './SlideCanvas.svelte';
   import SlideSettings from './SlideSettings.svelte';
@@ -225,50 +226,26 @@
 
   function onKeydown(event: KeyboardEvent) {
     if (deleteKey !== null) return;
-    const mod = event.ctrlKey || event.metaKey;
-    const key = event.key.toLowerCase();
-    if (mod && key === 's') {
-      event.preventDefault();
-      save();
-      return;
-    }
     const target = event.target as HTMLElement;
-    if (target.closest('input, textarea, select, [contenteditable="true"]')) return; // native editing shortcuts
-    if (mod && key === 'z') {
-      event.preventDefault();
-      if (event.shiftKey) session.redo();
-      else session.undo();
-      return;
-    }
-    if (mod && key === 'y') {
-      event.preventDefault();
-      session.redo();
-      return;
-    }
-    if (mod && key === 'd' && selected) {
-      event.preventDefault();
-      duplicateSelected();
-      return;
-    }
-    if (!(target === document.body || target.closest('[data-designer-area]')) || !selected) return;
-    const step = event.shiftKey ? NUDGE_BIG : NUDGE;
-    if (key === 'delete' || key === 'backspace') {
-      event.preventDefault();
-      removeSelected();
-    } else if (key === 'escape') {
+    const command = resolveDesignerKey(event, {
+      typing: target.closest('input, textarea, select, [contenteditable="true"]') !== null,
+      inArea: target === document.body || target.closest('[data-designer-area]') !== null,
+      hasSelection: Boolean(selected),
+    });
+    if (command === null) return;
+    if (command === 'deselect') {
       session.select(null);
-    } else if (key === 'arrowleft') {
-      event.preventDefault();
-      nudge(-step, 0);
-    } else if (key === 'arrowright') {
-      event.preventDefault();
-      nudge(step, 0);
-    } else if (key === 'arrowup') {
-      event.preventDefault();
-      nudge(0, -step);
-    } else if (key === 'arrowdown') {
-      event.preventDefault();
-      nudge(0, step);
+      return;
+    }
+    event.preventDefault();
+    if (command === 'save') save();
+    else if (command === 'undo') session.undo();
+    else if (command === 'redo') session.redo();
+    else if (command === 'duplicate') duplicateSelected();
+    else if (command === 'remove') removeSelected();
+    else {
+      const delta = nudgeDelta(command, event.shiftKey);
+      if (delta) nudge(delta.dx, delta.dy);
     }
   }
 
@@ -394,10 +371,10 @@
           {/each}
           <input bind:this={fileInput} type="file" accept="image/*" class="sr-only" tabindex="-1" aria-label="Choose a logo or image to add" onchange={uploadImageLayer} />
           <span class="mx-1 hidden h-6 w-px bg-border-strong sm:block" aria-hidden="true"></span>
-          <button type="button" class="{secondaryButtonClass} !p-2" onclick={() => session.undo()} disabled={!designer.canUndo} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)">
+          <button type="button" class="{secondaryButtonClass} !p-2" onclick={() => session.undo()} disabled={!designer.canUndo} aria-label="Undo" aria-keyshortcuts={ariaKeys('undo')} title="Undo (Ctrl/Cmd+Z)">
             <Undo2 class="h-4 w-4" aria-hidden="true" />
           </button>
-          <button type="button" class="{secondaryButtonClass} !p-2" onclick={() => session.redo()} disabled={!designer.canRedo} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)">
+          <button type="button" class="{secondaryButtonClass} !p-2" onclick={() => session.redo()} disabled={!designer.canRedo} aria-label="Redo" aria-keyshortcuts={ariaKeys('redo')} title="Redo (Ctrl/Cmd+Shift+Z)">
             <Redo2 class="h-4 w-4" aria-hidden="true" />
           </button>
           <div role="group" aria-label="Layout" class="flex gap-1">
@@ -431,7 +408,7 @@
           </button>
           {/if}
           <span class="ml-auto"></span>
-          <button type="button" class="{primaryButtonClass} !px-4 !py-1.5 text-xs" onclick={save} disabled={designer.saving || (!designer.activeDirty && active.id !== null)} title="Save (Ctrl/Cmd+S)">
+          <button type="button" class="{primaryButtonClass} !px-4 !py-1.5 text-xs" onclick={save} disabled={designer.saving || (!designer.activeDirty && active.id !== null)} aria-keyshortcuts={ariaKeys('save')} title="Save (Ctrl/Cmd+S)">
             {#if designer.saving}<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />{:else}<Save class="h-4 w-4" aria-hidden="true" />{/if}
             {active.id === null ? 'Create slide' : designer.activeDirty ? 'Save slide' : 'Saved'}
           </button>

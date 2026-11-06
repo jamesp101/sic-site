@@ -242,5 +242,6 @@ export function parseMarkdown(markdown: string | null | undefined): string {
     }
     flushParagraph();
 
+    if (html.length === 0) return '';
     return `<div data-sic-markdown>${restore(html.join('\n'), stash)}</div>`;
 }

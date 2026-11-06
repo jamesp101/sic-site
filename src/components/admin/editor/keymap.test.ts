@@ -56,6 +56,17 @@ describe('resolveKey', () => {
         expect(resolveKey(press('Delete'), { ...idle, hasSelection: false })).toBeNull();
     });
 
+    it('ignores keys with extra modifiers', () => {
+        expect(resolveKey(press('Backspace', { ctrlKey: true }), idle)).toBeNull();
+        expect(resolveKey(press('Backspace', { metaKey: true }), idle)).toBeNull();
+        expect(resolveKey(press('Delete', { shiftKey: true }), idle)).toBeNull();
+        expect(resolveKey(press('d', { ctrlKey: true, shiftKey: true }), idle)).toBeNull();
+        expect(resolveKey(press('d', { ctrlKey: true, altKey: true }), idle)).toBeNull();
+        expect(resolveKey(press('z', { ctrlKey: true, altKey: true }), idle)).toBeNull();
+        expect(resolveKey(press('Escape', { shiftKey: true }), idle)).toBeNull();
+        expect(resolveKey(press('ArrowUp', { altKey: true, shiftKey: true }), idle)).toBeNull();
+    });
+
     it('? opens help without Ctrl, Cmd or Alt', () => {
         expect(resolveKey(press('?', { shiftKey: true }), idle)).toBe('help');
         expect(resolveKey(press('?', { ctrlKey: true }), idle)).toBeNull();

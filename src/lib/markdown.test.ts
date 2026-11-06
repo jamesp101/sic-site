@@ -5,6 +5,8 @@ describe('parseMarkdown', () => {
     it('returns an empty string for empty input', () => {
         expect(parseMarkdown('')).toBe('');
         expect(parseMarkdown(null)).toBe('');
+        expect(parseMarkdown(' \n\t\n ')).toBe('');
+        expect(parseMarkdown("import Foo from './foo';")).toBe('');
     });
 
     it('wraps its output in the renderer-owned format marker', () => {

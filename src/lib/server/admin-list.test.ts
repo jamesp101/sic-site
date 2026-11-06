@@ -6,7 +6,7 @@ import { closeTestDb } from './test-db';
 vi.mock('./db', async () => ({ db: await (await import('./test-db')).openTestDb(), dbProvider: 'sqlite' }));
 
 const { db } = await import('./db');
-const { runList, sortBy } = await import('./admin-list');
+const { runList, sortBy, listFilter, parseYesNo } = await import('./admin-list');
 
 const admin = { id: 1, role: 'superadmin', departmentId: null };
 const cit = { id: 2, role: 'department_user', departmentId: 10 };
@@ -23,13 +23,26 @@ const spec = {
     perPage: 4,
 };
 
+const postFilters = {
+    type: listFilter<Prisma.PostWhereInput, string>(
+        (raw) => ['article', 'event'].find((t) => t === raw) ?? null,
+        (type) => ({ type }),
+    ),
+    featured: listFilter<Prisma.PostWhereInput, boolean>(parseYesNo, (isFeatured) => ({ isFeatured })),
+};
+
 function list(
     actor: typeof admin | typeof cit,
     query = '',
     scope: Parameters<typeof runList>[0]['scope'] = all,
-    filtering: { filters?: Prisma.PostWhereInput[]; filterParams?: string[] } = {},
+    filtering: { filters?: typeof postFilters } = {},
 ) {
-    return runList<Prisma.PostWhereInput, Prisma.PostOrderByWithRelationInput, { id: number; title: string }>({
+    return runList<
+        Prisma.PostWhereInput,
+        Prisma.PostOrderByWithRelationInput,
+        { id: number; title: string },
+        typeof postFilters
+    >({
         url: new URL(`http://localhost/admin/posts${query}`),
         actor,
         scope,
@@ -137,26 +150,48 @@ describe('runList', () => {
         expect(sorted.sortHref('title')).toBe('/admin/posts?sort=title&dir=desc');
     });
 
-    it('reports whether a search or a declared filter narrows the list; sort, direction and page do not', async () => {
-        const params = ['type', 'featured'];
-        const run = (query: string, filters: Prisma.PostWhereInput[] = []) =>
-            list(admin, query, all, { filters, filterParams: params });
+    it('declares a filter once: a value narrows the list and counts as filtered, an invalid one is ignored', async () => {
+        const type = await list(admin, '?type=article', all, { filters: postFilters });
+        expect(type.filtered).toBe(true);
+        expect(type.values).toEqual({ type: 'article', featured: null });
+        expect(type.total).toBe(10);
+        expect(type.rows.every((row) => row.title.startsWith('Alpha') || row.title.startsWith('Beta'))).toBe(true);
+        const featured = await list(admin, '?featured=yes', all, { filters: postFilters });
+        expect(featured.filtered).toBe(true);
+        expect(featured.values.featured).toBe(true);
+        expect(featured.total).toBe(await db.post.count({ where: { isFeatured: true } }));
+        const notFeatured = await list(admin, '?featured=no', all, { filters: postFilters });
+        expect(notFeatured.values.featured).toBe(false);
+        expect(notFeatured.total).toBe(await db.post.count({ where: { isFeatured: false } }));
+
+        const invalid = await list(admin, '?type=bogus&featured=maybe', all, { filters: postFilters });
+        expect(invalid.filtered).toBe(false);
+        expect(invalid.values).toEqual({ type: null, featured: null });
+        expect(invalid.total).toBe(await db.post.count());
+    });
+
+    it('reports whether a search or a filter narrows the list; sort, direction and page do not', async () => {
+        const run = (query: string) => list(admin, query, all, { filters: postFilters });
         expect((await run('')).filtered).toBe(false);
         expect((await run('?sort=title&dir=asc&page=2')).filtered).toBe(false);
         expect((await run('?q=Alpha')).filtered).toBe(true);
         expect((await run('?q=%20%20')).filtered).toBe(false);
-        expect((await run('?type=article', [{ type: 'article' }])).filtered).toBe(true);
-        // An absent filter (the page passes `false`/`''`/null for it) does not count.
-        const absent = await list(admin, '', all, { filters: [false, '', null] as never, filterParams: params });
-        expect(absent.filtered).toBe(false);
     });
 
-    it('resets to the bare list, keeping only the sort and direction', async () => {
+    it('resets to the bare list, dropping search, page and declared filters but keeping the sort and direction', async () => {
         const state = await list(admin, '?q=Alpha&type=article&featured=yes&page=2&sort=title&dir=desc&other=1', all, {
-            filterParams: ['type', 'featured'],
+            filters: postFilters,
         });
         expect(state.resetHref).toBe('/admin/posts?sort=title&dir=desc&other=1');
         expect((await list(admin, '?q=Alpha&page=2')).resetHref).toBe('/admin/posts');
+    });
+
+    it('keeps the actor restriction when a filter is set', async () => {
+        const cba = { kind: 'department', id: 11, name: 'CBA', slug: 'cba' } as const;
+        const own = await list(cit, '?type=article', cba, { filters: postFilters });
+        expect(own.total).toBe(6);
+        const featured = await list(cit, '?featured=no', cba, { filters: postFilters });
+        expect(featured.total).toBe(6);
     });
 
     it('reports filtered for a list with its own restriction too', async () => {

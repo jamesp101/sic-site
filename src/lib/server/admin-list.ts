@@ -38,7 +38,7 @@ export interface SortLinks {
     ariaSort(field: string): 'ascending' | 'descending' | undefined;
 }
 
-export interface ListState<Row> extends SortLinks {
+export interface ListState<Row, F = Record<never, never>> extends SortLinks {
     rows: Row[];
     total: number;
     /** 1-based; an out-of-range request shows the last page. */
@@ -57,6 +57,8 @@ export interface ListState<Row> extends SortLinks {
     pageHref(page: number): string;
     /** Same list with `changes` applied to its parameters (`null` removes one); back on page 1 unless `page` is set. */
     href(changes: Record<string, string | null>): string;
+    /** Parsed value of each declared filter, for the page's controls. */
+    values: ListValues<F>;
 }
 
 export const LIST_PER_PAGE = 25;
@@ -69,26 +71,54 @@ export function sortBy<O>(orderBy: (dir: SortDir) => O, defaultDir: SortDir = 'a
 /** The assembled `where`: the restriction first, then search and filters, all ANDed. */
 export type ListWhere<W extends object> = { AND: W[] };
 
-export interface RunListInput<W extends object, O, Row> {
+/**
+ * A filter a page declares once: the query parameter is its key in `RunListInput.filters`, `parse` turns
+ * the raw value into a typed one (`null` when absent or invalid, which is then ignored), and `where`
+ * narrows the query for a parsed value (`false` or `{}` narrows nothing).
+ */
+export interface ListFilter<W extends object, V> {
+    parse(raw: string | null): V | null;
+    where(value: V): W | false;
+}
+
+export function listFilter<W extends object, V>(
+    parse: (raw: string | null) => V | null,
+    where: (value: V) => W | false,
+): ListFilter<W, V> {
+    return { parse, where };
+}
+
+/** `yes` → true, `no` → false, anything else → null (no filter). */
+export function parseYesNo(raw: string | null): boolean | null {
+    return raw === 'yes' ? true : raw === 'no' ? false : null;
+}
+
+/** The parsed value of each declared filter (`null` when absent or invalid), by query parameter. */
+export type ListValues<F> = { [K in keyof F]: F[K] extends ListFilter<any, infer V> ? V | null : never };
+
+export interface RunListInput<W extends object, O, Row, F extends Record<string, ListFilter<W, any>>> {
     url: URL;
     actor: Actor;
     scope: AdminScope;
     spec: ListSpec<O>;
-    /** Extra conditions (type, flags…); empty ones are skipped. */
-    filters?: readonly (W | '' | null | undefined | false)[];
+    /** Filters by query parameter; each narrows the `where`, counts toward `filtered` and is dropped by `resetHref`. */
+    filters?: F;
     /**
      * Replaces the Admin scope for lists that are not department-owned rows (the departments list itself
      * is restricted by `id`, the users list is superadmin-only). It is still ANDed, so search cannot widen it.
      */
     restriction?: W;
-    /** Query parameters the `filters` are read from; a reset drops them with `q` and `page`. */
-    filterParams?: readonly string[];
     count: (where: ListWhere<W>) => Promise<number>;
     fetch: (args: { where: ListWhere<W>; orderBy: O[]; skip: number; take: number }) => Promise<Row[]>;
 }
 
-export async function runList<W extends object, O, Row>(input: RunListInput<W, O, Row>): Promise<ListState<Row>> {
-    const { url, actor, scope, spec, filters = [], restriction, filterParams = [], count, fetch } = input;
+export async function runList<
+    W extends object,
+    O,
+    Row,
+    F extends Record<string, ListFilter<W, any>> = Record<never, never>,
+>(input: RunListInput<W, O, Row, F>): Promise<ListState<Row, F>> {
+    const { url, actor, scope, spec, filters: declared = {} as F, restriction, count, fetch } = input;
     const params = url.searchParams;
     const perPage = spec.perPage ?? LIST_PER_PAGE;
 
@@ -100,17 +130,24 @@ export async function runList<W extends object, O, Row>(input: RunListInput<W, O
     const dir: SortDir = requestedDir === 'asc' || requestedDir === 'desc' ? requestedDir : field.defaultDir;
 
     const active = (f: unknown) => !!f && Object.keys(f).length > 0;
+    const values = {} as ListValues<F>;
+    const conditions: (W | false)[] = [];
+    for (const [name, filter] of Object.entries(declared)) {
+        const value = filter.parse(params.get(name));
+        (values as Record<string, unknown>)[name] = value;
+        if (value !== null) conditions.push(filter.where(value));
+    }
     const searchFilter =
         q && spec.search?.length
             ? ({ OR: spec.search.map((name) => ({ [name]: textContains(q) })) } as unknown as W)
             : null;
-    const all = [searchFilter, ...filters];
+    const all = [searchFilter, ...conditions];
     // `listWhere` yields a `departmentId` condition: lists using it are models with that column, so it is a W.
     const where: ListWhere<W> = restriction
         ? { AND: [restriction, ...all.filter((f): f is W => active(f))] }
         : (listWhere<W>(actor, scope, all) as ListWhere<W>);
 
-    const filtered = q !== '' || filters.some(active);
+    const filtered = q !== '' || conditions.some(active);
     const total = await count(where);
     const pageCount = Math.max(1, Math.ceil(total / perPage));
     // Past the end (e.g. after deleting the last row of the last page): show the last page instead.
@@ -139,7 +176,12 @@ export async function runList<W extends object, O, Row>(input: RunListInput<W, O
         perPage,
         q,
         filtered,
-        resetHref: hrefWith({ q: null, page: null, ...Object.fromEntries(filterParams.map((n) => [n, null])) }),
+        resetHref: hrefWith({
+            q: null,
+            page: null,
+            ...Object.fromEntries(Object.keys(declared).map((n) => [n, null])),
+        }),
+        values,
         sort,
         dir,
         href: hrefWith,

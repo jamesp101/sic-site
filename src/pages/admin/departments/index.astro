@@ -12,7 +12,7 @@ import ListFilterBar from '@/components/admin/shared/ListFilterBar.astro';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { getInitials } from '@/lib/initials';
 import { adminPage } from '@/lib/server/admin-page';
-import { runList, sortBy } from '@/lib/server/admin-list';
+import { listFilter, parseYesNo, runList, sortBy } from '@/lib/server/admin-list';
 import { isSuperAdmin } from '@/lib/server/authz';
 import { db } from '@/lib/server/db';
 import { publicUrl } from '@/lib/server/storage';
@@ -23,11 +23,14 @@ if (access instanceof Response) return access;
 const { actor } = access;
 
 const superadmin = isSuperAdmin(actor);
-const params = Astro.url.searchParams;
-const yesNo = (value: string | null) => (value === 'yes' ? true : value === 'no' ? false : null);
-const hasLogo = yesNo(params.get('logo'));
-const hasMembers = yesNo(params.get('members'));
-const hasPosts = yesNo(params.get('posts'));
+// Each filter is declared once: its query parameter, how it parses, how a value narrows the `where`.
+const hasFilter = (present: Prisma.DepartmentWhereInput, absent: Prisma.DepartmentWhereInput) =>
+    listFilter<Prisma.DepartmentWhereInput, boolean>(parseYesNo, (has) => (has ? present : absent));
+const filters = {
+    logo: hasFilter({ logoPath: { not: null } }, { logoPath: null }),
+    members: hasFilter({ members: { some: {} } }, { members: { none: {} } }),
+    posts: hasFilter({ posts: { some: {} } }, { posts: { none: {} } }),
+};
 
 const rowSelect = {
     id: true,
@@ -43,7 +46,8 @@ const rowSelect = {
 const list = await runList<
     Prisma.DepartmentWhereInput,
     Prisma.DepartmentOrderByWithRelationInput,
-    Prisma.DepartmentGetPayload<{ select: typeof rowSelect }>
+    Prisma.DepartmentGetPayload<{ select: typeof rowSelect }>,
+    typeof filters
 >({
     url: Astro.url,
     actor,
@@ -61,12 +65,7 @@ const list = await runList<
         tiebreak: { name: 'asc' },
         search: ['name', 'slug', 'description'],
     },
-    filterParams: ['logo', 'members', 'posts'],
-    filters: [
-        hasLogo === true ? { logoPath: { not: null } } : hasLogo === false && { logoPath: null },
-        hasMembers === true ? { members: { some: {} } } : hasMembers === false && { members: { none: {} } },
-        hasPosts === true ? { posts: { some: {} } } : hasPosts === false && { posts: { none: {} } },
-    ],
+    filters,
     count: (where) => db.department.count({ where }),
     fetch: (args) => db.department.findMany({ ...args, select: rowSelect }),
 });
@@ -79,11 +78,11 @@ const columns = [
     ['downloads', 'Downloads', 'text-right'],
     ['updated', 'Updated', ''],
 ];
-const filters = [
-    { name: 'logo', label: 'Logo', value: hasLogo, yes: 'With logo', no: 'Without logo' },
-    { name: 'members', label: 'Org chart', value: hasMembers, yes: 'With members', no: 'No members' },
-    { name: 'posts', label: 'Posts', value: hasPosts, yes: 'With posts', no: 'No posts' },
-];
+const filterControls = [
+    { name: 'logo', label: 'Logo', yes: 'With logo', no: 'Without logo' },
+    { name: 'members', label: 'Org chart', yes: 'With members', no: 'No members' },
+    { name: 'posts', label: 'Posts', yes: 'With posts', no: 'No posts' },
+] as const;
 ---
 
 <AppLayout title="Departments" breadcrumbs={[{ title: 'Dashboard', href: '/dashboard' }, { title: 'Departments' }]}>
@@ -96,13 +95,13 @@ const filters = [
         </PageHeader>
 
         <ListFilterBar list={list} placeholder="Search name, slug or description…" label="Search departments">
-            {filters.map((f) => (
+            {filterControls.map((f) => (
                 <select name={f.name} aria-label={`Filter by ${f.label.toLowerCase()}`} class={selectClass}>
                     <option value="">{`Any ${f.label.toLowerCase()}`}</option>
-                    <option value="yes" selected={f.value === true}>
+                    <option value="yes" selected={list.values[f.name] === true}>
                         {f.yes}
                     </option>
-                    <option value="no" selected={f.value === false}>
+                    <option value="no" selected={list.values[f.name] === false}>
                         {f.no}
                     </option>
                 </select>

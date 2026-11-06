@@ -26,3 +26,5 @@ A slide may have a background video: either `carousel_items.video_path` (an uplo
 - save reconcile and reorder rollback through a `DesignerPort` (the carousel actions, wired in the component).
 
 The component takes Layer limits from the schema and changes drafts only through the session. It uses `UnsavedChangesGuard` (`auth-admin.md`).
+
+Designer keyboard shortcuts are one table in `components/admin/carousels/designer-keymap.ts` (chords, command, when it applies: not while typing, inside the designer area, needs a selected Layer). `resolveDesignerKey(event, context)` gives the command; `onKeydown` only runs it, and the toolbar `aria-keyshortcuts` come from `ariaKeys`. Chord mechanics (exact modifiers, first applicable shortcut, aria/display strings) are shared with the block editor in `components/admin/shared/keymap-core.ts`; the command sets stay separate. Add a shortcut to the table, never to `onKeydown`.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { EXCERPT_LENGTH, editableBlocks, excerptOf, parseContent, renderContent, toPlainText } from './content';
+import { renderBlocks } from './render';
 import { createBlock, createDocument, serializeDocument } from './document';
 
 const validDocument = serializeDocument(
@@ -21,6 +22,13 @@ describe('Rich content classification', () => {
             text: 'Welcome Hello',
         },
         { name: 'Markdown', content: '# Title\n\nSome **text**', format: 'markdown', text: 'Title Some text' },
+        { name: 'whitespace-only Markdown', content: ' \n\t\n ', format: 'markdown', text: '' },
+        {
+            name: 'import-only Markdown',
+            content: 'import Foo from \'./foo\';\n\nimport Bar from "./bar"',
+            format: 'markdown',
+            text: '',
+        },
         { name: 'empty string', content: '', format: 'empty', text: '' },
         { name: 'null', content: null, format: 'empty', text: '' },
     ];
@@ -41,6 +49,14 @@ describe('Rich content classification', () => {
             }
         });
     }
+});
+
+describe('Markdown block with nothing readable', () => {
+    it.each([' \n ', "import Foo from './foo';"])('shows the editor hint for %j and nothing to visitors', (source) => {
+        const block = createBlock('markdown', { source });
+        expect(renderBlocks([block], { editor: true })).toContain('Empty Markdown block');
+        expect(renderBlocks([block])).toBe('');
+    });
 });
 
 describe('excerpt', () => {
