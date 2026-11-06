@@ -29,7 +29,7 @@
   const SWIPE_PX = 48;
 
   let root: HTMLElement;
-  const slideEls: HTMLElement[] = [];
+  const slideEls: HTMLElement[] = $state([]);
 
   let current = $state(0);
   /** The slide fading out, kept zoomed so its photo does not jump while it disappears. */
