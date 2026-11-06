@@ -160,6 +160,39 @@ describe('local driver: ranges and streamed uploads', () => {
         expect((await readdir(path.join(dir, 'videos'))).filter((name) => name.startsWith('g.mp4'))).toEqual([]);
     });
 
+    /** A body that hands over one chunk, then fails on the next read (the client drops mid-upload). */
+    function failingAfterChunk(size: number, error: Error) {
+        let pulls = 0;
+        return new ReadableStream<Uint8Array>({
+            pull(controller) {
+                if (pulls++ === 0) controller.enqueue(new Uint8Array(size).fill(1));
+                else controller.error(error);
+            },
+        });
+    }
+
+    const partials = async (prefix: string) =>
+        (await readdir(path.join(dir, 'videos'))).filter((name) => name.startsWith(prefix));
+
+    it('putStream removes the partial file when the client fails after a real chunk was written', async () => {
+        const driver = createLocalDriver(dir);
+        for (let attempt = 0; attempt < 20; attempt++) {
+            await expect(
+                driver.putStream(`videos/i${attempt}.mp4`, failingAfterChunk(100, new Error('client went away')), 1000),
+            ).rejects.toThrow('client went away');
+            expect(await partials(`i${attempt}.mp4`)).toEqual([]);
+        }
+    });
+
+    it('putStream leaves no file when the body fails before anything is written', async () => {
+        const driver = createLocalDriver(dir);
+        for (let attempt = 0; attempt < 50; attempt++) {
+            const body = new ReadableStream<Uint8Array>({ start: (controller) => controller.error(new Error('gone')) });
+            await expect(driver.putStream(`videos/j${attempt}.mp4`, body, 1000)).rejects.toThrow('gone');
+            expect(await partials(`j${attempt}.mp4`)).toEqual([]);
+        }
+    });
+
     it('putStream returns the short length of a body that ends early, for the caller to reject', async () => {
         const driver = createLocalDriver(dir);
         const short = new Blob([bytes.slice(0, 10)]).stream();

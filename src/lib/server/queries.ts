@@ -109,28 +109,25 @@ function heroSections(departmentId: number | null): Promise<HeroSectionView[]> {
     });
 }
 
-/**
- * Starts a query the layout needs (`getNavLinks()`, `getDepartments()`) before the page's own queries, so they run
- * side by side instead of one after the other. A page that returns early (404, redirect) never awaits it, so the
- * promise is marked handled: a failing query then cannot become an unhandled rejection.
- */
-export function startQuery<T>(query: Promise<T>): Promise<T> {
-    query.catch(() => {});
-    return query;
-}
-
-/** The layout's queries, already running (`PublicLayout`'s `navLinks` / `departments`). */
+/** The layout's queries, already running: `PublicLayout`'s one input (`layout`). */
 export interface LayoutQueries {
     navLinks: Promise<NavLinkView[]>;
     departments: Promise<DepartmentSummary[]>;
 }
 
 /**
- * Starts the layout's queries. A page-by-slug query calls it right after its row lookup, so an unknown slug costs
- * one query and a found page runs them beside its own remaining queries.
+ * Starts the layout's queries (Navigation links, Departments). Every public page query returns the result as
+ * `layout`, calling this before its own queries so they run side by side; a page found by slug calls it right after
+ * the row lookup, so an unknown slug costs one query. Both promises are marked
+ * handled: a page that returns early (404, redirect) never awaits them, and a failing query then cannot become an
+ * unhandled rejection. A page that needs Departments itself awaits `layout.departments`: the same query, not a second.
  */
-function startLayoutQueries(): LayoutQueries {
-    return { navLinks: startQuery(getNavLinks()), departments: startQuery(getDepartments()) };
+export function startLayoutQueries(): LayoutQueries {
+    const navLinks = getNavLinks();
+    const departments = getDepartments();
+    navLinks.catch(() => {});
+    departments.catch(() => {});
+    return { navLinks, departments };
 }
 
 /** Active Navigation links with their active children: one flat query, nested in memory. */
@@ -167,24 +164,24 @@ export function getNavDepartments(): Promise<{ name: string; slug: string }[]> {
 
 export async function getHomeData(): Promise<{
     carousel: CarouselSlide[];
-    departments: DepartmentSummary[];
     latestPosts: PostSummary[];
     welcomeHero: string | null;
     heroSections: HeroSectionView[];
+    layout: LayoutQueries;
 }> {
-    const [carousel, departments, latestPosts, welcomeHero, heroes] = await Promise.all([
+    const layout = startLayoutQueries();
+    const [carousel, latestPosts, welcomeHero, heroes] = await Promise.all([
         findSlides({ showOnMain: true }),
-        getDepartments(),
         db.post.findMany({ orderBy: { createdAt: 'desc' }, take: 6, select: postSelect }),
         getWelcomeHero(),
         heroSections(null),
     ]);
     return {
         carousel,
-        departments,
         latestPosts: await toPostSummaries(latestPosts),
         welcomeHero,
         heroSections: heroes,
+        layout,
     };
 }
 
@@ -192,18 +189,16 @@ export async function getHomeData(): Promise<{
 export async function getDepartmentPage(
     slug: string,
     site: URL,
-): Promise<
-    | ({
-          department: DepartmentDetail;
-          carousel: CarouselSlide[];
-          posts: PostSummary[];
-          postCount: number;
-          members: MemberNode[];
-          heroSections: HeroSectionView[];
-          seo: PageSeo;
-      } & LayoutQueries)
-    | null
-> {
+): Promise<{
+    department: DepartmentDetail;
+    carousel: CarouselSlide[];
+    posts: PostSummary[];
+    postCount: number;
+    members: MemberNode[];
+    heroSections: HeroSectionView[];
+    seo: PageSeo;
+    layout: LayoutQueries;
+} | null> {
     const row = await db.department.findUnique({
         where: { slug },
         select: { ...departmentSelect, heroContent: true },
@@ -246,7 +241,7 @@ export async function getDepartmentPage(
         members,
         heroSections: heroes,
         seo: departmentPageSeo(department, members, carousel[0]?.imageUrl, site),
-        ...layout,
+        layout,
     };
 }
 
@@ -280,22 +275,23 @@ export async function listPosts(
     };
 }
 
-/** One page of the public `/posts` list with the departments for its filter bar; `null` when `page` is past the end. */
+/** One page of the public `/posts` list; `null` when `page` is past the end. */
 export async function getPostsPage(
     filters: PostFilters,
     page: number,
     perPage: number,
     site: URL,
-): Promise<{ result: Paginated<PostSummary>; departments: DepartmentSummary[]; seo: PageSeo } | null> {
-    const [departments, result] = await Promise.all([getDepartments(), listPosts(filters, { page, perPage })]);
+): Promise<{ result: Paginated<PostSummary>; seo: PageSeo; layout: LayoutQueries } | null> {
+    const layout = startLayoutQueries();
+    const result = await listPosts(filters, { page, perPage });
     if (page > result.pageCount) return null;
-    return { result, departments, seo: postsListSeo(result.items, filters, page, site) };
+    return { result, seo: postsListSeo(result.items, filters, page, site), layout };
 }
 
 export async function getPostPage(
     slug: string,
     site: URL,
-): Promise<({ post: PostDetail; related: PostSummary[]; seo: PageSeo } & LayoutQueries) | null> {
+): Promise<{ post: PostDetail; related: PostSummary[]; seo: PageSeo; layout: LayoutQueries } | null> {
     const row = await db.post.findUnique({
         where: { slug },
         select: { ...postSelect, content: true, hideAuthor: true, user: { select: { name: true } } },
@@ -308,7 +304,7 @@ export async function getPostPage(
         html: content.html(),
         authorName: row.hideAuthor ? null : row.user.name,
     };
-    return { post, related: await getRelatedPosts(post), seo: postPageSeo(post, site), ...layout };
+    return { post, related: await getRelatedPosts(post), seo: postPageSeo(post, site), layout };
 }
 
 /**

@@ -1,0 +1,50 @@
+---
+import { Search } from '@lucide/svelte';
+import { primaryButtonClass, secondaryButtonClass } from '@/components/admin/shared/form-utils';
+import { cardClass, searchInputClass } from '@/components/admin/ui';
+import type { ListState } from '@/lib/server/admin-list';
+
+interface Props {
+    /** The page's `runList` result: supplies the search text, the sort to keep, and the reset link. */
+    list: Pick<ListState<unknown>, 'q' | 'sort' | 'dir' | 'filtered' | 'resetHref'>;
+    placeholder: string;
+    /** Accessible name of the search input ("Search posts"). */
+    label: string;
+    /** Text of the submit button. */
+    submitLabel?: string;
+}
+
+const { list, placeholder, label, submitLabel = 'Filter' } = Astro.props;
+const action = list.resetHref.split('?')[0];
+---
+
+<form
+    method="get"
+    action={action}
+    class={`${cardClass} flex flex-col items-center justify-between gap-4 p-4 md:flex-row`}
+>
+    <div class="relative w-full md:max-w-xs">
+        <Search class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <input
+            type="search"
+            name="q"
+            value={list.q}
+            placeholder={placeholder}
+            aria-label={label}
+            class={searchInputClass}
+        />
+    </div>
+    <div class="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-center md:w-auto">
+        <slot />
+        <input type="hidden" name="sort" value={list.sort} />
+        <input type="hidden" name="dir" value={list.dir} />
+        <button type="submit" class={primaryButtonClass}>
+            {submitLabel}
+        </button>
+        {list.filtered && (
+            <a href={list.resetHref} class={secondaryButtonClass}>
+                Reset
+            </a>
+        )}
+    </div>
+</form>

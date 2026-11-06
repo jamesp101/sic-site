@@ -60,7 +60,7 @@ describe('getHomeData', () => {
         ]);
         expect(home.latestPosts.map((p) => p.slug)).toEqual(['cba-1', 'cit-8', 'cit-7', 'cit-6', 'main-1', 'cit-5']);
         expect(home.heroSections.map((h) => h.title)).toEqual(['main-first', 'main-second']);
-        expect(home.departments.map((d) => d.slug)).toEqual(['cba', 'cit']);
+        expect((await home.layout.departments).map((d) => d.slug)).toEqual(['cba', 'cit']);
         expect(home.welcomeHero).toBe('Hello');
     });
 
@@ -82,8 +82,8 @@ describe('getDepartmentPage', () => {
 
     it('hands over the layout queries, started once the Department was found', async () => {
         const page = await getDepartmentPage('cit', site);
-        expect((await page!.departments).map((d) => d.name)).toContain('CIT');
-        expect(await page!.navLinks).toEqual(expect.any(Array));
+        expect((await page!.layout.departments).map((d) => d.name)).toContain('CIT');
+        expect(await page!.layout.navLinks).toEqual(expect.any(Array));
     });
 
     it("reads the Department's 6 newest Posts with their total, its Slides, People and hero sections", async () => {

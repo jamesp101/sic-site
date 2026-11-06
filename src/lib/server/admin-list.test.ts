@@ -23,12 +23,18 @@ const spec = {
     perPage: 4,
 };
 
-function list(actor: typeof admin | typeof cit, query = '', scope: Parameters<typeof runList>[0]['scope'] = all) {
+function list(
+    actor: typeof admin | typeof cit,
+    query = '',
+    scope: Parameters<typeof runList>[0]['scope'] = all,
+    filtering: { filters?: Prisma.PostWhereInput[]; filterParams?: string[] } = {},
+) {
     return runList<Prisma.PostWhereInput, Prisma.PostOrderByWithRelationInput, { id: number; title: string }>({
         url: new URL(`http://localhost/admin/posts${query}`),
         actor,
         scope,
         spec,
+        ...filtering,
         count: (where) => db.post.count({ where }),
         fetch: (args) => db.post.findMany({ ...args, select: { id: true, title: true } }),
     });
@@ -129,5 +135,42 @@ describe('runList', () => {
         expect(state.pageHref(3)).toBe('/admin/posts?q=Alpha&page=3');
         const sorted = await list(admin, '?sort=title&dir=asc');
         expect(sorted.sortHref('title')).toBe('/admin/posts?sort=title&dir=desc');
+    });
+
+    it('reports whether a search or a declared filter narrows the list; sort, direction and page do not', async () => {
+        const params = ['type', 'featured'];
+        const run = (query: string, filters: Prisma.PostWhereInput[] = []) =>
+            list(admin, query, all, { filters, filterParams: params });
+        expect((await run('')).filtered).toBe(false);
+        expect((await run('?sort=title&dir=asc&page=2')).filtered).toBe(false);
+        expect((await run('?q=Alpha')).filtered).toBe(true);
+        expect((await run('?q=%20%20')).filtered).toBe(false);
+        expect((await run('?type=article', [{ type: 'article' }])).filtered).toBe(true);
+        // An absent filter (the page passes `false`/`''`/null for it) does not count.
+        const absent = await list(admin, '', all, { filters: [false, '', null] as never, filterParams: params });
+        expect(absent.filtered).toBe(false);
+    });
+
+    it('resets to the bare list, keeping only the sort and direction', async () => {
+        const state = await list(admin, '?q=Alpha&type=article&featured=yes&page=2&sort=title&dir=desc&other=1', all, {
+            filterParams: ['type', 'featured'],
+        });
+        expect(state.resetHref).toBe('/admin/posts?sort=title&dir=desc&other=1');
+        expect((await list(admin, '?q=Alpha&page=2')).resetHref).toBe('/admin/posts');
+    });
+
+    it('reports filtered for a list with its own restriction too', async () => {
+        const restricted = (query: string) =>
+            runList<Prisma.PostWhereInput, Prisma.PostOrderByWithRelationInput, { id: number }>({
+                url: new URL(`http://localhost/admin/posts${query}`),
+                actor: admin,
+                scope: all,
+                spec,
+                restriction: {},
+                count: (where) => db.post.count({ where }),
+                fetch: (args) => db.post.findMany({ ...args, select: { id: true } }),
+            });
+        expect((await restricted('')).filtered).toBe(false);
+        expect((await restricted('?q=Beta')).filtered).toBe(true);
     });
 });

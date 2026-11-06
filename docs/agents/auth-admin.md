@@ -21,7 +21,8 @@
 
 ## Admin lists
 
-- Paginated admin lists (posts, hero sections, departments, downloads, users) run through `runList` (`src/lib/server/admin-list.ts`). The page declares its sortable fields (`sortBy`, default direction per field), search fields and filters, and gets back the rows, totals and the `sortHref`/`ariaSort`/`pageHref` links. Pages build no `orderBy`, sort link or page clamp.
+- Paginated admin lists (posts, hero sections, departments, downloads, users) run through `runList` (`src/lib/server/admin-list.ts`). The page declares its sortable fields (`sortBy`, default direction per field), search fields and filters, and gets back the rows, totals and the `sortHref`/`ariaSort`/`pageHref` links. Pages build no `orderBy`, sort link or page clamp. The result also carries `filtered` (search or a declared filter is set; sort/dir/page do not count) and `resetHref` (list path without `q`, the page's `filterParams` and `page`, keeping sort/dir). Pages pass `filterParams` and use these for the empty row and Reset link, never a hand-built flag or hard-coded path.
+- The search form is `ListFilterBar.astro` (`list`, `placeholder`, `label`, optional `submitLabel`); a page puts its own filter controls in the default slot.
 - Rendering: `SortableTh`, `EmptyRow`, `ListPagination` in `components/admin/shared/` (the "Pages" nav and "Showing x–y of N" come from `ListPagination`); page widths from `widePageClass`/`formPageClass` in `admin/ui.ts`.
 - Other list queries filter with `departmentWhere(actor, scope)` / `listWhere(actor, scope, [search, type, …])` only. The actor's restriction always wins: `runList` applies it through `listWhere`, which ANDs extra filters so a search `OR` cannot overwrite it. Spreading a filter next to `departmentWhere` loses that guarantee. `{ includeGeneral: true }` adds department-less rows (e.g. download directories). No per-page department filters.
 

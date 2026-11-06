@@ -196,11 +196,11 @@
     }
     /* Reading measure; centred or right-aligned text keeps its side. */
     [data-sic-blocks] > :is(p, ul, ol, blockquote),
-    [data-markdown] > :is(p, ul, ol, blockquote) {
+    [data-sic-markdown] > :is(p, ul, ol, blockquote) {
         max-width: var(--measure);
     }
     /* Legacy Markdown <Center> wraps its text in a centred flex column. */
-    [data-markdown] > .text-center > :is(p, ul, ol) {
+    [data-sic-markdown] > [data-sic-center] > :is(p, ul, ol) {
         max-width: var(--measure);
     }
     [data-sic-blocks] > :is(p, ul, ol, blockquote):is(.text-center) {

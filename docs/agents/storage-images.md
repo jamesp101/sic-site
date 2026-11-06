@@ -35,8 +35,13 @@ Every stored image upload is WebP.
     3. POST `{ key }` to `video/complete.ts` (`video-intake.ts`: owner, object, size, then the claim);
     4. store the returned app URL `storageRouteUrl(key)` (`/storage/videos/<key>`, also with `S3_PUBLIC_URL`; the route redirects to the bucket base, which answers `Range`). `videoKeyFromUrl` maps either URL form back to its key.
 - Pending-upload expiry deletes only the `pending_uploads` row, never the file (a never-completed key may already be in content). Only the orphan cleanup deletes files.
+- The `local` driver writes every file (`put`, `putStream`) through one `writePartial` in `storage/local.ts`: bytes go to `<key>.<random>.part`, which is renamed to the key on success. On failure the sink is closed (awaited) before the `.part` file is removed, so no partial file survives a client abort or an early source error. Keep any new local write on that path.
 - Body limits: keep multipart bodies small (`LIMITS.image` is 4 MB on `s3`). `local` takes every other upload multipart through actions, so `security.actionBodySizeLimit` in `astro.config.mjs` (24 MB) must stay above the largest non-video limit in `LIMITS` (`e2e/uploads.spec.ts` checks the 20 MB Download). API routes are not actions, so that limit does not cover videos; `@astrojs/node`'s `bodySizeLimit` applies to them, and `astro.config.mjs` sets it to `VIDEO_MAX_BYTES` + 1 MB.
 
 ## Cleanup
 
 `storage-cleanup.ts` (`vp run storage:cleanup [-- --dry-run]`; Vercel Cron `/api/cron/storage-cleanup` with `CRON_SECRET`) reclaims orphans: it deletes files that no String column of any table mentions (found from the Prisma model metadata, so new columns count automatically) once they are older than the 24 h grace, and drops expired pending-upload rows. The same daily run deletes expired `app:` rate-limit rows.
+
+## Download manager
+
+`DownloadsManager.svelte` keeps only markup and the form fields; `downloads-session.ts` (same folder) owns the confirm-delete flow for a Download or a Directory (pending, failure closes the dialog and reports the message, success reloads) and the New directory dialog (`fields.name` error first, otherwise the message). Its port (`DownloadsPort`) is built in the component from `actions.downloads/directories` and `reloadView`; tests use an in-memory port. Folder, search and sort are page state (`runList` links), not session state.

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { createReadStream, createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream, type WriteStream } from 'node:fs';
 import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { once } from 'node:events';
@@ -53,18 +53,29 @@ export function createLocalDriver(rootDir: string): LocalDriver {
         }
     }
 
-    // Streams to a temporary sibling and renames it into place, so the file is never held in
-    // memory and a failed upload never leaves a partial file under its key. The source is created
-    // only once the pipeline can take it over, so a stream that is already failing is never unhandled.
-    async function writeAtomic(key: string, source: () => Readable): Promise<void> {
+    // The one partial-file write: bytes go to a temporary sibling that is renamed into place on
+    // success, so a failed upload never leaves a partial file under its key. On failure the sink is
+    // closed (awaited) before the partial file is removed, because a sink still opening or flushing
+    // would otherwise create the file again after the removal.
+    async function writePartial<T>(key: string, fill: (sink: WriteStream) => Promise<T>): Promise<T> {
         const full = resolve(key);
         await mkdir(path.dirname(full), { recursive: true });
         const partial = `${full}.${randomBytes(6).toString('hex')}.part`;
+        const sink = createWriteStream(partial);
+        // A write error with no listener would crash the process; keep the first and surface it.
+        let sinkError: Error | null = null;
+        sink.on('error', (error) => (sinkError ??= error));
         try {
-            const sink = createWriteStream(partial);
-            await pipeline(source(), sink);
+            const result = await fill(sink);
+            if (sinkError) throw sinkError;
             await rename(partial, full);
+            return result;
         } catch (error) {
+            if (!sink.closed) {
+                const closed = once(sink, 'close');
+                sink.destroy();
+                await closed;
+            }
             await rm(partial, { force: true });
             throw error;
         }
@@ -74,42 +85,32 @@ export function createLocalDriver(rootDir: string): LocalDriver {
         name: 'local',
         resolve,
         async put(key, body) {
-            await writeAtomic(key, () => Readable.fromWeb(body.stream() as NodeReadableStream));
+            await writePartial(key, (sink) => pipeline(Readable.fromWeb(body.stream() as NodeReadableStream), sink));
         },
         async putStream(key, body, maxBytes) {
-            const full = resolve(key);
-            await mkdir(path.dirname(full), { recursive: true });
-            const partial = `${full}.${randomBytes(6).toString('hex')}.part`;
-            const sink = createWriteStream(partial);
-            // A write error with no listener would crash the process; keep the first and surface it in the loop.
-            let sinkError: Error | null = null;
-            sink.on('error', (error) => (sinkError ??= error));
-            // Read by hand and never cancel `body`: cancelling a request body that Node is still
-            // feeding makes the runtime enqueue into a closed stream later, which throws
-            // `ERR_INVALID_STATE` outside any handler and kills the server. An abandoned body is
-            // dropped by the HTTP server once the response is sent.
-            const reader = body.getReader();
-            let written = 0;
-            try {
-                for (;;) {
-                    const { done, value } = await reader.read();
-                    if (sinkError) throw sinkError;
-                    if (done) break;
-                    written += value.length;
-                    if (written > maxBytes) throw new UploadTooLargeError(maxBytes);
-                    if (!sink.write(value)) await once(sink, 'drain');
+            return writePartial(key, async (sink) => {
+                // Read by hand and never cancel `body`: cancelling a request body that Node is still
+                // feeding makes the runtime enqueue into a closed stream later, which throws
+                // `ERR_INVALID_STATE` outside any handler and kills the server. An abandoned body is
+                // dropped by the HTTP server once the response is sent.
+                const reader = body.getReader();
+                let written = 0;
+                try {
+                    for (;;) {
+                        const { done, value } = await reader.read();
+                        if (sink.errored) throw sink.errored;
+                        if (done) break;
+                        written += value.length;
+                        if (written > maxBytes) throw new UploadTooLargeError(maxBytes);
+                        if (!sink.write(value)) await once(sink, 'drain');
+                    }
+                    sink.end();
+                    await once(sink, 'finish');
+                    return written;
+                } finally {
+                    reader.releaseLock();
                 }
-                sink.end();
-                await once(sink, 'finish');
-                await rename(partial, full);
-                return written;
-            } catch (error) {
-                sink.destroy();
-                await rm(partial, { force: true });
-                throw error;
-            } finally {
-                reader.releaseLock();
-            }
+            });
         },
         async delete(key) {
             await rm(resolve(key), { force: true });

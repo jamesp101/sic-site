@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { DEMO_DEPARTMENTS } from '../prisma/demo-data';
+import { DEMO_DEPARTMENTS, DEMO_POSTS } from '../prisma/demo-data';
 import { visitorPage } from './support';
 
 test('home → department → post navigation works with server-rendered links', async ({ page }) => {
@@ -105,4 +105,26 @@ test('page sections line up with the header container on wide screens', async ({
             expect(Math.abs(box.contentWidth - box.innerWidth), path).toBeLessThan(1);
         }
     }
+});
+
+test('a Legacy Markdown Post caps its paragraphs at the reading measure', async ({ page }) => {
+    await page.goto('/posts');
+    await page.locator('main a[href^="/posts/"]', { hasText: DEMO_POSTS.enrolment.title }).first().click();
+    const paragraph = page.locator('article [data-sic-markdown] > p').first();
+    await expect(paragraph).toBeVisible();
+    const { width, measure, column } = await paragraph.evaluate((el) => {
+        const probe = document.createElement('div');
+        probe.style.width = 'var(--measure)';
+        probe.style.height = '0';
+        el.parentElement!.appendChild(probe);
+        const measure = probe.getBoundingClientRect().width;
+        probe.remove();
+        return {
+            width: el.getBoundingClientRect().width,
+            measure,
+            column: el.parentElement!.getBoundingClientRect().width,
+        };
+    });
+    expect(width).toBeLessThanOrEqual(measure + 1);
+    expect(measure).toBeLessThan(column);
 });

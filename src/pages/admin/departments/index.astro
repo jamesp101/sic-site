@@ -1,5 +1,5 @@
 ---
-import { Network, Pencil, Search } from '@lucide/svelte';
+import { Network, Pencil } from '@lucide/svelte';
 import ListPagination from '@/components/admin/shared/ListPagination.astro';
 import AddLink from '@/components/admin/shared/AddLink.astro';
 import EmptyRow from '@/components/admin/shared/EmptyRow.astro';
@@ -7,16 +7,8 @@ import PageHeader from '@/components/admin/shared/PageHeader.astro';
 import DeleteRowButton from '@/components/admin/shared/DeleteRowButton.astro';
 import RowDeleteDialog from '@/components/admin/shared/RowDeleteDialog.svelte';
 import SortableTh from '@/components/admin/shared/SortableTh.astro';
-import {
-    cardClass,
-    formatDate,
-    iconLinkClass,
-    widePageClass,
-    searchInputClass,
-    selectClass,
-    thClass,
-} from '@/components/admin/ui';
-import { primaryButtonClass, secondaryButtonClass } from '@/components/admin/shared/form-utils';
+import { cardClass, formatDate, iconLinkClass, widePageClass, selectClass, thClass } from '@/components/admin/ui';
+import ListFilterBar from '@/components/admin/shared/ListFilterBar.astro';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { getInitials } from '@/lib/initials';
 import { adminPage } from '@/lib/server/admin-page';
@@ -69,6 +61,7 @@ const list = await runList<
         tiebreak: { name: 'asc' },
         search: ['name', 'slug', 'description'],
     },
+    filterParams: ['logo', 'members', 'posts'],
     filters: [
         hasLogo === true ? { logoPath: { not: null } } : hasLogo === false && { logoPath: null },
         hasMembers === true ? { members: { some: {} } } : hasMembers === false && { members: { none: {} } },
@@ -77,9 +70,8 @@ const list = await runList<
     count: (where) => db.department.count({ where }),
     fetch: (args) => db.department.findMany({ ...args, select: rowSelect }),
 });
-const { rows, q, sort, dir } = list;
+const { rows, sort, dir } = list;
 
-const filtered = Boolean(q || hasLogo !== null || hasMembers !== null || hasPosts !== null);
 const columns = [
     ['name', 'Department', ''],
     ['members', 'Members', 'text-right'],
@@ -103,49 +95,19 @@ const filters = [
             {superadmin && <AddLink href="/admin/departments/create">New department</AddLink>}
         </PageHeader>
 
-        <form
-            method="get"
-            action="/admin/departments"
-            class={`${cardClass} flex flex-col items-center justify-between gap-4 p-4 md:flex-row`}
-        >
-            <div class="relative w-full md:max-w-xs">
-                <Search
-                    class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    aria-hidden="true"
-                />
-                <input
-                    type="search"
-                    name="q"
-                    value={q}
-                    placeholder="Search name, slug or description…"
-                    aria-label="Search departments"
-                    class={searchInputClass}
-                />
-            </div>
-            <div class="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-center md:w-auto">
-                {filters.map((f) => (
-                    <select name={f.name} aria-label={`Filter by ${f.label.toLowerCase()}`} class={selectClass}>
-                        <option value="">{`Any ${f.label.toLowerCase()}`}</option>
-                        <option value="yes" selected={f.value === true}>
-                            {f.yes}
-                        </option>
-                        <option value="no" selected={f.value === false}>
-                            {f.no}
-                        </option>
-                    </select>
-                ))}
-                <input type="hidden" name="sort" value={sort} />
-                <input type="hidden" name="dir" value={dir} />
-                <button type="submit" class={primaryButtonClass}>
-                    Filter
-                </button>
-                {filtered && (
-                    <a href="/admin/departments" class={secondaryButtonClass}>
-                        Reset
-                    </a>
-                )}
-            </div>
-        </form>
+        <ListFilterBar list={list} placeholder="Search name, slug or description…" label="Search departments">
+            {filters.map((f) => (
+                <select name={f.name} aria-label={`Filter by ${f.label.toLowerCase()}`} class={selectClass}>
+                    <option value="">{`Any ${f.label.toLowerCase()}`}</option>
+                    <option value="yes" selected={f.value === true}>
+                        {f.yes}
+                    </option>
+                    <option value="no" selected={f.value === false}>
+                        {f.no}
+                    </option>
+                </select>
+            ))}
+        </ListFilterBar>
 
         <div class={`${cardClass} overflow-hidden`}>
             <div class="overflow-x-auto" tabindex="0" role="region" aria-label="Departments table">
@@ -250,7 +212,7 @@ const filters = [
                             <EmptyRow
                                 colspan={columns.length + 1}
                                 noun="departments"
-                                filtered={filtered}
+                                filtered={list.filtered}
                                 createHref={superadmin ? '/admin/departments/create' : undefined}
                                 createLabel="New department"
                             />

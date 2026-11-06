@@ -15,11 +15,11 @@ const page = slug ? await getPostPage(slug, siteUrl(Astro)) : null;
 if (!page) return new Response(null, { status: 404, statusText: 'Not Found' });
 
 // The layout's queries start once the Post exists (an unknown slug costs one query) and run beside the related Posts.
-const { post, related, seo, navLinks, departments } = page;
+const { post, related, seo, layout } = page;
 const hasEventDates = post.type === 'event' && post.startDate;
 ---
 
-<PublicLayout {...seo} {navLinks} {departments}>
+<PublicLayout {...seo} {layout}>
     <article class="py-12 md:py-20">
         <div class="reading-frame">
             <header class="space-y-4">

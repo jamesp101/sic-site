@@ -7,6 +7,19 @@ describe('parseMarkdown', () => {
         expect(parseMarkdown(null)).toBe('');
     });
 
+    it('wraps its output in the renderer-owned format marker', () => {
+        const html = parseMarkdown('Text');
+        expect(html.startsWith('<div data-sic-markdown>')).toBe(true);
+        expect(html.endsWith('</div>')).toBe(true);
+        expect(html.match(/data-sic-markdown/g)).toHaveLength(1);
+    });
+
+    it('marks the <Center> column so the measure rule can find it', () => {
+        const html = parseMarkdown('<Center>\nMiddle\n</Center>');
+        expect(html).toMatch(/<div data-sic-center class="[^"]*">/);
+        expect(html).not.toContain('data-sic-center data-sic-center');
+    });
+
     it('shifts content headings down one level, capped at h6', () => {
         const html = parseMarkdown('# One\n\n## Two\n\n###### Six');
         expect(html).not.toContain('<h1');

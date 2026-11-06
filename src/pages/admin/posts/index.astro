@@ -1,5 +1,5 @@
 ---
-import { Calendar, FileText, Megaphone, Pencil, Search, Star } from '@lucide/svelte';
+import { Calendar, FileText, Megaphone, Pencil, Star } from '@lucide/svelte';
 import ListPagination from '@/components/admin/shared/ListPagination.astro';
 import AddLink from '@/components/admin/shared/AddLink.astro';
 import EmptyRow from '@/components/admin/shared/EmptyRow.astro';
@@ -13,11 +13,10 @@ import {
     iconLinkClass,
     pillClass,
     widePageClass,
-    searchInputClass,
     selectClass,
     thClass,
 } from '@/components/admin/ui';
-import { primaryButtonClass, secondaryButtonClass } from '@/components/admin/shared/form-utils';
+import ListFilterBar from '@/components/admin/shared/ListFilterBar.astro';
 import AppLayout from '@/layouts/AppLayout.astro';
 import { POST_TYPES } from '@/lib/content-types';
 import { adminPage } from '@/lib/server/admin-page';
@@ -66,11 +65,12 @@ const list = await runList<
         tiebreak: { id: 'desc' },
         search: ['title', 'searchText'],
     },
+    filterParams: ['type', 'featured'],
     filters: [type && { type }, featured !== null && { isFeatured: featured }],
     count: (where) => db.post.count({ where }),
     fetch: (args) => db.post.findMany({ ...args, select: rowSelect }),
 });
-const { rows: posts, q, sort, dir } = list;
+const { rows: posts } = list;
 
 const typeClass: Record<string, string> = {
     article: 'bg-status-article-bg text-status-article-fg',
@@ -78,7 +78,6 @@ const typeClass: Record<string, string> = {
     announcement: 'bg-status-announcement-bg text-status-announcement-fg',
 };
 const typeIcon = { article: FileText, event: Calendar, announcement: Megaphone } as const;
-const filtered = Boolean(q || type || featured !== null);
 /** A single department or main page: the Department column adds nothing. */
 const showDepartment = scope.kind === 'all';
 const columns = [
@@ -99,55 +98,25 @@ const columns = [
             <AddLink href="/admin/posts/create">New post</AddLink>
         </PageHeader>
 
-        <form
-            method="get"
-            action="/admin/posts"
-            class={`${cardClass} flex flex-col items-center justify-between gap-4 p-4 md:flex-row`}
-        >
-            <div class="relative w-full md:max-w-xs">
-                <Search
-                    class="absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    aria-hidden="true"
-                />
-                <input
-                    type="search"
-                    name="q"
-                    value={q}
-                    placeholder="Search posts…"
-                    aria-label="Search posts"
-                    class={searchInputClass}
-                />
-            </div>
-            <div class="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-center md:w-auto">
-                <select name="type" aria-label="Filter by type" class={selectClass}>
-                    <option value="">All types</option>
-                    {POST_TYPES.map((t) => (
-                        <option value={t} selected={t === type}>
-                            {t[0].toUpperCase() + t.slice(1)}
-                        </option>
-                    ))}
-                </select>
-                <select name="featured" aria-label="Filter by featured" class={selectClass}>
-                    <option value="">All featured</option>
-                    <option value="yes" selected={featured === true}>
-                        Featured only
+        <ListFilterBar list={list} placeholder="Search posts…" label="Search posts">
+            <select name="type" aria-label="Filter by type" class={selectClass}>
+                <option value="">All types</option>
+                {POST_TYPES.map((t) => (
+                    <option value={t} selected={t === type}>
+                        {t[0].toUpperCase() + t.slice(1)}
                     </option>
-                    <option value="no" selected={featured === false}>
-                        Not featured
-                    </option>
-                </select>
-                <input type="hidden" name="sort" value={sort} />
-                <input type="hidden" name="dir" value={dir} />
-                <button type="submit" class={primaryButtonClass}>
-                    Filter
-                </button>
-                {filtered && (
-                    <a href="/admin/posts" class={secondaryButtonClass}>
-                        Reset
-                    </a>
-                )}
-            </div>
-        </form>
+                ))}
+            </select>
+            <select name="featured" aria-label="Filter by featured" class={selectClass}>
+                <option value="">All featured</option>
+                <option value="yes" selected={featured === true}>
+                    Featured only
+                </option>
+                <option value="no" selected={featured === false}>
+                    Not featured
+                </option>
+            </select>
+        </ListFilterBar>
 
         <div class={`${cardClass} overflow-hidden`}>
             <div class="overflow-x-auto" tabindex="0" role="region" aria-label="Posts table">
@@ -248,7 +217,7 @@ const columns = [
                             <EmptyRow
                                 colspan={columns.length + 1}
                                 noun="posts"
-                                filtered={filtered}
+                                filtered={list.filtered}
                                 createHref="/admin/posts/create"
                                 createLabel="New post"
                             />

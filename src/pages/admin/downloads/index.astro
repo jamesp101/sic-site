@@ -39,6 +39,7 @@ const list = await runList<
         search: ['fileName', 'directory', 'tags'],
         perPage: 24,
     },
+    filterParams: ['folder'],
     filters: [folder && directoryWhere(folder)],
     count: (where) => db.download.count({ where }),
     fetch: (args) => db.download.findMany({ ...args, include: { department: { select: { name: true } } } }),
@@ -65,7 +66,7 @@ const manager = {
         { label: 'Size', field: 'size' },
     ].map((s) => ({ ...s, href: list.sortHref(s.field), active: list.sort === s.field })),
     allFoldersHref: list.href({ folder: null }),
-    resetHref: list.href({ q: null, folder: null, sort: null, dir: null }),
+    resetHref: list.resetHref,
     folders,
 };
 ---

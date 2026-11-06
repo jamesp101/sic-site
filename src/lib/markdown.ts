@@ -90,7 +90,7 @@ function extractTags(source: string, stash: string[]): string {
         if (badgeAttr !== undefined) return put(badges(badgeAttr));
         if (badgeBody !== undefined) return put(badges(badgeBody));
         if (closing) return closeTag(closing);
-        if (simple === 'Center') return open('Center', `<div class="${CLASSES.center}">`, '</div>');
+        if (simple === 'Center') return open('Center', `<div data-sic-center class="${CLASSES.center}">`, '</div>');
         if (simple === 'Flex') return open('Flex', `<div class="${CLASSES.flex}">`, '</div>');
         if (accTitle !== undefined || match.startsWith('<Accordion')) {
             return open(
@@ -242,5 +242,5 @@ export function parseMarkdown(markdown: string | null | undefined): string {
     }
     flushParagraph();
 
-    return restore(html.join('\n'), stash);
+    return `<div data-sic-markdown>${restore(html.join('\n'), stash)}</div>`;
 }

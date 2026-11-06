@@ -13,6 +13,7 @@
   import { Sheet, SheetContent } from '@/components/ui/sheet';
   import type { FileKind } from '@/lib/content-types';
   import { formatFileSize } from '@/lib/format';
+  import { createDownloadsSession } from './downloads-session';
 
   interface DownloadRow {
     id: number;
@@ -76,15 +77,30 @@
   let detailsOpen = $state(false);
   let copied = $state(false);
 
-  let folderOpen = $state(false);
   let folderName = $state('');
   let folderDept = $state('');
-  let folderBusy = $state(false);
-  let folderError = $state('');
 
-  let confirmOpen = $state(false);
-  let confirmBusy = $state(false);
-  let pending = $state<{ kind: 'file' | 'folder'; id: number; name: string } | null>(null);
+  const session = createDownloadsSession({
+    port: {
+      async deleteDownload(id) {
+        const { error } = await actions.downloads.delete({ id });
+        return error ? { ok: false, ...parseActionError(error) } : { ok: true };
+      },
+      async deleteDirectory(id) {
+        const { error } = await actions.directories.delete({ id });
+        return error ? { ok: false, ...parseActionError(error) } : { ok: true };
+      },
+      async createDirectory(input) {
+        const { error } = await actions.directories.create(input);
+        return error ? { ok: false, ...parseActionError(error) } : { ok: true };
+      },
+      refresh: reloadView,
+    },
+    onChange: (next) => (view = next),
+    onError: (message) => toast.error(message),
+  });
+  let view = $state.raw(session.snapshot());
+  const pending = $derived(view.delete.target);
 
   const filtered = $derived(Boolean(manager.q || manager.folder));
 
@@ -99,45 +115,15 @@
     setTimeout(() => (copied = false), 2000);
   }
 
-  function askDelete(kind: 'file' | 'folder', id: number, name: string) {
-    pending = { kind, id, name };
-    confirmOpen = true;
-  }
+  const askDelete = (kind: 'file' | 'folder', id: number, name: string) => session.askDelete(kind, id, name);
 
-  async function confirmDelete() {
-    if (!pending) return;
-    confirmBusy = true;
-    const { error } = await (pending.kind === 'file'
-      ? actions.downloads.delete({ id: pending.id })
-      : actions.directories.delete({ id: pending.id }));
-    if (error) {
-      confirmBusy = false;
-      confirmOpen = false;
-      toast.error(parseActionError(error).message);
-      return;
-    }
-    await reloadView();
-  }
-
-  async function createFolder(event: SubmitEvent) {
+  function createFolder(event: SubmitEvent) {
     event.preventDefault();
-    folderBusy = true;
-    folderError = '';
-    const { error } = await actions.directories.create({
-      name: folderName.trim(),
-      departmentId: folderDept ? Number(folderDept) : null,
-    });
-    if (error) {
-      const parsed = parseActionError(error);
-      folderError = parsed.fields.name || parsed.message;
-      folderBusy = false;
-      return;
-    }
-    await reloadView();
+    return session.createFolder(folderName, folderDept);
   }
 
   function onKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape' && detailsOpen && !confirmOpen) detailsOpen = false;
+    if (event.key === 'Escape' && detailsOpen && !view.delete.open) detailsOpen = false;
   }
 
   const chip = 'inline-flex items-center gap-1 rounded-md bg-surface-alt px-2 py-0.5 text-xs font-semibold text-muted-foreground';
@@ -162,7 +148,7 @@
           <List class="h-3.5 w-3.5" aria-hidden="true" /> List
         </button>
       </div>
-      <button type="button" onclick={() => (folderOpen = true)} class={secondaryButtonClass}>
+      <button type="button" onclick={() => session.openFolder()} class={secondaryButtonClass}>
         <FolderPlus class="h-4 w-4 text-gold-600" aria-hidden="true" /> New directory
       </button>
       <a href="/admin/downloads/create" class={primaryButtonClass}>Upload file</a>
@@ -317,7 +303,7 @@
 </div>
 
 <!-- New directory -->
-<Dialog bind:open={folderOpen}>
+<Dialog bind:open={() => view.folder.open, (open) => session.setFolderOpen(open)}>
   <DialogContent class="max-w-md border-border bg-surface shadow-brand-xl">
     <form method="post" onsubmit={createFolder} class="space-y-4">
       <DialogTitle>New directory</DialogTitle>
@@ -332,11 +318,11 @@
           {#each departments as dept (dept.id)}<option value={String(dept.id)}>{dept.name}</option>{/each}
         </select>
       </div>
-      {#if folderError}<p class="text-xs text-destructive" role="alert">{folderError}</p>{/if}
+      {#if view.folder.error}<p class="text-xs text-destructive" role="alert">{view.folder.error}</p>{/if}
       <div class="flex justify-end gap-3 pt-2">
-        <button type="button" onclick={() => (folderOpen = false)} class={secondaryButtonClass}>Cancel</button>
-        <button type="submit" disabled={folderBusy} class={primaryButtonClass}>
-          {#if folderBusy}<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />{/if} Create directory
+        <button type="button" onclick={() => session.setFolderOpen(false)} class={secondaryButtonClass}>Cancel</button>
+        <button type="submit" disabled={view.folder.busy} class={primaryButtonClass}>
+          {#if view.folder.busy}<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />{/if} Create directory
         </button>
       </div>
     </form>
@@ -344,13 +330,13 @@
 </Dialog>
 
 <ConfirmDialog
-  bind:open={confirmOpen}
+  bind:open={() => view.delete.open, (open) => session.setDeleteOpen(open)}
   title={pending?.kind === 'folder' ? `Delete directory “${pending.name}”?` : `Delete “${pending?.name ?? ''}”?`}
   description={pending?.kind === 'folder' ? 'Files in this directory are kept.' : 'The file will be permanently removed. This cannot be undone.'}
   confirmLabel="Delete"
   destructive
-  processing={confirmBusy}
-  onConfirm={confirmDelete}
+  processing={view.delete.busy}
+  onConfirm={() => session.confirmDelete()}
 />
 
 <!-- File details drawer -->

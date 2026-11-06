@@ -6,7 +6,7 @@ import { closeTestDb } from './test-db';
 vi.mock('./db', async () => ({ db: await (await import('./test-db')).openTestDb(), dbProvider: 'sqlite' }));
 
 const { db } = await import('./db');
-const { getNavLinks, getPostPage, listPosts } = await import('./queries');
+const { getNavLinks, getPostPage, getPostsPage, listPosts } = await import('./queries');
 
 const long = 'Plenty of words about enrolment and orientation week. '.repeat(10);
 const blockContent = serializeDocument(
@@ -44,6 +44,16 @@ beforeAll(async () => {
 
 afterAll(closeTestDb);
 
+describe('getPostsPage', () => {
+    it('hands over the layout queries beside the list, and is null past the last page', async () => {
+        const page = await getPostsPage({}, 1, 10, site);
+        expect(page!.result.items).toHaveLength(4);
+        expect((await page!.layout.departments).map((d) => d.name)).toEqual(['CBA', 'CIT']);
+        expect(await page!.layout.navLinks).toEqual([]);
+        expect(await getPostsPage({}, 2, 10, site)).toBeNull();
+    });
+});
+
 describe('Post Excerpts', () => {
     it('are the same as parsing the content, for block, Markdown and unindexed posts', async () => {
         const { items } = await listPosts({}, { perPage: 10 });
@@ -70,8 +80,8 @@ describe('Post Excerpts', () => {
         expect(navLinks).not.toHaveBeenCalled();
         vi.restoreAllMocks();
         const page = await getPostPage('markdown', site);
-        expect(await page!.navLinks).toEqual(expect.any(Array));
-        expect(await page!.departments).toEqual(expect.any(Array));
+        expect(await page!.layout.navLinks).toEqual(expect.any(Array));
+        expect(await page!.layout.departments).toEqual(expect.any(Array));
     });
 
     it('stay equal on the Post page, whose Excerpt comes from the content', async () => {

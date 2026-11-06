@@ -5,6 +5,7 @@ Rich content is the Post body, hero sections, the Welcome hero (`src/lib/server/
 ## One entry point
 
 - Classification happens once, in `@/lib/blocks/content`: `parseContent` → `html()`, `text()`, `excerpt()`, `check()`. Wrappers: `renderContent`, `toPlainText`, `excerptOf`, `checkContent`. `editableBlocks` turns stored content into the editor's blocks.
+- Each renderer marks its own output: block HTML is wrapped in `data-sic-blocks`, Markdown HTML in `data-sic-markdown` (its `<Center>` column carries `data-sic-center`). `app.css` keys the reading measure on these markers, so a page never tells the formats apart; do not add format attributes in pages.
 - Anything opening with `{"type":"sic-blocks"` is a block document. A broken one renders empty and is rejected on save.
 - Call the Markdown or block renderers only through that module. The exception is the editors' live previews (`BlockEditor` canvas with `renderBlocks`, `MarkdownEditor` preview with `parseMarkdown`): they render the in-memory draft, not stored content.
 - Validate on save with `contentField()` (`@/lib/server/content-field`).
@@ -30,3 +31,4 @@ Media blocks:
 - The editing session is `EditorSession` in `components/admin/editor/session.ts`: blocks, `History`, a selection that never dangles, the emitted value, the Layers `revision`.
 - `BlockEditor.svelte` applies edits only through the session (`session.apply(edit)`, `setProps`, `undo`, `redo`, `select`); it never mutates blocks, history or selection itself.
 - The one columns-stack literal is in `document.ts` (`updateBlock` keeps one stack per column).
+- Keyboard shortcuts are one table in `components/admin/editor/keymap.ts` (`SHORTCUTS`: chords, label, command, when it applies). `resolveKey(event, context)` gives the command; `BlockEditor.handleKey` only runs it. The shortcuts dialog (`displayKeys`) and the toolbar `aria-keyshortcuts` (`ariaKeys`) derive from the same table. Add a shortcut there, never in `handleKey`.

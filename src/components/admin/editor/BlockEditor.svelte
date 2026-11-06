@@ -51,6 +51,7 @@
   import LayerList from './LayerList.svelte';
   import Palette from './Palette.svelte';
   import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+  import { ariaKeys, displayKeys, resolveKey, SHORTCUTS } from './keymap';
 
   let {
     value = $bindable(''),
@@ -207,69 +208,47 @@
     const target = event.target as HTMLElement | null;
     const tag = target?.tagName ?? '';
     const typing = editing || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable === true;
-    const mod = event.ctrlKey || event.metaKey;
-    const key = event.key.toLowerCase();
+    const command = resolveKey(event, {
+      typing,
+      // The layers list lends arrow keys to the drag & drop library.
+      inList: Boolean(target?.closest('[data-editor-layers]')) || tag === 'BUTTON',
+      hasSelection: Boolean(selectedId),
+      hasParent: Boolean(selected?.parentId),
+      hasChild: Boolean(selected?.block.children?.[0])
+    });
+    if (!command) return;
 
-    if (mod && (key === 'z' || key === 'y')) {
-      if (typing) return;
-      event.preventDefault();
-      if (key === 'y' || event.shiftKey) redo();
-      else undo();
-      return;
-    }
-    if (event.key === 'Escape') {
+    if (command === 'escape') {
       if (typing) {
         if (!editing) target?.blur();
-        return;
-      }
-      if (selectedId) select(null);
+      } else if (selectedId) select(null);
       else if (fullscreen) fullscreen = false;
       return;
     }
-    if (typing) return;
-
-    if (event.key === '?' && !mod && !event.altKey) {
-      event.preventDefault();
-      helpOpen = true;
-      return;
-    }
-
-    if (mod && key === 'd') {
-      event.preventDefault();
-      duplicate();
-      return;
-    }
-    if (event.altKey && event.key.startsWith('Arrow')) {
-      event.preventDefault();
-      if (event.key === 'ArrowUp') shift(-1);
-      else if (event.key === 'ArrowDown') shift(1);
-      else if (event.key === 'ArrowLeft') outdent();
-      else indent();
-      return;
-    }
-    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) {
-      event.preventDefault();
-      remove();
-      return;
-    }
-    if (mod || event.altKey || event.shiftKey) return;
-    // The layers list lends arrow keys to the drag & drop library.
-    if (target?.closest('[data-editor-layers]') || tag === 'BUTTON') return;
+    event.preventDefault();
 
     const position = flat.findIndex(({ block }) => block.id === selectedId);
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const next = flat[position + (event.key === 'ArrowDown' ? 1 : -1)] ?? (position === -1 ? flat[0] : undefined);
-      if (next) select(next.block.id);
-    } else if (event.key === 'ArrowLeft' && selected?.parentId) {
-      event.preventDefault();
-      select(selected.parentId);
-    } else if (event.key === 'ArrowRight' && selected?.block.children?.[0]) {
-      event.preventDefault();
-      select(selected.block.children[0].id);
-    } else if (event.key === 'Enter' && selectedId) {
-      event.preventDefault();
-      if (!canvas?.startEdit(selectedId)) inspectorEl?.querySelector<HTMLElement>('input, textarea, select')?.focus();
+    switch (command) {
+      case 'undo': return undo();
+      case 'redo': return redo();
+      case 'help': helpOpen = true; return;
+      case 'duplicate': return duplicate();
+      case 'moveUp': return shift(-1);
+      case 'moveDown': return shift(1);
+      case 'outdent': return outdent();
+      case 'indent': return indent();
+      case 'remove': return remove();
+      case 'selectNext':
+      case 'selectPrevious': {
+        const next = flat[position + (command === 'selectNext' ? 1 : -1)] ?? (position === -1 ? flat[0] : undefined);
+        if (next) select(next.block.id);
+        return;
+      }
+      case 'selectParent': return select(selected?.parentId ?? null);
+      case 'selectChild': return select(selected?.block.children?.[0]?.id ?? null);
+      case 'edit':
+        if (!canvas?.startEdit(selectedId!)) inspectorEl?.querySelector<HTMLElement>('input, textarea, select')?.focus();
+        return;
     }
   }
 
@@ -291,20 +270,6 @@
   let rightOpen = $state(true);
   let helpOpen = $state(false);
 
-  const SHORTCUTS: [string, string][] = [
-    ['Undo', 'Ctrl+Z'],
-    ['Redo', 'Ctrl+Shift+Z or Ctrl+Y'],
-    ['Duplicate the selected element', 'Ctrl+D'],
-    ['Delete the selected element', 'Del or Backspace'],
-    ['Move up or down', 'Alt+↑ / Alt+↓'],
-    ['Move out of the container', 'Alt+←'],
-    ['Move into the previous container', 'Alt+→'],
-    ['Select the previous or next element', '↑ / ↓'],
-    ['Select the parent or first child', '← / →'],
-    ['Edit the selected text', 'Enter'],
-    ['Deselect, or leave full screen', 'Esc'],
-    ['Show these shortcuts', '?'],
-  ];
   let leftTab = $state<'elements' | 'layers'>('elements');
   let showIssues = $state(false);
 
@@ -395,29 +360,29 @@
   >
     <!-- Toolbar -->
     <div role="toolbar" aria-label="Editor toolbar" class="flex flex-wrap items-center gap-0.5 border-b border-border bg-surface-alt px-2 py-1.5">
-      <button type="button" class={btn} aria-label="Undo" title="Undo (Ctrl+Z)" aria-keyshortcuts="Control+Z Meta+Z" disabled={!canUndo} onclick={undo}>
+      <button type="button" class={btn} aria-label="Undo" title="Undo (Ctrl+Z)" aria-keyshortcuts={ariaKeys('undo')} disabled={!canUndo} onclick={undo}>
         <Undo2 class="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" class={btn} aria-label="Redo" title="Redo (Ctrl+Shift+Z)" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y" disabled={!canRedo} onclick={redo}>
+      <button type="button" class={btn} aria-label="Redo" title="Redo (Ctrl+Shift+Z)" aria-keyshortcuts={ariaKeys('redo')} disabled={!canRedo} onclick={redo}>
         <Redo2 class="h-4 w-4" aria-hidden="true" />
       </button>
       <span class="mx-1 h-5 w-px bg-border-strong" aria-hidden="true"></span>
-      <button type="button" class={btn} aria-label="Duplicate" title="Duplicate (Ctrl+D)" aria-keyshortcuts="Control+D Meta+D" disabled={!selectedId} onclick={duplicate}>
+      <button type="button" class={btn} aria-label="Duplicate" title="Duplicate (Ctrl+D)" aria-keyshortcuts={ariaKeys('duplicate')} disabled={!selectedId} onclick={duplicate}>
         <Copy class="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" class={btn} aria-label="Delete" title="Delete (Del)" aria-keyshortcuts="Delete" disabled={!selectedId} onclick={remove}>
+      <button type="button" class={btn} aria-label="Delete" title="Delete (Del)" aria-keyshortcuts={ariaKeys('remove')} disabled={!selectedId} onclick={remove}>
         <Trash class="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" class={btn} aria-label="Move up" title="Move up (Alt+↑)" aria-keyshortcuts="Alt+ArrowUp" disabled={!selectedId} onclick={() => shift(-1)}>
+      <button type="button" class={btn} aria-label="Move up" title="Move up (Alt+↑)" aria-keyshortcuts={ariaKeys('moveUp')} disabled={!selectedId} onclick={() => shift(-1)}>
         <ArrowUp class="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" class={btn} aria-label="Move down" title="Move down (Alt+↓)" aria-keyshortcuts="Alt+ArrowDown" disabled={!selectedId} onclick={() => shift(1)}>
+      <button type="button" class={btn} aria-label="Move down" title="Move down (Alt+↓)" aria-keyshortcuts={ariaKeys('moveDown')} disabled={!selectedId} onclick={() => shift(1)}>
         <ArrowDown class="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" class={btn} aria-label="Move out of container" title="Move out of container (Alt+←)" aria-keyshortcuts="Alt+ArrowLeft" disabled={!selected?.parentId} onclick={outdent}>
+      <button type="button" class={btn} aria-label="Move out of container" title="Move out of container (Alt+←)" aria-keyshortcuts={ariaKeys('outdent')} disabled={!selected?.parentId} onclick={outdent}>
         <CornerUpLeft class="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" class={btn} aria-label="Move into previous container" title="Move into previous container (Alt+→)" aria-keyshortcuts="Alt+ArrowRight" disabled={!selectedId} onclick={indent}>
+      <button type="button" class={btn} aria-label="Move into previous container" title="Move into previous container (Alt+→)" aria-keyshortcuts={ariaKeys('indent')} disabled={!selectedId} onclick={indent}>
         <CornerDownRight class="h-4 w-4" aria-hidden="true" />
       </button>
 
@@ -465,10 +430,10 @@
         <button type="button" class={toggleBtn(rightOpen && !previewing)} aria-label="Toggle inspector panel" title="Toggle inspector panel" aria-pressed={rightOpen} disabled={previewing} onclick={() => (rightOpen = !rightOpen)}>
           <PanelRight class="h-4 w-4" aria-hidden="true" />
         </button>
-        <button type="button" class={btn} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" aria-keyshortcuts="?" aria-haspopup="dialog" onclick={() => (helpOpen = true)}>
+        <button type="button" class={btn} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" aria-keyshortcuts={ariaKeys('help')} aria-haspopup="dialog" onclick={() => (helpOpen = true)}>
           <Keyboard class="h-4 w-4" aria-hidden="true" />
         </button>
-        <button type="button" class={btn} aria-label={fullscreen ? 'Exit full screen' : 'Full screen'} title={fullscreen ? 'Exit full screen' : 'Full screen editor'} aria-keyshortcuts={fullscreen ? 'Escape' : undefined} onclick={() => (fullscreen = !fullscreen)}>
+        <button type="button" class={btn} aria-label={fullscreen ? 'Exit full screen' : 'Full screen'} title={fullscreen ? 'Exit full screen' : 'Full screen editor'} aria-keyshortcuts={fullscreen ? ariaKeys('escape') : undefined} onclick={() => (fullscreen = !fullscreen)}>
           {#if fullscreen}<Minimize2 class="h-4 w-4" aria-hidden="true" />{:else}<Maximize2 class="h-4 w-4" aria-hidden="true" />{/if}
         </button>
       </div>
@@ -609,9 +574,9 @@
       <div onkeydown={(event) => event.key === 'Escape' && (helpOpen = false)}>
         <DialogTitle>Keyboard shortcuts</DialogTitle>
         <dl class="mt-4 grid grid-cols-[1fr_auto] gap-x-6 gap-y-2 text-sm">
-          {#each SHORTCUTS as [action, keys] (action)}
-            <dt class="text-foreground">{action}</dt>
-            <dd class="text-right"><kbd class="font-sans font-semibold">{keys}</kbd></dd>
+          {#each SHORTCUTS as shortcut (shortcut.command)}
+            <dt class="text-foreground">{shortcut.label}</dt>
+            <dd class="text-right"><kbd class="font-sans font-semibold">{displayKeys(shortcut)}</kbd></dd>
           {/each}
         </dl>
         <div class="mt-6 flex justify-end">

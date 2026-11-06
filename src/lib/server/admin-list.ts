@@ -47,6 +47,10 @@ export interface ListState<Row> extends SortLinks {
     perPage: number;
     /** Trimmed `?q=` ('' when absent). */
     q: string;
+    /** A search or a filter narrows the list (sort, direction and page do not count). */
+    filtered: boolean;
+    /** The list without search, filters and page; sort and direction stay, so a reset does not reorder it. */
+    resetHref: string;
     sort: string;
     dir: SortDir;
     /** Link to `page` keeping the other parameters; page 1 is left out of the URL. */
@@ -77,12 +81,14 @@ export interface RunListInput<W extends object, O, Row> {
      * is restricted by `id`, the users list is superadmin-only). It is still ANDed, so search cannot widen it.
      */
     restriction?: W;
+    /** Query parameters the `filters` are read from; a reset drops them with `q` and `page`. */
+    filterParams?: readonly string[];
     count: (where: ListWhere<W>) => Promise<number>;
     fetch: (args: { where: ListWhere<W>; orderBy: O[]; skip: number; take: number }) => Promise<Row[]>;
 }
 
 export async function runList<W extends object, O, Row>(input: RunListInput<W, O, Row>): Promise<ListState<Row>> {
-    const { url, actor, scope, spec, filters = [], restriction, count, fetch } = input;
+    const { url, actor, scope, spec, filters = [], restriction, filterParams = [], count, fetch } = input;
     const params = url.searchParams;
     const perPage = spec.perPage ?? LIST_PER_PAGE;
 
@@ -93,6 +99,7 @@ export async function runList<W extends object, O, Row>(input: RunListInput<W, O
     const requestedDir = params.get('dir');
     const dir: SortDir = requestedDir === 'asc' || requestedDir === 'desc' ? requestedDir : field.defaultDir;
 
+    const active = (f: unknown) => !!f && Object.keys(f).length > 0;
     const searchFilter =
         q && spec.search?.length
             ? ({ OR: spec.search.map((name) => ({ [name]: textContains(q) })) } as unknown as W)
@@ -100,9 +107,10 @@ export async function runList<W extends object, O, Row>(input: RunListInput<W, O
     const all = [searchFilter, ...filters];
     // `listWhere` yields a `departmentId` condition: lists using it are models with that column, so it is a W.
     const where: ListWhere<W> = restriction
-        ? { AND: [restriction, ...all.filter((f): f is W => !!f && Object.keys(f).length > 0)] }
+        ? { AND: [restriction, ...all.filter((f): f is W => active(f))] }
         : (listWhere<W>(actor, scope, all) as ListWhere<W>);
 
+    const filtered = q !== '' || filters.some(active);
     const total = await count(where);
     const pageCount = Math.max(1, Math.ceil(total / perPage));
     // Past the end (e.g. after deleting the last row of the last page): show the last page instead.
@@ -130,6 +138,8 @@ export async function runList<W extends object, O, Row>(input: RunListInput<W, O
         pageCount,
         perPage,
         q,
+        filtered,
+        resetHref: hrefWith({ q: null, page: null, ...Object.fromEntries(filterParams.map((n) => [n, null])) }),
         sort,
         dir,
         href: hrefWith,

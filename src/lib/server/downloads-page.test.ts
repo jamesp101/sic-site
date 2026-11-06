@@ -49,6 +49,12 @@ beforeAll(async () => {
 afterAll(closeTestDb);
 
 describe('getDownloadsPage', () => {
+    it('hands over the layout queries', async () => {
+        const page = await getDownloadsPage({});
+        expect((await page.layout.departments).map((d) => d.name)).toEqual(['CBA', 'CIT']);
+        expect(await page.layout.navLinks).toEqual([]);
+    });
+
     it('counts Downloads per Directory, files without one under General', async () => {
         const page = await getDownloadsPage({});
         expect(page.totalCount).toBe(4);

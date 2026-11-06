@@ -5,15 +5,14 @@ import ContactInfoCard from '@/components/site/ContactInfoCard.astro';
 import Eyebrow from '@/components/site/Eyebrow.astro';
 import PageBanner from '@/components/site/PageBanner.astro';
 import PublicLayout from '@/layouts/PublicLayout.astro';
-import { getDepartments, getNavLinks, startQuery } from '@/lib/server/queries';
+import { startLayoutQueries } from '@/lib/server/queries';
 
 // No-JS path: the browser POSTs the form to this page, Astro runs the action, we render its result.
 const result = Astro.getActionResult(actions.contact.send);
 if (result && !result.error) return Astro.redirect('/contact?sent=1', 303);
 
 // The layout's queries run while the failed form's body is read below.
-const navLinks = startQuery(getNavLinks());
-const departments = startQuery(getDepartments());
+const layout = startLayoutQueries();
 
 const fieldErrors = result?.error && isInputError(result.error) ? result.error.fields : {};
 const formError = result?.error
@@ -34,8 +33,7 @@ if (result?.error) {
 ---
 
 <PublicLayout
-    {navLinks}
-    {departments}
+    {layout}
     title="Contact & Admissions"
     description="Contact San Isidro College in Impalambong, Malaybalay City, Bukidnon: phone, email, campus address and an online inquiry form."
     canonical="/contact"

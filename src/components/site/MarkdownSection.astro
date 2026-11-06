@@ -14,8 +14,8 @@ const { content, title, class: className = '' } = Astro.props;
 const rich = parseContent(content);
 const html = rich.html();
 // Same container as the header and banner, so the section's left edge lines up with them. Text gets its reading
-// measure per element (`app.css`: `[data-sic-blocks]` for block documents, `[data-markdown]` for Legacy
-// Markdown); grids, cards and accordions use the full width.
+// measure per element (`app.css`: `[data-sic-blocks]` for block documents, `[data-sic-markdown]` for Legacy
+// Markdown; both markers come from the renderers); grids, cards and accordions use the full width.
 ---
 
 {html && (
@@ -25,11 +25,7 @@ const html = rich.html();
                 {title && (
                     <h2 class="mb-6 text-3xl font-bold text-brand-800 md:text-4xl dark:text-foreground">{title}</h2>
                 )}
-                <div
-                    data-markdown={rich.format === 'markdown' ? '' : undefined}
-                    class="text-base leading-relaxed text-foreground"
-                    set:html={html}
-                />
+                <div class="text-base leading-relaxed text-foreground" set:html={html} />
             </div>
         </section>
         {hasAlbum(html) && <AlbumLightbox />}

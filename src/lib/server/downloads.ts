@@ -4,14 +4,14 @@
  * admin Downloads list. Free of `astro:*` imports so it is unit-testable.
  */
 import type { Prisma } from '@/generated/prisma/client';
-import type { DepartmentSummary, DownloadFilters, DownloadView } from '@/lib/content-types';
+import type { DownloadFilters, DownloadView } from '@/lib/content-types';
 import { extensionOf, fileKind } from '@/lib/files';
 import { downloadsHref, hasDownloadFilters } from '@/lib/post-filters';
 import type { PageSeo } from '@/lib/seo';
 import { departmentWhere, type AdminScope } from './admin-scope';
 import { isSuperAdmin, type Actor } from './authz';
 import { db } from './db';
-import { getDepartments } from './queries';
+import { startLayoutQueries, type LayoutQueries } from './queries';
 import { textContains } from './search';
 import { downloadUrl, storedUrl } from './storage';
 
@@ -67,7 +67,7 @@ export async function getDirectoryNames(): Promise<string[]> {
 
 /** What `/downloads` renders: see `getDownloadsPage`. */
 export interface DownloadsPage {
-    departments: DepartmentSummary[];
+    layout: LayoutQueries;
     /** The files to list: matching the search and Department, narrowed to `selected`. */
     downloads: DownloadView[];
     /** `downloads` grouped by Directory, in order of first appearance. */
@@ -164,8 +164,8 @@ async function getDownloadDirectories(departmentId?: number): Promise<string[]> 
  */
 export async function getDownloadsPage(filters: DownloadFilters): Promise<DownloadsPage> {
     const { search, departmentId, directory } = filters;
-    const [departments, matching, directoryNames] = await Promise.all([
-        getDepartments(),
+    const layout = startLayoutQueries();
+    const [matching, directoryNames] = await Promise.all([
         listDownloads({ search, departmentId }),
         getDownloadDirectories(departmentId),
     ]);
@@ -183,7 +183,7 @@ export async function getDownloadsPage(filters: DownloadFilters): Promise<Downlo
     for (const file of downloads) groups.set(file.directory, [...(groups.get(file.directory) ?? []), file]);
 
     return {
-        departments,
+        layout,
         downloads,
         groups: [...groups].map(([name, files]) => ({ name, files })),
         folders,

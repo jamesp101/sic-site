@@ -16,10 +16,10 @@ const page = slug ? await getDepartmentPage(slug, siteUrl(Astro)) : null;
 if (!page) return new Response(null, { status: 404, statusText: 'Not Found' });
 
 // The layout's queries start once the Department exists (an unknown slug costs one query) and run beside the page's own.
-const { department, carousel, posts, postCount, members, heroSections, seo, navLinks, departments } = page;
+const { department, carousel, posts, postCount, members, heroSections, seo, layout } = page;
 ---
 
-<PublicLayout {...seo} {navLinks} {departments}>
+<PublicLayout {...seo} {layout}>
     {carousel.length > 0 && (
         <HeroCarousel client:visible slides={carousel} tall={false} label={`${department.name} highlights`} />
     )}

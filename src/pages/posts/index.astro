@@ -9,13 +9,11 @@ import type { PostType } from '@/lib/content-types';
 import { parsePage } from '@/lib/pagination';
 import { hasPostFilters, parsePostFilters, postsHref } from '@/lib/post-filters';
 import { siteUrl } from '@/lib/seo';
-import { getNavLinks, getPostsPage, startQuery } from '@/lib/server/queries';
+import { getPostsPage } from '@/lib/server/queries';
 
 /** Three full rows of the three-column grid. */
 const PER_PAGE = 12;
 
-// The layout's Navigation links run beside the page's queries, not after them.
-const navLinks = startQuery(getNavLinks());
 const params = Astro.url.searchParams;
 const filters = parsePostFilters(params);
 const { type, departmentId, sort } = filters;
@@ -24,7 +22,8 @@ const page = parsePage(params.get('page'));
 
 const listing = await getPostsPage(filters, page, PER_PAGE, siteUrl(Astro));
 if (!listing) return new Response(null, { status: 404, statusText: 'Not Found' });
-const { result, departments, seo } = listing;
+const { result, seo, layout } = listing;
+const departments = await layout.departments;
 const posts = result.items;
 
 const filtered = hasPostFilters(filters);
@@ -38,7 +37,7 @@ const tabs: { label: string; type?: PostType }[] = [
 ];
 ---
 
-<PublicLayout {...seo} {navLinks} {departments}>
+<PublicLayout {...seo} {layout}>
     <PageBanner
         eyebrow="News & events"
         title="News, Events & Announcements"
