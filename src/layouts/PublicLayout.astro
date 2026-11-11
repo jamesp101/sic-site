@@ -18,14 +18,7 @@ type Props = PageSeo & {
     minimal?: boolean;
 };
 
-const {
-    breadcrumbs,
-    bodyClass = '',
-    minimal = false,
-    jsonLd,
-    layout,
-    ...seo
-} = Astro.props;
+const { breadcrumbs, bodyClass = '', minimal = false, jsonLd, layout, ...seo } = Astro.props;
 
 const queries = minimal ? null : (layout ?? startLayoutQueries());
 const [navLinks, departments] = queries ? await Promise.all([queries.navLinks, queries.departments]) : [[], []];
