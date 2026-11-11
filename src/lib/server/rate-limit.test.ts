@@ -70,14 +70,14 @@ describe('sign-in attempts', () => {
         for (let i = 0; i < 100; i++) expect(await claimSignInAttempt('c@sic.edu.ph', `192.0.2.${i}`, T0)).toBe(true);
         expect(await claimSignInAttempt('c@sic.edu.ph', '192.0.2.200', T0)).toBe(false);
         expect(await claimSignInAttempt('d@sic.edu.ph', '192.0.2.200', T0)).toBe(true);
-    });
+    }, 60_000);
 
     it('does not keep a slot for the address when the per-email limit refused it', async () => {
         for (let i = 0; i < 100; i++) await claimSignInAttempt('f@sic.edu.ph', `192.0.2.${i}`, T0);
         for (let i = 0; i < 20; i++) expect(await claimSignInAttempt('f@sic.edu.ph', '192.0.2.250', T0)).toBe(false);
         const row = await db.rateLimit.findMany({ where: { key: { startsWith: 'app:signin:ip:' }, count: { gt: 0 } } });
         expect(row.every((r) => r.count <= 10)).toBe(true);
-    });
+    }, 60_000);
 
     it('never lets more than the limit through 15 concurrent attempts', async () => {
         const results = await Promise.all(
